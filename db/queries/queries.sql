@@ -235,6 +235,7 @@ scoped AS (
         (d.total_exec_time / nullif(d.calls, 0))::double precision AS mean_ms,
         d.calls AS weight,
         (d.calls > 0
+         AND s.query_kind <> sqlc.arg('utility_kind')::int
          AND (sqlc.narg('database_name')::text IS NULL OR s.database_name = sqlc.narg('database_name'))
          AND (sqlc.narg('statement_id')::bigint IS NULL OR d.statement_id = sqlc.narg('statement_id'))
          AND (sqlc.narg('text_filter')::text IS NULL

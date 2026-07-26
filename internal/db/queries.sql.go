@@ -1747,17 +1747,18 @@ scoped AS (
         (d.total_exec_time / nullif(d.calls, 0))::double precision AS mean_ms,
         d.calls AS weight,
         (d.calls > 0
-         AND ($4::text IS NULL OR s.database_name = $4)
-         AND ($5::bigint IS NULL OR d.statement_id = $5)
-         AND ($6::text IS NULL
-              OR s.query_full ILIKE '%' || $6::text || '%')
-         AND ($7::bigint[] IS NULL
-              OR s.id = ANY($7::bigint[]))) AS matched
+         AND s.query_kind <> $4::int
+         AND ($5::text IS NULL OR s.database_name = $5)
+         AND ($6::bigint IS NULL OR d.statement_id = $6)
+         AND ($7::text IS NULL
+              OR s.query_full ILIKE '%' || $7::text || '%')
+         AND ($8::bigint[] IS NULL
+              OR s.id = ANY($8::bigint[]))) AS matched
     FROM statement_deltas d
     JOIN statements s ON s.id = d.statement_id
     CROSS JOIN bounds b
-    WHERE ($8::text IS NULL OR s.server_name = $8)
-      AND ($9::text[] IS NULL OR s.server_name = ANY($9::text[]))
+    WHERE ($9::text IS NULL OR s.server_name = $9)
+      AND ($10::text[] IS NULL OR s.server_name = ANY($10::text[]))
       AND d.collected_at > b.first_end - b.bucket
       AND d.collected_at <= b.anchor
 ),
@@ -1795,6 +1796,7 @@ type StatementPercentileSeriesParams struct {
 	Bucket         pgtype.Interval
 	Until          pgtype.Timestamptz
 	Since          pgtype.Timestamptz
+	UtilityKind    int32
 	DatabaseName   pgtype.Text
 	StatementID    pgtype.Int8
 	TextFilter     pgtype.Text
@@ -1815,6 +1817,7 @@ func (q *Queries) StatementPercentileSeries(ctx context.Context, arg StatementPe
 		arg.Bucket,
 		arg.Until,
 		arg.Since,
+		arg.UtilityKind,
 		arg.DatabaseName,
 		arg.StatementID,
 		arg.TextFilter,

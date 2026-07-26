@@ -852,6 +852,7 @@ func (s *StatementServer) statementPercentiles(
 		TextFilter:     filter.text,
 		StatementIds:   filter.statementIDs,
 		StatementID:    pgtype.Int8{},
+		UtilityKind:    int32(querysheriffv1.QueryKind_QUERY_KIND_OTHERS),
 	})
 	if err != nil {
 		return nil, nil, nil, connect.NewError(connect.CodeInternal, err)

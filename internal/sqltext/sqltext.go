@@ -156,7 +156,7 @@ func previewText(clean string, summary *pg.SummaryResult, err error) string {
 }
 
 func classify(sql string, summary *pg.SummaryResult, err error) querysheriffv1.QueryKind {
-	if isUtility(sql) || err != nil {
+	if err != nil || isUtility(sql) || isConfigCall(sql) {
 		return querysheriffv1.QueryKind_QUERY_KIND_OTHERS
 	}
 
@@ -171,6 +171,10 @@ func classify(sql string, summary *pg.SummaryResult, err error) querysheriffv1.Q
 		return querysheriffv1.QueryKind_QUERY_KIND_READS
 	}
 	return querysheriffv1.QueryKind_QUERY_KIND_OTHERS
+}
+
+func isConfigCall(sql string) bool {
+	return strings.Contains(strings.ToLower(sql), "set_config")
 }
 
 func isUtility(sql string) bool {
