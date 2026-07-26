@@ -12,6 +12,7 @@ import (
 
 	"connectrpc.com/connect"
 	connectcors "connectrpc.com/cors"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/rs/cors"
@@ -161,7 +162,19 @@ func registerHealthEndpoints(mux *http.ServeMux, pool *pgxpool.Pool) {
 }
 
 func connectPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, databaseURL)
+	poolCfg, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unnamed statements are always custom-planned. The default cached
+	// prepared statements let PostgreSQL latch onto a generic plan that
+	// misestimates the windowed statement/activity queries and runs several
+	// times slower; unnamed statements also sidestep PgBouncer prepared-
+	// statement pooling hazards.
+	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return nil, err
 	}
