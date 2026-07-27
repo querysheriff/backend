@@ -18,11 +18,33 @@ var (
 )
 
 const ensureStatements = `-- name: EnsureStatements :batchone
-INSERT INTO statements (server_name, database_name, user_name, query_id, query_full, query_short, query_kind)
-VALUES ($1, $2, $3, $4, '', '', 0)
-ON CONFLICT (server_name, database_name, user_name, query_id)
-DO UPDATE SET query_full = statements.query_full
-RETURNING id
+WITH params AS (
+    SELECT
+        $1::text   AS server_name,
+        $2::text AS database_name,
+        $3::text     AS user_name,
+        $4::bigint    AS query_id
+),
+existing AS (
+    SELECT s.id
+    FROM statements s
+    JOIN params p ON s.server_name   = p.server_name
+                 AND s.database_name = p.database_name
+                 AND s.user_name     = p.user_name
+                 AND s.query_id      = p.query_id
+),
+inserted AS (
+    INSERT INTO statements (server_name, database_name, user_name, query_id, query_full, query_short, query_kind)
+    SELECT server_name, database_name, user_name, query_id, '', '', 0
+    FROM params
+    WHERE NOT EXISTS (SELECT 1 FROM existing)
+    ON CONFLICT (server_name, database_name, user_name, query_id)
+    DO UPDATE SET query_full = statements.query_full
+    RETURNING id
+)
+SELECT id FROM existing
+UNION ALL
+SELECT id FROM inserted
 `
 
 type EnsureStatementsBatchResults struct {
