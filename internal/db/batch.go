@@ -143,70 +143,55 @@ func (b *FillStatementTextBatchResults) Close() error {
 	return b.br.Close()
 }
 
-const insertLogEvents = `-- name: InsertLogEvents :batchone
-INSERT INTO log_events (
-    server_name, collected_at, occurred_at, log_level, classification, message,
-    pid, username, database_name, application_name, detail, hint, context,
-    statement, backend_type, state_code
+const insertStatementSamples = `-- name: InsertStatementSamples :batchone
+INSERT INTO statement_samples (
+    server_name, collected_at, occurred_at, statement_id, query,
+    duration_ms, parameters, explain_plan_json, tags
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
 RETURNING id
 `
 
-type InsertLogEventsBatchResults struct {
+type InsertStatementSamplesBatchResults struct {
 	br     pgx.BatchResults
 	tot    int
 	closed bool
 }
 
-type InsertLogEventsParams struct {
+type InsertStatementSamplesParams struct {
 	ServerName      string
 	CollectedAt     pgtype.Timestamptz
 	OccurredAt      pgtype.Timestamptz
-	LogLevel        int32
-	Classification  int32
-	Message         string
-	Pid             pgtype.Int4
-	Username        pgtype.Text
-	DatabaseName    pgtype.Text
-	ApplicationName pgtype.Text
-	Detail          pgtype.Text
-	Hint            pgtype.Text
-	Context         pgtype.Text
-	Statement       pgtype.Text
-	BackendType     pgtype.Text
-	StateCode       pgtype.Text
+	StatementID     pgtype.Int8
+	Query           string
+	DurationMs      float64
+	Parameters      []string
+	ExplainPlanJson pgtype.Text
+	Tags            []byte
 }
 
-func (q *Queries) InsertLogEvents(ctx context.Context, arg []InsertLogEventsParams) *InsertLogEventsBatchResults {
+func (q *Queries) InsertStatementSamples(ctx context.Context, arg []InsertStatementSamplesParams) *InsertStatementSamplesBatchResults {
 	batch := &pgx.Batch{}
 	for _, a := range arg {
 		vals := []interface{}{
 			a.ServerName,
 			a.CollectedAt,
 			a.OccurredAt,
-			a.LogLevel,
-			a.Classification,
-			a.Message,
-			a.Pid,
-			a.Username,
-			a.DatabaseName,
-			a.ApplicationName,
-			a.Detail,
-			a.Hint,
-			a.Context,
-			a.Statement,
-			a.BackendType,
-			a.StateCode,
+			a.StatementID,
+			a.Query,
+			a.DurationMs,
+			a.Parameters,
+			a.ExplainPlanJson,
+			a.Tags,
 		}
-		batch.Queue(insertLogEvents, vals...)
+		batch.Queue(insertStatementSamples, vals...)
 	}
 	br := q.db.SendBatch(ctx, batch)
-	return &InsertLogEventsBatchResults{br, len(arg), false}
+	return &InsertStatementSamplesBatchResults{br, len(arg), false}
 }
 
-func (b *InsertLogEventsBatchResults) QueryRow(f func(int, int64, error)) {
+func (b *InsertStatementSamplesBatchResults) QueryRow(f func(int, int64, error)) {
 	defer b.br.Close()
 	for t := 0; t < b.tot; t++ {
 		var id int64
@@ -224,7 +209,7 @@ func (b *InsertLogEventsBatchResults) QueryRow(f func(int, int64, error)) {
 	}
 }
 
-func (b *InsertLogEventsBatchResults) Close() error {
+func (b *InsertStatementSamplesBatchResults) Close() error {
 	b.closed = true
 	return b.br.Close()
 }

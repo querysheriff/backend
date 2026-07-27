@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+
 	"time"
 
 	"connectrpc.com/connect"
@@ -46,12 +47,12 @@ func (s *LogServer) ReportLogs(
 
 	collectedAt := pgtype.Timestamptz{Time: msg.GetCollectedAt().AsTime(), Valid: true}
 
-	eventIDs, err := s.insertLogEvents(ctx, serverName, collectedAt, events)
+	sampleIDs, err := s.insertStatementSamples(ctx, serverName, collectedAt, events)
 	if err != nil {
 		return nil, err
 	}
 
-	if err = s.insertStatementSamples(ctx, serverName, collectedAt, events, eventIDs); err != nil {
+	if err = s.insertLogEvents(ctx, serverName, collectedAt, events, sampleIDs); err != nil {
 		return nil, err
 	}
 
@@ -226,7 +227,7 @@ func logRecordFromRow(row db.ListLogEventsRow) *querysheriffv1.LogRecord {
 		Username:        protoFromText(row.Username),
 		ApplicationName: protoFromText(row.ApplicationName),
 		BackendType:     protoFromText(row.BackendType),
-		Message:         row.Message,
+		Message:         protoFromText(row.Message),
 		StateCode:       protoFromText(row.StateCode),
 		Detail:          protoFromText(row.Detail),
 		Hint:            protoFromText(row.Hint),
@@ -253,38 +254,23 @@ func (s *LogServer) insertLogEvents(
 	serverName string,
 	collectedAt pgtype.Timestamptz,
 	events []*querysheriffv1.LogEvent,
-) ([]int64, error) {
+	sampleIDs []pgtype.Int8,
+) error {
 	params := make([]db.InsertLogEventsParams, len(events))
 	for i, event := range events {
-		params[i] = logEventInsertParams(serverName, collectedAt, event)
+		params[i] = logEventInsertParams(serverName, collectedAt, event, sampleIDs[i])
 	}
 
-	ids := make([]int64, len(events))
-
-	var scanErr error
-
-	s.queries.InsertLogEvents(ctx, params).QueryRow(func(i int, id int64, err error) {
-		if err != nil {
-			if scanErr == nil {
-				scanErr = err
-			}
-
-			return
-		}
-
-		ids[i] = id
-	})
-
-	if scanErr != nil {
-		return nil, connect.NewError(connect.CodeInternal, scanErr)
+	if _, err := s.queries.InsertLogEvents(ctx, params); err != nil {
+		return connect.NewError(connect.CodeInternal, err)
 	}
 
-	return ids, nil
+	return nil
 }
 
 type sampleEntry struct {
 	sample         *querysheriffv1.LogStatementSample
-	logEventID     int64
+	eventIndex     int
 	statementIndex int
 }
 
@@ -293,8 +279,9 @@ func (s *LogServer) insertStatementSamples(
 	serverName string,
 	collectedAt pgtype.Timestamptz,
 	events []*querysheriffv1.LogEvent,
-	eventIDs []int64,
-) error {
+) ([]pgtype.Int8, error) {
+	sampleIDs := make([]pgtype.Int8, len(events))
+
 	var (
 		entries         []sampleEntry
 		statementParams []db.EnsureStatementsParams
@@ -306,7 +293,7 @@ func (s *LogServer) insertStatementSamples(
 			continue
 		}
 
-		entry := sampleEntry{sample: sample, logEventID: eventIDs[i], statementIndex: -1}
+		entry := sampleEntry{sample: sample, eventIndex: i, statementIndex: -1}
 
 		if queryID := event.GetQueryId(); queryID != 0 {
 			entry.statementIndex = len(statementParams)
@@ -322,7 +309,7 @@ func (s *LogServer) insertStatementSamples(
 	}
 
 	if len(entries) == 0 {
-		return nil
+		return sampleIDs, nil
 	}
 
 	var statementIDs []int64
@@ -330,7 +317,7 @@ func (s *LogServer) insertStatementSamples(
 	if len(statementParams) > 0 {
 		ids, err := ensureStatements(ctx, s.queries, statementParams)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		statementIDs = ids
@@ -343,50 +330,75 @@ func (s *LogServer) insertStatementSamples(
 			statementID = pgtype.Int8{Int64: statementIDs[entry.statementIndex], Valid: true}
 		}
 
-		param, err := statementSampleInsertParams(serverName, collectedAt, entry.logEventID, statementID, entry.sample)
+		param, err := statementSampleInsertParams(serverName, collectedAt, statementID, entry.sample)
 		if err != nil {
-			return connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 
 		params[i] = param
 	}
 
-	if _, err := s.queries.InsertStatementSamples(ctx, params); err != nil {
-		return connect.NewError(connect.CodeInternal, err)
+	var scanErr error
+
+	s.queries.InsertStatementSamples(ctx, params).QueryRow(func(i int, id int64, err error) {
+		if err != nil {
+			if scanErr == nil {
+				scanErr = err
+			}
+
+			return
+		}
+
+		sampleIDs[entries[i].eventIndex] = pgtype.Int8{Int64: id, Valid: true}
+	})
+
+	if scanErr != nil {
+		return nil, connect.NewError(connect.CodeInternal, scanErr)
 	}
 
-	return nil
+	return sampleIDs, nil
 }
 
 func logEventInsertParams(
 	serverName string,
 	collectedAt pgtype.Timestamptz,
 	event *querysheriffv1.LogEvent,
+	sampleID pgtype.Int8,
 ) db.InsertLogEventsParams {
-	return db.InsertLogEventsParams{
-		ServerName:      serverName,
-		CollectedAt:     collectedAt,
-		OccurredAt:      timestamptzFromProto(event.GetOccurredAt()),
-		LogLevel:        int32(event.GetLogLevel()),
-		Classification:  int32(event.GetClassification()),
-		Message:         event.GetMessage(),
-		Pid:             int4FromProto(event.GetPid()),
-		Username:        textFromProto(event.GetUsername()),
-		DatabaseName:    textFromProto(event.GetDatabaseName()),
-		ApplicationName: textFromProto(event.GetApplicationName()),
-		Detail:          textFromProto(event.GetDetail()),
-		Hint:            textFromProto(event.GetHint()),
-		Context:         textFromProto(event.GetContext()),
-		Statement:       textFromProto(event.GetStatement()),
-		BackendType:     textFromProto(event.GetBackendType()),
-		StateCode:       textFromProto(event.GetStateCode()),
+	params := db.InsertLogEventsParams{
+		ServerName:        serverName,
+		CollectedAt:       collectedAt,
+		OccurredAt:        timestamptzFromProto(event.GetOccurredAt()),
+		LogLevel:          int32(event.GetLogLevel()),
+		Classification:    int32(event.GetClassification()),
+		Message:           textFromProto(event.GetMessage()),
+		Pid:               int4FromProto(event.GetPid()),
+		Username:          textFromProto(event.GetUsername()),
+		DatabaseName:      textFromProto(event.GetDatabaseName()),
+		ApplicationName:   textFromProto(event.GetApplicationName()),
+		Detail:            textFromProto(event.GetDetail()),
+		Hint:              textFromProto(event.GetHint()),
+		Context:           textFromProto(event.GetContext()),
+		Statement:         textFromProto(event.GetStatement()),
+		BackendType:       textFromProto(event.GetBackendType()),
+		StateCode:         textFromProto(event.GetStateCode()),
+		StatementSampleID: sampleID,
 	}
+
+	if sampleID.Valid {
+		params.Message = pgtype.Text{}
+		params.Detail = pgtype.Text{}
+		params.Hint = pgtype.Text{}
+		params.Context = pgtype.Text{}
+		params.Statement = pgtype.Text{}
+	}
+
+	return params
 }
 
 func statementSampleInsertParams(
 	serverName string,
 	collectedAt pgtype.Timestamptz,
-	logEventID int64,
 	statementID pgtype.Int8,
 	sample *querysheriffv1.LogStatementSample,
 ) (db.InsertStatementSamplesParams, error) {
@@ -399,7 +411,6 @@ func statementSampleInsertParams(
 		ServerName:      serverName,
 		CollectedAt:     collectedAt,
 		OccurredAt:      timestamptzFromProto(sample.GetOccurredAt()),
-		LogEventID:      pgtype.Int8{Int64: logEventID, Valid: true},
 		StatementID:     statementID,
 		Query:           sample.GetQuery(),
 		DurationMs:      sample.GetDurationMs(),

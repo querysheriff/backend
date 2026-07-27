@@ -536,15 +536,14 @@ FROM statement_samples
 WHERE id = sqlc.arg('sample_id')
   AND (sqlc.narg('allowed_servers')::text[] IS NULL OR server_name = ANY(sqlc.narg('allowed_servers')::text[]));
 
--- name: InsertLogEvents :batchone
+-- name: InsertLogEvents :copyfrom
 INSERT INTO log_events (
     server_name, collected_at, occurred_at, log_level, classification, message,
     pid, username, database_name, application_name, detail, hint, context,
-    statement, backend_type, state_code
+    statement, backend_type, state_code, statement_sample_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
-)
-RETURNING id;
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+);
 
 -- name: ListLogEvents :many
 SELECT id, occurred_at, log_level, classification, message, pid, username,
@@ -586,13 +585,14 @@ WHERE server_name = sqlc.arg('server_name')
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
--- name: InsertStatementSamples :copyfrom
+-- name: InsertStatementSamples :batchone
 INSERT INTO statement_samples (
-    server_name, collected_at, occurred_at, log_event_id, statement_id, query,
+    server_name, collected_at, occurred_at, statement_id, query,
     duration_ms, parameters, explain_plan_json, tags
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-);
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
+)
+RETURNING id;
 
 -- name: UpsertCollectorHealth :exec
 INSERT INTO collector_health (server_name, collected_at, databases)

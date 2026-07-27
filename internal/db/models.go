@@ -39,23 +39,24 @@ type CollectorToken struct {
 }
 
 type LogEvent struct {
-	ID              int64
-	CollectedAt     pgtype.Timestamptz
-	ServerName      string
-	OccurredAt      pgtype.Timestamptz
-	LogLevel        int32
-	Classification  int32
-	Message         string
-	Pid             pgtype.Int4
-	Username        pgtype.Text
-	DatabaseName    pgtype.Text
-	ApplicationName pgtype.Text
-	Detail          pgtype.Text
-	Hint            pgtype.Text
-	Context         pgtype.Text
-	Statement       pgtype.Text
-	BackendType     pgtype.Text
-	StateCode       pgtype.Text
+	ID                int64
+	CollectedAt       pgtype.Timestamptz
+	ServerName        string
+	OccurredAt        pgtype.Timestamptz
+	LogLevel          int32
+	Classification    int32
+	Message           pgtype.Text
+	Pid               pgtype.Int4
+	Username          pgtype.Text
+	DatabaseName      pgtype.Text
+	ApplicationName   pgtype.Text
+	Detail            pgtype.Text
+	Hint              pgtype.Text
+	Context           pgtype.Text
+	Statement         pgtype.Text
+	BackendType       pgtype.Text
+	StateCode         pgtype.Text
+	StatementSampleID pgtype.Int8
 }
 
 type LogEventsDefault struct {
@@ -65,7 +66,7 @@ type LogEventsDefault struct {
 	OccurredAt      pgtype.Timestamptz
 	LogLevel        int32
 	Classification  int32
-	Message         string
+	Message         pgtype.Text
 	Pid             pgtype.Int4
 	Username        pgtype.Text
 	DatabaseName    pgtype.Text
@@ -114,7 +115,6 @@ type StatementSample struct {
 	CollectedAt     pgtype.Timestamptz
 	ServerName      string
 	OccurredAt      pgtype.Timestamptz
-	LogEventID      pgtype.Int8
 	StatementID     pgtype.Int8
 	Query           string
 	DurationMs      float64

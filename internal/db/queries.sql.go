@@ -583,6 +583,26 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 	return i, err
 }
 
+type InsertLogEventsParams struct {
+	ServerName        string
+	CollectedAt       pgtype.Timestamptz
+	OccurredAt        pgtype.Timestamptz
+	LogLevel          int32
+	Classification    int32
+	Message           pgtype.Text
+	Pid               pgtype.Int4
+	Username          pgtype.Text
+	DatabaseName      pgtype.Text
+	ApplicationName   pgtype.Text
+	Detail            pgtype.Text
+	Hint              pgtype.Text
+	Context           pgtype.Text
+	Statement         pgtype.Text
+	BackendType       pgtype.Text
+	StateCode         pgtype.Text
+	StatementSampleID pgtype.Int8
+}
+
 type InsertStatementDeltasParams struct {
 	StatementID   int64
 	CollectedAt   pgtype.Timestamptz
@@ -590,19 +610,6 @@ type InsertStatementDeltasParams struct {
 	Rows          int64
 	TotalExecTime float64
 	TotalIoTime   float64
-}
-
-type InsertStatementSamplesParams struct {
-	ServerName      string
-	CollectedAt     pgtype.Timestamptz
-	OccurredAt      pgtype.Timestamptz
-	LogEventID      pgtype.Int8
-	StatementID     pgtype.Int8
-	Query           string
-	DurationMs      float64
-	Parameters      []string
-	ExplainPlanJson pgtype.Text
-	Tags            []byte
 }
 
 const listAlertToggles = `-- name: ListAlertToggles :many
@@ -833,7 +840,7 @@ type ListLogEventsRow struct {
 	OccurredAt      pgtype.Timestamptz
 	LogLevel        int32
 	Classification  int32
-	Message         string
+	Message         pgtype.Text
 	Pid             pgtype.Int4
 	Username        pgtype.Text
 	DatabaseName    pgtype.Text
@@ -846,6 +853,7 @@ type ListLogEventsRow struct {
 	StateCode       pgtype.Text
 }
 
+// Sampled events carry no message; the linked statement_sample holds their text.
 func (q *Queries) ListLogEvents(ctx context.Context, arg ListLogEventsParams) ([]ListLogEventsRow, error) {
 	rows, err := q.db.Query(ctx, listLogEvents,
 		arg.ServerName,

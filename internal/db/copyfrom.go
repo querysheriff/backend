@@ -9,6 +9,54 @@ import (
 	"context"
 )
 
+// iteratorForInsertLogEvents implements pgx.CopyFromSource.
+type iteratorForInsertLogEvents struct {
+	rows                 []InsertLogEventsParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForInsertLogEvents) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForInsertLogEvents) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].ServerName,
+		r.rows[0].CollectedAt,
+		r.rows[0].OccurredAt,
+		r.rows[0].LogLevel,
+		r.rows[0].Classification,
+		r.rows[0].Message,
+		r.rows[0].Pid,
+		r.rows[0].Username,
+		r.rows[0].DatabaseName,
+		r.rows[0].ApplicationName,
+		r.rows[0].Detail,
+		r.rows[0].Hint,
+		r.rows[0].Context,
+		r.rows[0].Statement,
+		r.rows[0].BackendType,
+		r.rows[0].StateCode,
+		r.rows[0].StatementSampleID,
+	}, nil
+}
+
+func (r iteratorForInsertLogEvents) Err() error {
+	return nil
+}
+
+func (q *Queries) InsertLogEvents(ctx context.Context, arg []InsertLogEventsParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"log_events"}, []string{"server_name", "collected_at", "occurred_at", "log_level", "classification", "message", "pid", "username", "database_name", "application_name", "detail", "hint", "context", "statement", "backend_type", "state_code", "statement_sample_id"}, &iteratorForInsertLogEvents{rows: arg})
+}
+
 // iteratorForInsertStatementDeltas implements pgx.CopyFromSource.
 type iteratorForInsertStatementDeltas struct {
 	rows                 []InsertStatementDeltasParams
@@ -44,45 +92,4 @@ func (r iteratorForInsertStatementDeltas) Err() error {
 
 func (q *Queries) InsertStatementDeltas(ctx context.Context, arg []InsertStatementDeltasParams) (int64, error) {
 	return q.db.CopyFrom(ctx, []string{"statement_deltas"}, []string{"statement_id", "collected_at", "calls", "rows", "total_exec_time", "total_io_time"}, &iteratorForInsertStatementDeltas{rows: arg})
-}
-
-// iteratorForInsertStatementSamples implements pgx.CopyFromSource.
-type iteratorForInsertStatementSamples struct {
-	rows                 []InsertStatementSamplesParams
-	skippedFirstNextCall bool
-}
-
-func (r *iteratorForInsertStatementSamples) Next() bool {
-	if len(r.rows) == 0 {
-		return false
-	}
-	if !r.skippedFirstNextCall {
-		r.skippedFirstNextCall = true
-		return true
-	}
-	r.rows = r.rows[1:]
-	return len(r.rows) > 0
-}
-
-func (r iteratorForInsertStatementSamples) Values() ([]interface{}, error) {
-	return []interface{}{
-		r.rows[0].ServerName,
-		r.rows[0].CollectedAt,
-		r.rows[0].OccurredAt,
-		r.rows[0].LogEventID,
-		r.rows[0].StatementID,
-		r.rows[0].Query,
-		r.rows[0].DurationMs,
-		r.rows[0].Parameters,
-		r.rows[0].ExplainPlanJson,
-		r.rows[0].Tags,
-	}, nil
-}
-
-func (r iteratorForInsertStatementSamples) Err() error {
-	return nil
-}
-
-func (q *Queries) InsertStatementSamples(ctx context.Context, arg []InsertStatementSamplesParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"statement_samples"}, []string{"server_name", "collected_at", "occurred_at", "log_event_id", "statement_id", "query", "duration_ms", "parameters", "explain_plan_json", "tags"}, &iteratorForInsertStatementSamples{rows: arg})
 }
