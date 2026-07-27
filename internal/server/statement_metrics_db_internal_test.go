@@ -32,15 +32,16 @@ func TestStatementSeriesTotalMatchesTable(t *testing.T) {
 
 	to := time.Now()
 	from := to.Add(-24 * time.Hour)
-	bucket := metricBucket(to.Sub(from))
+	bounds := newSeriesBounds(from, to, to)
 
-	since := pgtype.Timestamptz{Time: from, Valid: true}
-	until := pgtype.Timestamptz{Time: to, Valid: true}
+	rangeStart := pgtype.Timestamptz{Time: bounds.rangeStart, Valid: true}
+	rangeEnd := pgtype.Timestamptz{Time: bounds.anchor, Valid: true}
 
 	buckets, err := q.StatementMetricSeries(ctx, db.StatementMetricSeriesParams{
-		Since:  since,
-		Until:  until,
-		Bucket: pgtype.Interval{Microseconds: bucket.Microseconds(), Valid: true},
+		RangeStart: rangeStart,
+		RangeEnd:   rangeEnd,
+		Anchor:     rangeEnd,
+		Bucket:     pgtype.Interval{Microseconds: bounds.bucket.Microseconds(), Valid: true},
 	})
 	if err != nil {
 		t.Fatalf("StatementMetricSeries: %v", err)
@@ -53,8 +54,8 @@ func TestStatementSeriesTotalMatchesTable(t *testing.T) {
 
 	rows, err := q.ListStatementStats(ctx, db.ListStatementStatsParams{
 		RowLimit: 100000,
-		Since:    pgtype.Timestamptz{Time: from.Add(-2 * bucket), Valid: true},
-		Until:    until,
+		Since:    rangeStart,
+		Until:    rangeEnd,
 		Kinds: requestedKinds([]querysheriffv1.QueryKind{
 			querysheriffv1.QueryKind_QUERY_KIND_READS,
 			querysheriffv1.QueryKind_QUERY_KIND_WRITES,

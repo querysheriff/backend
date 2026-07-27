@@ -79,6 +79,8 @@ func (r iteratorForInsertStatementDeltas) Values() ([]interface{}, error) {
 	return []interface{}{
 		r.rows[0].StatementID,
 		r.rows[0].CollectedAt,
+		r.rows[0].ServerName,
+		r.rows[0].DatabaseName,
 		r.rows[0].Calls,
 		r.rows[0].Rows,
 		r.rows[0].TotalExecTime,
@@ -91,5 +93,5 @@ func (r iteratorForInsertStatementDeltas) Err() error {
 }
 
 func (q *Queries) InsertStatementDeltas(ctx context.Context, arg []InsertStatementDeltasParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"statement_deltas"}, []string{"statement_id", "collected_at", "calls", "rows", "total_exec_time", "total_io_time"}, &iteratorForInsertStatementDeltas{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"statement_deltas"}, []string{"statement_id", "collected_at", "server_name", "database_name", "calls", "rows", "total_exec_time", "total_io_time"}, &iteratorForInsertStatementDeltas{rows: arg})
 }

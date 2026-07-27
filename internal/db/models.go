@@ -93,17 +93,19 @@ type Statement struct {
 type StatementDelta struct {
 	CollectedAt   pgtype.Timestamptz
 	StatementID   int64
-	Calls         int32
+	Calls         int64
 	Rows          int64
 	TotalExecTime float64
 	TotalIoTime   float64
+	ServerName    string
+	DatabaseName  string
 }
 
 type StatementDeltasDefault struct {
 	ID            int64
 	CollectedAt   pgtype.Timestamptz
 	StatementID   int64
-	Calls         int32
+	Calls         int64
 	Rows          int64
 	TotalExecTime float64
 	TotalIoTime   float64

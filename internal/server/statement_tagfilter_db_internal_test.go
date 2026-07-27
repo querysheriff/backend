@@ -49,8 +49,9 @@ func tagFilterTestPool(t *testing.T, serverName string) *pgxpool.Pool {
 		    VALUES ($1, 'db', 'app', 991001, 'SELECT 1', 'SELECT 1', 1)
 		    RETURNING id
 		), d AS (
-		    INSERT INTO statement_deltas (statement_id, collected_at, calls, rows, total_exec_time, total_io_time)
-		    SELECT s.id, now() - interval '5 minutes', 10, 10, 100.0, 1.0 FROM s
+		    INSERT INTO statement_deltas (statement_id, collected_at, server_name, database_name,
+		                                  calls, rows, total_exec_time, total_io_time)
+		    SELECT s.id, now() - interval '5 minutes', $1, 'db', 10, 10, 100.0, 1.0 FROM s
 		)
 		INSERT INTO statement_samples (server_name, collected_at, occurred_at, statement_id, query, duration_ms, tags)
 		SELECT $1, now() - interval '5 minutes', now() - interval '5 minutes', s.id, 'SELECT 1', 1.0,

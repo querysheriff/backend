@@ -186,91 +186,63 @@ WHERE id = sqlc.arg('id')
 
 -- name: InsertStatementDeltas :copyfrom
 INSERT INTO statement_deltas (
-    statement_id, collected_at, calls, rows, total_exec_time, total_io_time
+    statement_id, collected_at, server_name, database_name, calls, rows, total_exec_time, total_io_time
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, $6, $7, $8
 );
 
 -- name: StatementMetricSeries :many
-WITH bounds AS (
+WITH scoped AS (
     SELECT
-        sqlc.arg('bucket')::interval AS bucket,
-        date_trunc('minute', least(sqlc.arg('until')::timestamptz, now())) AS anchor,
-        date_bin(
-            sqlc.arg('bucket')::interval,
-            sqlc.arg('since')::timestamptz,
-            date_trunc('minute', least(sqlc.arg('until')::timestamptz, now()))
-        ) AS first_end
-),
-grid AS (
-    SELECT generate_series(b.first_end, b.anchor, b.bucket) AS bucket_end
-    FROM bounds b
-),
-scoped AS (
-    SELECT
-        date_bin(b.bucket, d.collected_at - interval '1 microsecond', b.anchor) + b.bucket AS bucket_end,
+        date_bin(sqlc.arg('bucket')::interval,
+                 d.collected_at - interval '1 microsecond',
+                 sqlc.arg('anchor')::timestamptz) + sqlc.arg('bucket')::interval AS bucket_end,
         d.total_exec_time,
         d.total_io_time,
         d.calls,
-        ((sqlc.narg('database_name')::text IS NULL OR s.database_name = sqlc.narg('database_name'))
-         AND (sqlc.narg('statement_id')::bigint IS NULL OR d.statement_id = sqlc.narg('statement_id'))
+        ((sqlc.narg('statement_id')::bigint IS NULL OR d.statement_id = sqlc.narg('statement_id'))
          AND (sqlc.narg('text_filter')::text IS NULL
               OR s.query_full ILIKE '%' || sqlc.narg('text_filter')::text || '%')
          AND (sqlc.narg('statement_ids')::bigint[] IS NULL
-              OR s.id = ANY(sqlc.narg('statement_ids')::bigint[]))) AS matched
+              OR d.statement_id = ANY(sqlc.narg('statement_ids')::bigint[]))) AS matched
     FROM statement_deltas d
     JOIN statements s ON s.id = d.statement_id
-    CROSS JOIN bounds b
-    WHERE (sqlc.narg('server_name')::text IS NULL OR s.server_name = sqlc.narg('server_name'))
-      AND (sqlc.narg('allowed_servers')::text[] IS NULL OR s.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
-      AND d.collected_at > b.first_end - b.bucket
-      AND d.collected_at <= b.anchor
+    WHERE d.collected_at >  sqlc.arg('range_start')::timestamptz
+      AND d.collected_at <= sqlc.arg('range_end')::timestamptz
+      AND (sqlc.narg('server_name')::text IS NULL OR d.server_name = sqlc.narg('server_name'))
+      AND (sqlc.narg('database_name')::text IS NULL OR d.database_name = sqlc.narg('database_name'))
+      AND (sqlc.narg('allowed_servers')::text[] IS NULL
+           OR d.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
 )
 SELECT
-    g.bucket_end::timestamptz AS bucket_end,
-    coalesce(sum(sc.total_exec_time) FILTER (WHERE sc.matched), 0)::double precision AS total_exec_time,
-    coalesce(sum(sc.total_io_time) FILTER (WHERE sc.matched), 0)::double precision    AS total_io_time,
-    coalesce(sum(sc.calls) FILTER (WHERE sc.matched), 0)::bigint                      AS calls
-FROM grid g
-JOIN scoped sc ON sc.bucket_end = g.bucket_end
-GROUP BY g.bucket_end
-ORDER BY g.bucket_end;
+    bucket_end::timestamptz AS bucket_end,
+    coalesce(sum(total_exec_time) FILTER (WHERE matched), 0)::double precision AS total_exec_time,
+    coalesce(sum(total_io_time) FILTER (WHERE matched), 0)::double precision   AS total_io_time,
+    coalesce(sum(calls) FILTER (WHERE matched), 0)::bigint                     AS calls
+FROM scoped
+GROUP BY bucket_end
+ORDER BY bucket_end;
 
 -- name: StatementPercentileSeries :many
-WITH bounds AS (
+WITH scoped AS (
     SELECT
-        sqlc.arg('bucket')::interval AS bucket,
-        date_trunc('minute', least(sqlc.arg('until')::timestamptz, now())) AS anchor,
-        date_bin(
-            sqlc.arg('bucket')::interval,
-            sqlc.arg('since')::timestamptz,
-            date_trunc('minute', least(sqlc.arg('until')::timestamptz, now()))
-        ) AS first_end
-),
-grid AS (
-    SELECT generate_series(b.first_end, b.anchor, b.bucket) AS bucket_end
-    FROM bounds b
-),
-scoped AS (
-    SELECT
-        date_bin(b.bucket, d.collected_at - interval '1 microsecond', b.anchor) + b.bucket AS bucket_end,
+        date_bin(sqlc.arg('bucket')::interval,
+                 d.collected_at - interval '1 microsecond',
+                 sqlc.arg('anchor')::timestamptz) + sqlc.arg('bucket')::interval AS bucket_end,
         (d.total_exec_time / nullif(d.calls, 0))::double precision AS mean_ms,
         d.calls AS weight,
-        (d.calls > 0
-         AND s.query_kind <> sqlc.arg('utility_kind')::int
-         AND (sqlc.narg('database_name')::text IS NULL OR s.database_name = sqlc.narg('database_name'))
-         AND (sqlc.narg('statement_id')::bigint IS NULL OR d.statement_id = sqlc.narg('statement_id'))
-         AND (sqlc.narg('text_filter')::text IS NULL
-              OR s.query_full ILIKE '%' || sqlc.narg('text_filter')::text || '%')
-         AND (sqlc.narg('statement_ids')::bigint[] IS NULL
-              OR s.id = ANY(sqlc.narg('statement_ids')::bigint[]))) AS matched
+        (d.calls > 0 AND s.query_kind <> sqlc.arg('utility_kind')::int) AS matched
     FROM statement_deltas d
     JOIN statements s ON s.id = d.statement_id
-    CROSS JOIN bounds b
-    WHERE (sqlc.narg('server_name')::text IS NULL OR s.server_name = sqlc.narg('server_name'))
-      AND (sqlc.narg('allowed_servers')::text[] IS NULL OR s.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
-      AND d.collected_at > b.first_end - b.bucket
-      AND d.collected_at <= b.anchor
+    WHERE d.collected_at >  sqlc.arg('range_start')::timestamptz
+      AND d.collected_at <= sqlc.arg('range_end')::timestamptz
+      AND (sqlc.narg('server_name')::text IS NULL OR d.server_name = sqlc.narg('server_name'))
+      AND (sqlc.narg('database_name')::text IS NULL OR d.database_name = sqlc.narg('database_name'))
+      AND (sqlc.narg('allowed_servers')::text[] IS NULL
+           OR d.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
+),
+live AS (
+    SELECT bucket_end FROM scoped GROUP BY bucket_end
 ),
 ordered AS (
     SELECT
@@ -292,14 +264,13 @@ agg AS (
     GROUP BY bucket_end
 )
 SELECT
-    g.bucket_end::timestamptz AS bucket_end,
+    l.bucket_end::timestamptz AS bucket_end,
     coalesce(a.p90, 0)::double precision AS p90,
     coalesce(a.p95, 0)::double precision AS p95,
     coalesce(a.p99, 0)::double precision AS p99
-FROM grid g
-JOIN (SELECT DISTINCT bucket_end FROM scoped) live ON live.bucket_end = g.bucket_end
-LEFT JOIN agg a ON a.bucket_end = g.bucket_end
-ORDER BY g.bucket_end;
+FROM live l
+LEFT JOIN agg a ON a.bucket_end = l.bucket_end
+ORDER BY l.bucket_end;
 
 -- name: FilterStatementIDsByTags :many
 WITH scoped AS (

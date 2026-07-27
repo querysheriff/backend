@@ -84,7 +84,9 @@ func (s *StatementServer) ReportStatements(
 		deltaParams[i] = db.InsertStatementDeltasParams{
 			StatementID:   statementIDs[i],
 			CollectedAt:   collectedAt,
-			Calls:         int32FromCounter(delta.GetCalls()),
+			ServerName:    serverName,
+			DatabaseName:  delta.GetDatabaseName(),
+			Calls:         delta.GetCalls(),
 			Rows:          delta.GetRows(),
 			TotalExecTime: delta.GetTotalExecTime(),
 			TotalIoTime:   delta.GetTotalIoTime(),
@@ -277,7 +279,7 @@ func (s *StatementServer) QueryStatementMetrics(
 	}
 
 	metrics.P90, metrics.P95, metrics.P99, err = s.statementPercentiles(
-		ctx, serverName, databaseName, statementFilter{}, from, to, allowedServers,
+		ctx, serverName, databaseName, from, to, allowedServers,
 	)
 	if err != nil {
 		return nil, err
@@ -795,13 +797,13 @@ func (s *StatementServer) statementMetrics(
 	from, to time.Time,
 	allowedServers []string,
 ) (*querysheriffv1.StatementMetrics, error) {
-	duration := to.Sub(from)
-	bucket := metricBucket(duration)
+	bounds := newSeriesBounds(from, to, time.Now())
 
 	buckets, err := s.queries.StatementMetricSeries(ctx, db.StatementMetricSeriesParams{
-		Since:          pgtype.Timestamptz{Time: from, Valid: true},
-		Until:          pgtype.Timestamptz{Time: to, Valid: true},
-		Bucket:         pgtype.Interval{Microseconds: bucket.Microseconds(), Valid: true},
+		RangeStart:     pgtype.Timestamptz{Time: bounds.rangeStart, Valid: true},
+		RangeEnd:       pgtype.Timestamptz{Time: bounds.anchor, Valid: true},
+		Anchor:         pgtype.Timestamptz{Time: bounds.anchor, Valid: true},
+		Bucket:         pgtype.Interval{Microseconds: bounds.bucket.Microseconds(), Valid: true},
 		ServerName:     serverName,
 		DatabaseName:   databaseName,
 		AllowedServers: allowedServers,
@@ -829,29 +831,26 @@ func (s *StatementServer) statementMetrics(
 		Calls:    statementMetric(calls),
 		Avg:      statementMetric(avg),
 		AvgIo:    statementMetric(avgIo),
-		BucketMs: bucket.Milliseconds(),
+		BucketMs: bounds.bucket.Milliseconds(),
 	}, nil
 }
 
 func (s *StatementServer) statementPercentiles(
 	ctx context.Context,
 	serverName, databaseName pgtype.Text,
-	filter statementFilter,
 	from, to time.Time,
 	allowedServers []string,
 ) (*querysheriffv1.StatementMetric, *querysheriffv1.StatementMetric, *querysheriffv1.StatementMetric, error) {
-	bucket := metricBucket(to.Sub(from))
+	bounds := newSeriesBounds(from, to, time.Now())
 
 	rows, err := s.queries.StatementPercentileSeries(ctx, db.StatementPercentileSeriesParams{
-		Since:          pgtype.Timestamptz{Time: from, Valid: true},
-		Until:          pgtype.Timestamptz{Time: to, Valid: true},
-		Bucket:         pgtype.Interval{Microseconds: bucket.Microseconds(), Valid: true},
+		RangeStart:     pgtype.Timestamptz{Time: bounds.rangeStart, Valid: true},
+		RangeEnd:       pgtype.Timestamptz{Time: bounds.anchor, Valid: true},
+		Anchor:         pgtype.Timestamptz{Time: bounds.anchor, Valid: true},
+		Bucket:         pgtype.Interval{Microseconds: bounds.bucket.Microseconds(), Valid: true},
 		ServerName:     serverName,
 		DatabaseName:   databaseName,
 		AllowedServers: allowedServers,
-		TextFilter:     filter.text,
-		StatementIds:   filter.statementIDs,
-		StatementID:    pgtype.Int8{},
 		UtilityKind:    int32(querysheriffv1.QueryKind_QUERY_KIND_OTHERS),
 	})
 	if err != nil {
@@ -880,6 +879,40 @@ func metricBucket(d time.Duration) time.Duration {
 	}
 
 	return bucket.Round(time.Minute)
+}
+
+type seriesBounds struct {
+	bucket time.Duration
+	// anchor is the grid origin and the inclusive end of the scanned range.
+	anchor time.Time
+	// rangeStart is exclusive, and sits one bucket below the first bucket end so that
+	// leading bucket still aggregates a full window.
+	rangeStart time.Time
+}
+
+func newSeriesBounds(from, to, now time.Time) seriesBounds {
+	bucket := metricBucket(to.Sub(from))
+	if to.After(now) {
+		to = now
+	}
+	anchor := to.Truncate(time.Minute)
+
+	return seriesBounds{
+		bucket:     bucket,
+		anchor:     anchor,
+		rangeStart: binStart(from, anchor, bucket).Add(-bucket),
+	}
+}
+
+func binStart(t, anchor time.Time, bucket time.Duration) time.Time {
+	offset := t.Sub(anchor)
+
+	bins := int64(offset / bucket)
+	if offset%bucket != 0 && offset < 0 {
+		bins--
+	}
+
+	return anchor.Add(time.Duration(bins) * bucket)
 }
 
 func avgExecTime(totalExecTime float64, calls int64) float64 {

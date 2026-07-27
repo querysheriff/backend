@@ -606,7 +606,9 @@ type InsertLogEventsParams struct {
 type InsertStatementDeltasParams struct {
 	StatementID   int64
 	CollectedAt   pgtype.Timestamptz
-	Calls         int32
+	ServerName    string
+	DatabaseName  string
+	Calls         int64
 	Rows          int64
 	TotalExecTime float64
 	TotalIoTime   float64
@@ -1634,60 +1636,48 @@ func (q *Queries) RemoveServerFromUsers(ctx context.Context, serverName string) 
 }
 
 const statementMetricSeries = `-- name: StatementMetricSeries :many
-WITH bounds AS (
+WITH scoped AS (
     SELECT
-        $1::interval AS bucket,
-        date_trunc('minute', least($2::timestamptz, now())) AS anchor,
-        date_bin(
-            $1::interval,
-            $3::timestamptz,
-            date_trunc('minute', least($2::timestamptz, now()))
-        ) AS first_end
-),
-grid AS (
-    SELECT generate_series(b.first_end, b.anchor, b.bucket) AS bucket_end
-    FROM bounds b
-),
-scoped AS (
-    SELECT
-        date_bin(b.bucket, d.collected_at - interval '1 microsecond', b.anchor) + b.bucket AS bucket_end,
+        date_bin($1::interval,
+                 d.collected_at - interval '1 microsecond',
+                 $2::timestamptz) + $1::interval AS bucket_end,
         d.total_exec_time,
         d.total_io_time,
         d.calls,
-        (($4::text IS NULL OR s.database_name = $4)
-         AND ($5::bigint IS NULL OR d.statement_id = $5)
-         AND ($6::text IS NULL
-              OR s.query_full ILIKE '%' || $6::text || '%')
-         AND ($7::bigint[] IS NULL
-              OR s.id = ANY($7::bigint[]))) AS matched
+        (($3::bigint IS NULL OR d.statement_id = $3)
+         AND ($4::text IS NULL
+              OR s.query_full ILIKE '%' || $4::text || '%')
+         AND ($5::bigint[] IS NULL
+              OR d.statement_id = ANY($5::bigint[]))) AS matched
     FROM statement_deltas d
     JOIN statements s ON s.id = d.statement_id
-    CROSS JOIN bounds b
-    WHERE ($8::text IS NULL OR s.server_name = $8)
-      AND ($9::text[] IS NULL OR s.server_name = ANY($9::text[]))
-      AND d.collected_at > b.first_end - b.bucket
-      AND d.collected_at <= b.anchor
+    WHERE d.collected_at >  $6::timestamptz
+      AND d.collected_at <= $7::timestamptz
+      AND ($8::text IS NULL OR d.server_name = $8)
+      AND ($9::text IS NULL OR d.database_name = $9)
+      AND ($10::text[] IS NULL
+           OR d.server_name = ANY($10::text[]))
 )
 SELECT
-    g.bucket_end::timestamptz AS bucket_end,
-    coalesce(sum(sc.total_exec_time) FILTER (WHERE sc.matched), 0)::double precision AS total_exec_time,
-    coalesce(sum(sc.total_io_time) FILTER (WHERE sc.matched), 0)::double precision    AS total_io_time,
-    coalesce(sum(sc.calls) FILTER (WHERE sc.matched), 0)::bigint                      AS calls
-FROM grid g
-JOIN scoped sc ON sc.bucket_end = g.bucket_end
-GROUP BY g.bucket_end
-ORDER BY g.bucket_end
+    bucket_end::timestamptz AS bucket_end,
+    coalesce(sum(total_exec_time) FILTER (WHERE matched), 0)::double precision AS total_exec_time,
+    coalesce(sum(total_io_time) FILTER (WHERE matched), 0)::double precision   AS total_io_time,
+    coalesce(sum(calls) FILTER (WHERE matched), 0)::bigint                     AS calls
+FROM scoped
+GROUP BY bucket_end
+ORDER BY bucket_end
 `
 
 type StatementMetricSeriesParams struct {
 	Bucket         pgtype.Interval
-	Until          pgtype.Timestamptz
-	Since          pgtype.Timestamptz
-	DatabaseName   pgtype.Text
+	Anchor         pgtype.Timestamptz
 	StatementID    pgtype.Int8
 	TextFilter     pgtype.Text
 	StatementIds   []int64
+	RangeStart     pgtype.Timestamptz
+	RangeEnd       pgtype.Timestamptz
 	ServerName     pgtype.Text
+	DatabaseName   pgtype.Text
 	AllowedServers []string
 }
 
@@ -1701,13 +1691,14 @@ type StatementMetricSeriesRow struct {
 func (q *Queries) StatementMetricSeries(ctx context.Context, arg StatementMetricSeriesParams) ([]StatementMetricSeriesRow, error) {
 	rows, err := q.db.Query(ctx, statementMetricSeries,
 		arg.Bucket,
-		arg.Until,
-		arg.Since,
-		arg.DatabaseName,
+		arg.Anchor,
 		arg.StatementID,
 		arg.TextFilter,
 		arg.StatementIds,
+		arg.RangeStart,
+		arg.RangeEnd,
 		arg.ServerName,
+		arg.DatabaseName,
 		arg.AllowedServers,
 	)
 	if err != nil {
@@ -1734,40 +1725,25 @@ func (q *Queries) StatementMetricSeries(ctx context.Context, arg StatementMetric
 }
 
 const statementPercentileSeries = `-- name: StatementPercentileSeries :many
-WITH bounds AS (
+WITH scoped AS (
     SELECT
-        $1::interval AS bucket,
-        date_trunc('minute', least($2::timestamptz, now())) AS anchor,
-        date_bin(
-            $1::interval,
-            $3::timestamptz,
-            date_trunc('minute', least($2::timestamptz, now()))
-        ) AS first_end
-),
-grid AS (
-    SELECT generate_series(b.first_end, b.anchor, b.bucket) AS bucket_end
-    FROM bounds b
-),
-scoped AS (
-    SELECT
-        date_bin(b.bucket, d.collected_at - interval '1 microsecond', b.anchor) + b.bucket AS bucket_end,
+        date_bin($1::interval,
+                 d.collected_at - interval '1 microsecond',
+                 $2::timestamptz) + $1::interval AS bucket_end,
         (d.total_exec_time / nullif(d.calls, 0))::double precision AS mean_ms,
         d.calls AS weight,
-        (d.calls > 0
-         AND s.query_kind <> $4::int
-         AND ($5::text IS NULL OR s.database_name = $5)
-         AND ($6::bigint IS NULL OR d.statement_id = $6)
-         AND ($7::text IS NULL
-              OR s.query_full ILIKE '%' || $7::text || '%')
-         AND ($8::bigint[] IS NULL
-              OR s.id = ANY($8::bigint[]))) AS matched
+        (d.calls > 0 AND s.query_kind <> $3::int) AS matched
     FROM statement_deltas d
     JOIN statements s ON s.id = d.statement_id
-    CROSS JOIN bounds b
-    WHERE ($9::text IS NULL OR s.server_name = $9)
-      AND ($10::text[] IS NULL OR s.server_name = ANY($10::text[]))
-      AND d.collected_at > b.first_end - b.bucket
-      AND d.collected_at <= b.anchor
+    WHERE d.collected_at >  $4::timestamptz
+      AND d.collected_at <= $5::timestamptz
+      AND ($6::text IS NULL OR d.server_name = $6)
+      AND ($7::text IS NULL OR d.database_name = $7)
+      AND ($8::text[] IS NULL
+           OR d.server_name = ANY($8::text[]))
+),
+live AS (
+    SELECT bucket_end FROM scoped GROUP BY bucket_end
 ),
 ordered AS (
     SELECT
@@ -1789,26 +1765,23 @@ agg AS (
     GROUP BY bucket_end
 )
 SELECT
-    g.bucket_end::timestamptz AS bucket_end,
+    l.bucket_end::timestamptz AS bucket_end,
     coalesce(a.p90, 0)::double precision AS p90,
     coalesce(a.p95, 0)::double precision AS p95,
     coalesce(a.p99, 0)::double precision AS p99
-FROM grid g
-JOIN (SELECT DISTINCT bucket_end FROM scoped) live ON live.bucket_end = g.bucket_end
-LEFT JOIN agg a ON a.bucket_end = g.bucket_end
-ORDER BY g.bucket_end
+FROM live l
+LEFT JOIN agg a ON a.bucket_end = l.bucket_end
+ORDER BY l.bucket_end
 `
 
 type StatementPercentileSeriesParams struct {
 	Bucket         pgtype.Interval
-	Until          pgtype.Timestamptz
-	Since          pgtype.Timestamptz
+	Anchor         pgtype.Timestamptz
 	UtilityKind    int32
-	DatabaseName   pgtype.Text
-	StatementID    pgtype.Int8
-	TextFilter     pgtype.Text
-	StatementIds   []int64
+	RangeStart     pgtype.Timestamptz
+	RangeEnd       pgtype.Timestamptz
 	ServerName     pgtype.Text
+	DatabaseName   pgtype.Text
 	AllowedServers []string
 }
 
@@ -1822,14 +1795,12 @@ type StatementPercentileSeriesRow struct {
 func (q *Queries) StatementPercentileSeries(ctx context.Context, arg StatementPercentileSeriesParams) ([]StatementPercentileSeriesRow, error) {
 	rows, err := q.db.Query(ctx, statementPercentileSeries,
 		arg.Bucket,
-		arg.Until,
-		arg.Since,
+		arg.Anchor,
 		arg.UtilityKind,
-		arg.DatabaseName,
-		arg.StatementID,
-		arg.TextFilter,
-		arg.StatementIds,
+		arg.RangeStart,
+		arg.RangeEnd,
 		arg.ServerName,
+		arg.DatabaseName,
 		arg.AllowedServers,
 	)
 	if err != nil {
