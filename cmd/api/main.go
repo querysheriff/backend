@@ -167,12 +167,10 @@ func connectPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error)
 		return nil, err
 	}
 
-	// Unnamed statements are always custom-planned. The default cached
-	// prepared statements let PostgreSQL latch onto a generic plan that
-	// misestimates the windowed statement/activity queries and runs several
-	// times slower; unnamed statements also sidestep PgBouncer prepared-
-	// statement pooling hazards.
-	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec
+	// Unnamed statements stay custom-planned and clear of PgBouncer prepared-
+	// statement pooling. The cached describe supplies real parameter OIDs, which
+	// QueryExecModeExec lacks: it would encode a []byte jsonb parameter as bytea.
+	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeCacheDescribe
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {

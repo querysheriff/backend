@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// dbPool connects to DATABASE_URL, skipping the test when it is unset.
 func dbPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
@@ -20,7 +19,13 @@ func dbPool(t *testing.T) *pgxpool.Pool {
 		t.Skip("DATABASE_URL not set; skipping partition integration test")
 	}
 
-	pool, err := pgxpool.New(context.Background(), url)
+	cfg, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		t.Fatalf("parse config: %v", err)
+	}
+	cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeCacheDescribe
+
+	pool, err := pgxpool.NewWithConfig(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
