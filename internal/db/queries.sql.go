@@ -606,7 +606,7 @@ type InsertLogEventsParams struct {
 type InsertStatementDeltasParams struct {
 	StatementID   int64
 	CollectedAt   pgtype.Timestamptz
-	Calls         int64
+	Calls         int32
 	Rows          int64
 	TotalExecTime float64
 	TotalIoTime   float64
@@ -853,7 +853,6 @@ type ListLogEventsRow struct {
 	StateCode       pgtype.Text
 }
 
-// Sampled events carry no message; the linked statement_sample holds their text.
 func (q *Queries) ListLogEvents(ctx context.Context, arg ListLogEventsParams) ([]ListLogEventsRow, error) {
 	rows, err := q.db.Query(ctx, listLogEvents,
 		arg.ServerName,

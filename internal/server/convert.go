@@ -2,10 +2,23 @@ package server
 
 import (
 	"encoding/json"
+	"math"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func int32FromCounter(value int64) int32 {
+	if value < 0 {
+		return 0
+	}
+
+	if value > math.MaxInt32 {
+		return math.MaxInt32
+	}
+
+	return int32(value)
+}
 
 func timestamptzFromProto(ts *timestamppb.Timestamp) pgtype.Timestamptz {
 	if ts == nil {
