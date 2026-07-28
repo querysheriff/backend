@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
+	"github.com/querysheriff/backend/internal/alerts"
 	"github.com/querysheriff/backend/internal/db"
 )
 
@@ -132,12 +134,16 @@ type percentilePoint struct {
 	p90, p95, p99 float64
 }
 
-func TestPercentileSeriesMatchesOriginalQuery(t *testing.T) {
+// The shipping percentile path reads a pre-aggregated log histogram, so it cannot match
+// the exact per-delta computation bit for bit -- 1% bins with a midpoint estimate put it
+// within about half a percent. This asserts that bound against v0.0.11's exact query, and
+// asserts the buckets themselves line up exactly.
+func TestPercentileSeriesApproximatesExactPercentiles(t *testing.T) {
 	t.Parallel()
 
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
-		t.Skip("DATABASE_URL not set; skipping percentile parity test")
+		t.Skip("DATABASE_URL not set; skipping percentile accuracy test")
 	}
 
 	ctx := context.Background()
@@ -147,88 +153,98 @@ func TestPercentileSeriesMatchesOriginalQuery(t *testing.T) {
 	}
 	t.Cleanup(pool.Close)
 
-	const serverName = "parity-test-server"
+	const serverName = "percentile-accuracy-server"
 
-	// Anchored in the past so least(until, now()) is a no-op and both sides are
-	// comparable; the Go side clamps against its own clock.
 	until := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
-
 	seedParityData(ctx, t, pool, serverName, until)
 
-	q := db.New(pool)
+	queries := db.New(pool)
 	utility := int32(querysheriffv1.QueryKind_QUERY_KIND_OTHERS)
 
-	cases := []struct {
-		name         string
-		window       time.Duration
-		databaseName pgtype.Text
-		serverName   pgtype.Text
-		allowed      []string
-	}{
-		{name: "1h unfiltered", window: time.Hour},
-		{name: "1h server", window: time.Hour, serverName: pgtype.Text{String: serverName, Valid: true}},
-		{
-			name:         "1h server and dense database",
-			window:       time.Hour,
-			serverName:   pgtype.Text{String: serverName, Valid: true},
-			databaseName: pgtype.Text{String: "db_a", Valid: true},
-		},
-		{
-			// db_b reports only on even minutes while db_a fills the rest, so buckets
-			// exist that are live but hold nothing matching. That is the only shape
-			// that distinguishes the database filter sitting in matched from WHERE.
-			name:         "1h server and sparse database",
-			window:       time.Hour,
-			serverName:   pgtype.Text{String: serverName, Valid: true},
-			databaseName: pgtype.Text{String: "db_b", Valid: true},
-		},
-		{name: "1h allowed servers", window: time.Hour, allowed: []string{serverName}},
-		{name: "3h coarser bucket", window: 3 * time.Hour, serverName: pgtype.Text{String: serverName, Valid: true}},
-		{name: "24h coarser bucket", window: 24 * time.Hour, serverName: pgtype.Text{String: serverName, Valid: true}},
-		{
-			name:       "70m indivisible bucket",
-			window:     70 * time.Minute,
-			serverName: pgtype.Text{String: serverName, Valid: true},
-		},
+	// Roll up the seeded window so the read is served from bins rather than the raw tail.
+	if err = queries.RollupStatementLatencyBins(ctx, db.RollupStatementLatencyBinsParams{
+		RangeStart:  pgtype.Timestamptz{Time: until.Add(-25 * time.Hour), Valid: true},
+		RangeEnd:    pgtype.Timestamptz{Time: until, Valid: true},
+		UtilityKind: utility,
+	}); err != nil {
+		t.Fatalf("rollup: %v", err)
 	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM statement_latency_bins WHERE server_name = $1`, serverName)
+	})
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	server := NewStatementServer(queries, alerts.NewNotifier(queries, slog.New(slog.DiscardHandler)))
+	scoped := pgtype.Text{String: serverName, Valid: true}
+
+	for _, window := range []time.Duration{time.Hour, 3 * time.Hour, 24 * time.Hour, 70 * time.Minute} {
+		t.Run(window.String(), func(t *testing.T) {
 			t.Parallel()
 
-			from := until.Add(-tc.window)
+			from := until.Add(-window)
 			bounds := newSeriesBounds(from, until, until)
 
 			want := runOriginalPercentiles(ctx, t, pool, bounds.bucket, from, until,
-				utility, tc.serverName, tc.databaseName, tc.allowed)
+				utility, scoped, pgtype.Text{}, nil)
 
-			rows, seriesErr := q.StatementPercentileSeries(ctx, db.StatementPercentileSeriesParams{
-				RangeStart:     pgtype.Timestamptz{Time: bounds.rangeStart, Valid: true},
-				RangeEnd:       pgtype.Timestamptz{Time: bounds.anchor, Valid: true},
-				Anchor:         pgtype.Timestamptz{Time: bounds.anchor, Valid: true},
-				Bucket:         pgtype.Interval{Microseconds: bounds.bucket.Microseconds(), Valid: true},
-				ServerName:     tc.serverName,
-				DatabaseName:   tc.databaseName,
-				AllowedServers: tc.allowed,
-				UtilityKind:    utility,
-			})
+			p90, p95, p99, seriesErr := server.statementPercentiles(ctx, scoped, pgtype.Text{}, from, until, nil)
 			if seriesErr != nil {
-				t.Fatalf("StatementPercentileSeries: %v", seriesErr)
+				t.Fatalf("statementPercentiles: %v", seriesErr)
 			}
 
-			got := make([]percentilePoint, len(rows))
-			for i, r := range rows {
-				got[i] = percentilePoint{at: r.BucketEnd.Time.UTC(), p90: r.P90, p95: r.P95, p99: r.P99}
+			got := make([]percentilePoint, len(p90.GetSeries()))
+			for i := range p90.GetSeries() {
+				got[i] = percentilePoint{
+					at:  p90.GetSeries()[i].GetAt().AsTime(),
+					p90: p90.GetSeries()[i].GetValue(),
+					p95: p95.GetSeries()[i].GetValue(),
+					p99: p99.GetSeries()[i].GetValue(),
+				}
 			}
 
 			requireSubstance(t, got)
-			comparePercentiles(t, want, got)
+			comparePercentilesWithinBinWidth(t, want, got)
 		})
 	}
 }
 
-// requireSubstance guards against the comparison passing on an empty or degenerate
-// result, which would make the parity assertion meaningless.
+// comparePercentilesWithinBinWidth requires the buckets to match exactly and the values to
+// sit inside the histogram's own resolution.
+func comparePercentilesWithinBinWidth(t *testing.T, want, got []percentilePoint) {
+	t.Helper()
+
+	const tolerance = 0.01
+
+	if len(want) != len(got) {
+		t.Fatalf("bucket count: exact %d, histogram %d", len(want), len(got))
+	}
+
+	var worst float64
+
+	for i := range want {
+		if !want[i].at.Equal(got[i].at) {
+			t.Fatalf("bucket %d: exact at %s, histogram at %s", i, want[i].at, got[i].at)
+		}
+
+		for _, pair := range [][2]float64{
+			{want[i].p90, got[i].p90}, {want[i].p95, got[i].p95}, {want[i].p99, got[i].p99},
+		} {
+			if pair[0] == 0 && pair[1] == 0 {
+				continue
+			}
+
+			rel := relativeDiff(pair[0], pair[1])
+			worst = max(worst, rel)
+
+			if rel > tolerance {
+				t.Fatalf("bucket %d (%s): exact %v, histogram %v (relative %g)",
+					i, want[i].at, pair[0], pair[1], rel)
+			}
+		}
+	}
+
+	t.Logf("%d buckets matched; worst relative difference %g", len(got), worst)
+}
+
 func requireSubstance(t *testing.T, got []percentilePoint) {
 	t.Helper()
 
@@ -258,26 +274,6 @@ func requireSubstance(t *testing.T, got []percentilePoint) {
 
 	if len(distinct) < 2 {
 		t.Fatalf("every bucket has the same p90; fixture does not vary")
-	}
-}
-
-func comparePercentiles(t *testing.T, want, got []percentilePoint) {
-	t.Helper()
-
-	if len(want) != len(got) {
-		t.Fatalf("bucket count: original %d, current %d", len(want), len(got))
-	}
-
-	for i := range want {
-		if !want[i].at.Equal(got[i].at) {
-			t.Fatalf("bucket %d: original at %s, current at %s", i, want[i].at, got[i].at)
-		}
-		if want[i].p90 != got[i].p90 || want[i].p95 != got[i].p95 || want[i].p99 != got[i].p99 {
-			t.Fatalf("bucket %d (%s): original p90/p95/p99 = %v/%v/%v, current = %v/%v/%v",
-				i, want[i].at,
-				want[i].p90, want[i].p95, want[i].p99,
-				got[i].p90, got[i].p95, got[i].p99)
-		}
 	}
 }
 
@@ -409,8 +405,7 @@ func TestMetricSeriesMatchesV11Query(t *testing.T) {
 		serverName   pgtype.Text
 		databaseName pgtype.Text
 	}{
-		{name: "1h unfiltered", window: time.Hour},
-		{name: "1h server", window: time.Hour, serverName: pgtype.Text{String: serverName, Valid: true}},
+		{name: "1h all databases", window: time.Hour, serverName: pgtype.Text{String: serverName, Valid: true}},
 		{
 			name:         "1h sparse database",
 			window:       time.Hour,

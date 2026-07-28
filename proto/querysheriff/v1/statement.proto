@@ -10,9 +10,10 @@ service StatementService {
   rpc ReportStatements(ReportStatementsRequest) returns (ReportStatementsResponse) {}
   rpc ReportStatementTexts(ReportStatementTextsRequest) returns (ReportStatementTextsResponse) {}
   rpc QueryStatements(QueryStatementsRequest) returns (QueryStatementsResponse) {}
-  rpc QueryStatementMetrics(QueryStatementMetricsRequest) returns (QueryStatementMetricsResponse) {}
+  rpc QueryStatementCallsSeries(QueryStatementCallsSeriesRequest) returns (QueryStatementCallsSeriesResponse) {}
+  rpc QueryStatementPercentileSeries(QueryStatementPercentileSeriesRequest) returns (QueryStatementPercentileSeriesResponse) {}
+  rpc QueryStatementTimingSeries(QueryStatementTimingSeriesRequest) returns (QueryStatementTimingSeriesResponse) {}
   rpc QueryStatementDetail(QueryStatementDetailRequest) returns (QueryStatementDetailResponse) {}
-  rpc QueryStatementDetailMetrics(QueryStatementDetailMetricsRequest) returns (QueryStatementDetailMetricsResponse) {}
   rpc QueryStatementSamples(QueryStatementSamplesRequest) returns (QueryStatementSamplesResponse) {}
   rpc GetStatementSamplePlan(GetStatementSamplePlanRequest) returns (GetStatementSamplePlanResponse) {}
   rpc GetStatementSampleText(GetStatementSampleTextRequest) returns (GetStatementSampleTextResponse) {}
@@ -112,15 +113,42 @@ message QueryStatementsResponse {
   bool has_more = 2;
 }
 
-message QueryStatementMetricsRequest {
+message SeriesScope {
   string server_name = 1;
   string database_name = 2;
-  google.protobuf.Timestamp from = 3;
-  google.protobuf.Timestamp to = 4;
+  int64 statement_id = 3;
+  google.protobuf.Timestamp from = 4;
+  google.protobuf.Timestamp to = 5;
 }
 
-message QueryStatementMetricsResponse {
-  StatementMetrics metrics = 1;
+message QueryStatementCallsSeriesRequest {
+  SeriesScope scope = 1;
+}
+
+message QueryStatementCallsSeriesResponse {
+  StatementMetric calls = 1;
+  int64 bucket_ms = 2;
+}
+
+message QueryStatementPercentileSeriesRequest {
+  SeriesScope scope = 1;
+}
+
+message QueryStatementPercentileSeriesResponse {
+  StatementMetric p90 = 1;
+  StatementMetric p95 = 2;
+  StatementMetric p99 = 3;
+  int64 bucket_ms = 4;
+}
+
+message QueryStatementTimingSeriesRequest {
+  SeriesScope scope = 1;
+}
+
+message QueryStatementTimingSeriesResponse {
+  StatementMetric avg = 1;
+  StatementMetric avg_io = 2;
+  int64 bucket_ms = 3;
 }
 
 message QueryStatementDetailRequest {
@@ -141,17 +169,6 @@ message QueryStatementDetailResponse {
 
   string server_name = 5;
   string database_name = 6;
-}
-
-message QueryStatementDetailMetricsRequest {
-  // Internal statement id.
-  int64 id = 1;
-  google.protobuf.Timestamp from = 2;
-  google.protobuf.Timestamp to = 3;
-}
-
-message QueryStatementDetailMetricsResponse {
-  StatementMetrics metrics = 1;
 }
 
 message QueryStatementSamplesRequest {
@@ -223,16 +240,6 @@ message GetStatementTextRequest {
 message GetStatementTextResponse {
   // Full normalized query text.
   string query = 1;
-}
-
-message StatementMetrics {
-  StatementMetric calls = 1;
-  StatementMetric avg = 2;
-  StatementMetric avg_io = 3;
-  StatementMetric p90 = 4;
-  StatementMetric p95 = 5;
-  StatementMetric p99 = 6;
-  int64 bucket_ms = 7;
 }
 
 message StatementMetric {

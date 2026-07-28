@@ -26,6 +26,7 @@ func partitionedTables() []string {
 		"transactions",
 		"statement_samples",
 		"statement_deltas",
+		"statement_latency_bins",
 		"log_events",
 	}
 }

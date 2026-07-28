@@ -109,6 +109,22 @@ type StatementDeltasDefault struct {
 	TotalIoTime   float64
 }
 
+type StatementLatencyBin struct {
+	MinuteStart  pgtype.Timestamptz
+	ServerName   string
+	DatabaseName string
+	Bins         []int16
+	Weights      []int32
+}
+
+type StatementLatencyBinsDefault struct {
+	MinuteStart  pgtype.Timestamptz
+	ServerName   string
+	DatabaseName string
+	Bins         []int16
+	Weights      []int32
+}
+
 type StatementSample struct {
 	ID              int64
 	CollectedAt     pgtype.Timestamptz

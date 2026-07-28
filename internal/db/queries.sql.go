@@ -1068,40 +1068,39 @@ func (q *Queries) ListStatementSamples(ctx context.Context, arg ListStatementSam
 }
 
 const listStatementStats = `-- name: ListStatementStats :many
-WITH totals AS (
-    SELECT
-        sum(d.total_exec_time)::double precision AS total_exec_time,
-        sum(d.total_io_time)::double precision   AS total_io_time
-    FROM statement_deltas d
-    JOIN statements s ON s.id = d.statement_id
-    WHERE ($5::text IS NULL OR s.server_name = $5)
-      AND ($6::text IS NULL OR s.database_name = $6)
-      AND ($7::text[] IS NULL OR s.server_name = ANY($7::text[]))
-      AND ($8::timestamptz IS NULL OR d.collected_at >= $8)
-      AND ($9::timestamptz IS NULL OR d.collected_at <= $9)
-),
-per_statement AS (
+WITH per_all AS (
     SELECT
         s.id,
         s.query_short AS preview,
         s.user_name,
+        (($5::text IS NULL
+          OR s.query_full ILIKE '%' || $5::text || '%')
+         AND ($6::bigint[] IS NULL
+              OR s.id = ANY($6::bigint[]))
+         AND s.query_kind = ANY($7::int[])) AS matched,
         sum(d.calls)::bigint                     AS calls,
         sum(d.rows)::bigint                      AS rows,
         sum(d.total_exec_time)::double precision AS total_exec_time,
         sum(d.total_io_time)::double precision   AS total_io_time
     FROM statement_deltas d
     JOIN statements s ON s.id = d.statement_id
-    WHERE ($5::text IS NULL OR s.server_name = $5)
-      AND ($6::text IS NULL OR s.database_name = $6)
-      AND ($7::text[] IS NULL OR s.server_name = ANY($7::text[]))
-      AND ($8::timestamptz IS NULL OR d.collected_at >= $8)
-      AND ($9::timestamptz IS NULL OR d.collected_at <= $9)
-      AND ($10::text IS NULL
-           OR s.query_full ILIKE '%' || $10::text || '%')
-      AND ($11::bigint[] IS NULL
-           OR s.id = ANY($11::bigint[]))
-      AND s.query_kind = ANY($12::int[])
-    GROUP BY s.id
+    WHERE ($8::text IS NULL OR s.server_name = $8)
+      AND ($9::text IS NULL OR s.database_name = $9)
+      AND ($10::text[] IS NULL OR s.server_name = ANY($10::text[]))
+      AND ($11::timestamptz IS NULL OR d.collected_at >= $11)
+      AND ($12::timestamptz IS NULL OR d.collected_at <= $12)
+    GROUP BY s.id, 4
+),
+totals AS (
+    SELECT
+        sum(total_exec_time)::double precision AS total_exec_time,
+        sum(total_io_time)::double precision   AS total_io_time
+    FROM per_all
+),
+per_statement AS (
+    SELECT id, preview, user_name, calls, rows, total_exec_time, total_io_time
+    FROM per_all
+    WHERE matched
 ),
 statement_tags AS (
     SELECT statement_id, jsonb_object_agg(key, value) AS tags
@@ -1112,8 +1111,8 @@ statement_tags AS (
             FROM statement_samples qs
             WHERE qs.tags IS NOT NULL
               AND qs.statement_id IN (SELECT id FROM per_statement)
-              AND ($8::timestamptz IS NULL OR qs.collected_at >= $8)
-              AND ($9::timestamptz IS NULL OR qs.collected_at <= $9)
+              AND ($11::timestamptz IS NULL OR qs.collected_at >= $11)
+              AND ($12::timestamptz IS NULL OR qs.collected_at <= $12)
         ) dt
         CROSS JOIN LATERAL jsonb_each_text(dt.tags) AS kv(key, value)
         WHERE kv.key NOT LIKE '%\_id'
@@ -1167,14 +1166,14 @@ type ListStatementStatsParams struct {
 	SortDesc       bool
 	OffsetRows     int32
 	RowLimit       int32
+	TextFilter     pgtype.Text
+	StatementIds   []int64
+	Kinds          []int32
 	ServerName     pgtype.Text
 	DatabaseName   pgtype.Text
 	AllowedServers []string
 	Since          pgtype.Timestamptz
 	Until          pgtype.Timestamptz
-	TextFilter     pgtype.Text
-	StatementIds   []int64
-	Kinds          []int32
 }
 
 type ListStatementStatsRow struct {
@@ -1195,14 +1194,14 @@ func (q *Queries) ListStatementStats(ctx context.Context, arg ListStatementStats
 		arg.SortDesc,
 		arg.OffsetRows,
 		arg.RowLimit,
+		arg.TextFilter,
+		arg.StatementIds,
+		arg.Kinds,
 		arg.ServerName,
 		arg.DatabaseName,
 		arg.AllowedServers,
 		arg.Since,
 		arg.Until,
-		arg.TextFilter,
-		arg.StatementIds,
-		arg.Kinds,
 	)
 	if err != nil {
 		return nil, err
@@ -1633,6 +1632,182 @@ func (q *Queries) RemoveServerFromUsers(ctx context.Context, serverName string) 
 	return err
 }
 
+const rollupStatementLatencyBins = `-- name: RollupStatementLatencyBins :exec
+WITH cleared AS (
+    DELETE FROM statement_latency_bins
+    WHERE minute_start >= $1::timestamptz
+      AND minute_start <  $2::timestamptz
+    RETURNING 1
+),
+binned AS (
+    SELECT date_trunc('minute', d.collected_at - interval '1 microsecond') AS minute_start,
+           s.server_name,
+           s.database_name,
+           floor(ln(greatest(d.total_exec_time / d.calls, 0.001)) / ln(1.01))::smallint AS bin,
+           sum(d.calls)::integer AS weight
+    FROM statement_deltas d
+    JOIN statements s ON s.id = d.statement_id
+    WHERE d.collected_at >  $1::timestamptz
+      AND d.collected_at <= $2::timestamptz
+      AND d.calls > 0
+      AND s.query_kind <> $3::int
+      AND (SELECT count(*) FROM cleared) >= 0
+    GROUP BY 1, 2, 3, 4
+)
+INSERT INTO statement_latency_bins (minute_start, server_name, database_name, bins, weights)
+SELECT minute_start, server_name, database_name,
+       array_agg(bin ORDER BY bin), array_agg(weight ORDER BY bin)
+FROM binned
+GROUP BY minute_start, server_name, database_name
+`
+
+type RollupStatementLatencyBinsParams struct {
+	RangeStart  pgtype.Timestamptz
+	RangeEnd    pgtype.Timestamptz
+	UtilityKind int32
+}
+
+// Turns raw deltas from a time range into one summed latency histogram per minute.
+func (q *Queries) RollupStatementLatencyBins(ctx context.Context, arg RollupStatementLatencyBinsParams) error {
+	_, err := q.db.Exec(ctx, rollupStatementLatencyBins, arg.RangeStart, arg.RangeEnd, arg.UtilityKind)
+	return err
+}
+
+const statementLatencyBins = `-- name: StatementLatencyBins :many
+SELECT minute_start, bins, weights
+FROM statement_latency_bins
+WHERE minute_start >= $1::timestamptz
+  AND minute_start <  $2::timestamptz
+  AND ($3::text IS NULL OR server_name = $3)
+  AND ($4::text IS NULL OR database_name = $4)
+  AND ($5::text[] IS NULL
+       OR server_name = ANY($5::text[]))
+`
+
+type StatementLatencyBinsParams struct {
+	RangeStart     pgtype.Timestamptz
+	RangeEnd       pgtype.Timestamptz
+	ServerName     pgtype.Text
+	DatabaseName   pgtype.Text
+	AllowedServers []string
+}
+
+type StatementLatencyBinsRow struct {
+	MinuteStart pgtype.Timestamptz
+	Bins        []int16
+	Weights     []int32
+}
+
+// Fetches those ready-made histograms for the chart's time window.
+func (q *Queries) StatementLatencyBins(ctx context.Context, arg StatementLatencyBinsParams) ([]StatementLatencyBinsRow, error) {
+	rows, err := q.db.Query(ctx, statementLatencyBins,
+		arg.RangeStart,
+		arg.RangeEnd,
+		arg.ServerName,
+		arg.DatabaseName,
+		arg.AllowedServers,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StatementLatencyBinsRow
+	for rows.Next() {
+		var i StatementLatencyBinsRow
+		if err := rows.Scan(&i.MinuteStart, &i.Bins, &i.Weights); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const statementLatencyRollupResume = `-- name: StatementLatencyRollupResume :one
+SELECT coalesce(
+    (SELECT max(minute_start) FROM statement_latency_bins),
+    (SELECT min(collected_at) FROM statement_deltas),
+    now()
+)::timestamptz AS resume_from
+`
+
+// Where the rollup job picks up.
+func (q *Queries) StatementLatencyRollupResume(ctx context.Context) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, statementLatencyRollupResume)
+	var resume_from pgtype.Timestamptz
+	err := row.Scan(&resume_from)
+	return resume_from, err
+}
+
+const statementLatencyTailBins = `-- name: StatementLatencyTailBins :many
+WITH binned AS (
+    SELECT date_trunc('minute', d.collected_at - interval '1 microsecond') AS minute_start,
+           floor(ln(greatest(d.total_exec_time / d.calls, 0.001)) / ln(1.01))::smallint AS bin,
+           sum(d.calls)::integer AS weight
+    FROM statement_deltas d
+    JOIN statements s ON s.id = d.statement_id
+    WHERE d.collected_at >  $1::timestamptz + interval '1 minute'
+      AND d.collected_at <= $2::timestamptz
+      AND d.calls > 0
+      AND s.query_kind <> $3::int
+      AND ($4::text IS NULL OR s.server_name = $4)
+      AND ($5::text IS NULL OR s.database_name = $5)
+      AND ($6::text[] IS NULL
+           OR s.server_name = ANY($6::text[]))
+    GROUP BY 1, 2
+)
+SELECT minute_start::timestamptz AS minute_start,
+       array_agg(bin ORDER BY bin)::smallint[]   AS bins,
+       array_agg(weight ORDER BY bin)::integer[] AS weights
+FROM binned
+GROUP BY minute_start
+`
+
+type StatementLatencyTailBinsParams struct {
+	TailStart      pgtype.Timestamptz
+	RangeEnd       pgtype.Timestamptz
+	UtilityKind    int32
+	ServerName     pgtype.Text
+	DatabaseName   pgtype.Text
+	AllowedServers []string
+}
+
+type StatementLatencyTailBinsRow struct {
+	MinuteStart pgtype.Timestamptz
+	Bins        []int16
+	Weights     []int32
+}
+
+// Fills the last minute or two the writer hasn't reached yet, straight from raw deltas, so fresh data still shows up.
+func (q *Queries) StatementLatencyTailBins(ctx context.Context, arg StatementLatencyTailBinsParams) ([]StatementLatencyTailBinsRow, error) {
+	rows, err := q.db.Query(ctx, statementLatencyTailBins,
+		arg.TailStart,
+		arg.RangeEnd,
+		arg.UtilityKind,
+		arg.ServerName,
+		arg.DatabaseName,
+		arg.AllowedServers,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StatementLatencyTailBinsRow
+	for rows.Next() {
+		var i StatementLatencyTailBinsRow
+		if err := rows.Scan(&i.MinuteStart, &i.Bins, &i.Weights); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const statementMetricSeries = `-- name: StatementMetricSeries :many
 WITH scoped AS (
     SELECT
@@ -1711,110 +1886,6 @@ func (q *Queries) StatementMetricSeries(ctx context.Context, arg StatementMetric
 			&i.TotalExecTime,
 			&i.TotalIoTime,
 			&i.Calls,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const statementPercentileSeries = `-- name: StatementPercentileSeries :many
-WITH scoped AS (
-    SELECT
-        date_bin($1::interval,
-                 d.collected_at - interval '1 microsecond',
-                 $2::timestamptz) + $1::interval AS bucket_end,
-        (d.total_exec_time / nullif(d.calls, 0))::double precision AS mean_ms,
-        d.calls AS weight,
-        (d.calls > 0
-         AND s.query_kind <> $3::int
-         AND ($4::text IS NULL
-              OR s.database_name = $4)) AS matched
-    FROM statement_deltas d
-    JOIN statements s ON s.id = d.statement_id
-    WHERE d.collected_at >  $5::timestamptz
-      AND d.collected_at <= $6::timestamptz
-      AND ($7::text IS NULL OR s.server_name = $7)
-      AND ($8::text[] IS NULL
-           OR s.server_name = ANY($8::text[]))
-),
-live AS (
-    SELECT bucket_end FROM scoped GROUP BY bucket_end
-),
-ordered AS (
-    SELECT
-        bucket_end,
-        mean_ms,
-        sum(weight) OVER (PARTITION BY bucket_end ORDER BY mean_ms
-                          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_weight,
-        sum(weight) OVER (PARTITION BY bucket_end) AS total_weight
-    FROM scoped
-    WHERE matched
-),
-agg AS (
-    SELECT
-        bucket_end,
-        min(mean_ms) FILTER (WHERE cum_weight >= 0.90 * total_weight) AS p90,
-        min(mean_ms) FILTER (WHERE cum_weight >= 0.95 * total_weight) AS p95,
-        min(mean_ms) FILTER (WHERE cum_weight >= 0.99 * total_weight) AS p99
-    FROM ordered
-    GROUP BY bucket_end
-)
-SELECT
-    l.bucket_end::timestamptz AS bucket_end,
-    coalesce(a.p90, 0)::double precision AS p90,
-    coalesce(a.p95, 0)::double precision AS p95,
-    coalesce(a.p99, 0)::double precision AS p99
-FROM live l
-LEFT JOIN agg a ON a.bucket_end = l.bucket_end
-ORDER BY l.bucket_end
-`
-
-type StatementPercentileSeriesParams struct {
-	Bucket         pgtype.Interval
-	Anchor         pgtype.Timestamptz
-	UtilityKind    int32
-	DatabaseName   pgtype.Text
-	RangeStart     pgtype.Timestamptz
-	RangeEnd       pgtype.Timestamptz
-	ServerName     pgtype.Text
-	AllowedServers []string
-}
-
-type StatementPercentileSeriesRow struct {
-	BucketEnd pgtype.Timestamptz
-	P90       float64
-	P95       float64
-	P99       float64
-}
-
-func (q *Queries) StatementPercentileSeries(ctx context.Context, arg StatementPercentileSeriesParams) ([]StatementPercentileSeriesRow, error) {
-	rows, err := q.db.Query(ctx, statementPercentileSeries,
-		arg.Bucket,
-		arg.Anchor,
-		arg.UtilityKind,
-		arg.DatabaseName,
-		arg.RangeStart,
-		arg.RangeEnd,
-		arg.ServerName,
-		arg.AllowedServers,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []StatementPercentileSeriesRow
-	for rows.Next() {
-		var i StatementPercentileSeriesRow
-		if err := rows.Scan(
-			&i.BucketEnd,
-			&i.P90,
-			&i.P95,
-			&i.P99,
 		); err != nil {
 			return nil, err
 		}

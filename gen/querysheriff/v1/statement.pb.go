@@ -722,30 +722,31 @@ func (x *QueryStatementsResponse) GetHasMore() bool {
 	return false
 }
 
-type QueryStatementMetricsRequest struct {
+type SeriesScope struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ServerName    string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
 	DatabaseName  string                 `protobuf:"bytes,2,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
-	From          *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
-	To            *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
+	StatementId   int64                  `protobuf:"varint,3,opt,name=statement_id,json=statementId,proto3" json:"statement_id,omitempty"`
+	From          *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=from,proto3" json:"from,omitempty"`
+	To            *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=to,proto3" json:"to,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *QueryStatementMetricsRequest) Reset() {
-	*x = QueryStatementMetricsRequest{}
+func (x *SeriesScope) Reset() {
+	*x = SeriesScope{}
 	mi := &file_querysheriff_v1_statement_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *QueryStatementMetricsRequest) String() string {
+func (x *SeriesScope) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*QueryStatementMetricsRequest) ProtoMessage() {}
+func (*SeriesScope) ProtoMessage() {}
 
-func (x *QueryStatementMetricsRequest) ProtoReflect() protoreflect.Message {
+func (x *SeriesScope) ProtoReflect() protoreflect.Message {
 	mi := &file_querysheriff_v1_statement_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -757,60 +758,67 @@ func (x *QueryStatementMetricsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryStatementMetricsRequest.ProtoReflect.Descriptor instead.
-func (*QueryStatementMetricsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use SeriesScope.ProtoReflect.Descriptor instead.
+func (*SeriesScope) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *QueryStatementMetricsRequest) GetServerName() string {
+func (x *SeriesScope) GetServerName() string {
 	if x != nil {
 		return x.ServerName
 	}
 	return ""
 }
 
-func (x *QueryStatementMetricsRequest) GetDatabaseName() string {
+func (x *SeriesScope) GetDatabaseName() string {
 	if x != nil {
 		return x.DatabaseName
 	}
 	return ""
 }
 
-func (x *QueryStatementMetricsRequest) GetFrom() *timestamppb.Timestamp {
+func (x *SeriesScope) GetStatementId() int64 {
+	if x != nil {
+		return x.StatementId
+	}
+	return 0
+}
+
+func (x *SeriesScope) GetFrom() *timestamppb.Timestamp {
 	if x != nil {
 		return x.From
 	}
 	return nil
 }
 
-func (x *QueryStatementMetricsRequest) GetTo() *timestamppb.Timestamp {
+func (x *SeriesScope) GetTo() *timestamppb.Timestamp {
 	if x != nil {
 		return x.To
 	}
 	return nil
 }
 
-type QueryStatementMetricsResponse struct {
+type QueryStatementCallsSeriesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Metrics       *StatementMetrics      `protobuf:"bytes,1,opt,name=metrics,proto3" json:"metrics,omitempty"`
+	Scope         *SeriesScope           `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *QueryStatementMetricsResponse) Reset() {
-	*x = QueryStatementMetricsResponse{}
+func (x *QueryStatementCallsSeriesRequest) Reset() {
+	*x = QueryStatementCallsSeriesRequest{}
 	mi := &file_querysheriff_v1_statement_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *QueryStatementMetricsResponse) String() string {
+func (x *QueryStatementCallsSeriesRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*QueryStatementMetricsResponse) ProtoMessage() {}
+func (*QueryStatementCallsSeriesRequest) ProtoMessage() {}
 
-func (x *QueryStatementMetricsResponse) ProtoReflect() protoreflect.Message {
+func (x *QueryStatementCallsSeriesRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_querysheriff_v1_statement_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -822,16 +830,284 @@ func (x *QueryStatementMetricsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryStatementMetricsResponse.ProtoReflect.Descriptor instead.
-func (*QueryStatementMetricsResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use QueryStatementCallsSeriesRequest.ProtoReflect.Descriptor instead.
+func (*QueryStatementCallsSeriesRequest) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *QueryStatementMetricsResponse) GetMetrics() *StatementMetrics {
+func (x *QueryStatementCallsSeriesRequest) GetScope() *SeriesScope {
 	if x != nil {
-		return x.Metrics
+		return x.Scope
 	}
 	return nil
+}
+
+type QueryStatementCallsSeriesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Calls         *StatementMetric       `protobuf:"bytes,1,opt,name=calls,proto3" json:"calls,omitempty"`
+	BucketMs      int64                  `protobuf:"varint,2,opt,name=bucket_ms,json=bucketMs,proto3" json:"bucket_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryStatementCallsSeriesResponse) Reset() {
+	*x = QueryStatementCallsSeriesResponse{}
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryStatementCallsSeriesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryStatementCallsSeriesResponse) ProtoMessage() {}
+
+func (x *QueryStatementCallsSeriesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryStatementCallsSeriesResponse.ProtoReflect.Descriptor instead.
+func (*QueryStatementCallsSeriesResponse) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *QueryStatementCallsSeriesResponse) GetCalls() *StatementMetric {
+	if x != nil {
+		return x.Calls
+	}
+	return nil
+}
+
+func (x *QueryStatementCallsSeriesResponse) GetBucketMs() int64 {
+	if x != nil {
+		return x.BucketMs
+	}
+	return 0
+}
+
+type QueryStatementPercentileSeriesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         *SeriesScope           `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryStatementPercentileSeriesRequest) Reset() {
+	*x = QueryStatementPercentileSeriesRequest{}
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryStatementPercentileSeriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryStatementPercentileSeriesRequest) ProtoMessage() {}
+
+func (x *QueryStatementPercentileSeriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryStatementPercentileSeriesRequest.ProtoReflect.Descriptor instead.
+func (*QueryStatementPercentileSeriesRequest) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *QueryStatementPercentileSeriesRequest) GetScope() *SeriesScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+type QueryStatementPercentileSeriesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	P90           *StatementMetric       `protobuf:"bytes,1,opt,name=p90,proto3" json:"p90,omitempty"`
+	P95           *StatementMetric       `protobuf:"bytes,2,opt,name=p95,proto3" json:"p95,omitempty"`
+	P99           *StatementMetric       `protobuf:"bytes,3,opt,name=p99,proto3" json:"p99,omitempty"`
+	BucketMs      int64                  `protobuf:"varint,4,opt,name=bucket_ms,json=bucketMs,proto3" json:"bucket_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryStatementPercentileSeriesResponse) Reset() {
+	*x = QueryStatementPercentileSeriesResponse{}
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryStatementPercentileSeriesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryStatementPercentileSeriesResponse) ProtoMessage() {}
+
+func (x *QueryStatementPercentileSeriesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryStatementPercentileSeriesResponse.ProtoReflect.Descriptor instead.
+func (*QueryStatementPercentileSeriesResponse) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *QueryStatementPercentileSeriesResponse) GetP90() *StatementMetric {
+	if x != nil {
+		return x.P90
+	}
+	return nil
+}
+
+func (x *QueryStatementPercentileSeriesResponse) GetP95() *StatementMetric {
+	if x != nil {
+		return x.P95
+	}
+	return nil
+}
+
+func (x *QueryStatementPercentileSeriesResponse) GetP99() *StatementMetric {
+	if x != nil {
+		return x.P99
+	}
+	return nil
+}
+
+func (x *QueryStatementPercentileSeriesResponse) GetBucketMs() int64 {
+	if x != nil {
+		return x.BucketMs
+	}
+	return 0
+}
+
+type QueryStatementTimingSeriesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         *SeriesScope           `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryStatementTimingSeriesRequest) Reset() {
+	*x = QueryStatementTimingSeriesRequest{}
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryStatementTimingSeriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryStatementTimingSeriesRequest) ProtoMessage() {}
+
+func (x *QueryStatementTimingSeriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryStatementTimingSeriesRequest.ProtoReflect.Descriptor instead.
+func (*QueryStatementTimingSeriesRequest) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *QueryStatementTimingSeriesRequest) GetScope() *SeriesScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+type QueryStatementTimingSeriesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Avg           *StatementMetric       `protobuf:"bytes,1,opt,name=avg,proto3" json:"avg,omitempty"`
+	AvgIo         *StatementMetric       `protobuf:"bytes,2,opt,name=avg_io,json=avgIo,proto3" json:"avg_io,omitempty"`
+	BucketMs      int64                  `protobuf:"varint,3,opt,name=bucket_ms,json=bucketMs,proto3" json:"bucket_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryStatementTimingSeriesResponse) Reset() {
+	*x = QueryStatementTimingSeriesResponse{}
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryStatementTimingSeriesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryStatementTimingSeriesResponse) ProtoMessage() {}
+
+func (x *QueryStatementTimingSeriesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryStatementTimingSeriesResponse.ProtoReflect.Descriptor instead.
+func (*QueryStatementTimingSeriesResponse) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *QueryStatementTimingSeriesResponse) GetAvg() *StatementMetric {
+	if x != nil {
+		return x.Avg
+	}
+	return nil
+}
+
+func (x *QueryStatementTimingSeriesResponse) GetAvgIo() *StatementMetric {
+	if x != nil {
+		return x.AvgIo
+	}
+	return nil
+}
+
+func (x *QueryStatementTimingSeriesResponse) GetBucketMs() int64 {
+	if x != nil {
+		return x.BucketMs
+	}
+	return 0
 }
 
 type QueryStatementDetailRequest struct {
@@ -846,7 +1122,7 @@ type QueryStatementDetailRequest struct {
 
 func (x *QueryStatementDetailRequest) Reset() {
 	*x = QueryStatementDetailRequest{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[11]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -858,7 +1134,7 @@ func (x *QueryStatementDetailRequest) String() string {
 func (*QueryStatementDetailRequest) ProtoMessage() {}
 
 func (x *QueryStatementDetailRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[11]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -871,7 +1147,7 @@ func (x *QueryStatementDetailRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryStatementDetailRequest.ProtoReflect.Descriptor instead.
 func (*QueryStatementDetailRequest) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{11}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *QueryStatementDetailRequest) GetId() int64 {
@@ -911,7 +1187,7 @@ type QueryStatementDetailResponse struct {
 
 func (x *QueryStatementDetailResponse) Reset() {
 	*x = QueryStatementDetailResponse{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[12]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -923,7 +1199,7 @@ func (x *QueryStatementDetailResponse) String() string {
 func (*QueryStatementDetailResponse) ProtoMessage() {}
 
 func (x *QueryStatementDetailResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[12]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -936,7 +1212,7 @@ func (x *QueryStatementDetailResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryStatementDetailResponse.ProtoReflect.Descriptor instead.
 func (*QueryStatementDetailResponse) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{12}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *QueryStatementDetailResponse) GetQuery() string {
@@ -967,111 +1243,6 @@ func (x *QueryStatementDetailResponse) GetDatabaseName() string {
 	return ""
 }
 
-type QueryStatementDetailMetricsRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Internal statement id.
-	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	From          *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
-	To            *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *QueryStatementDetailMetricsRequest) Reset() {
-	*x = QueryStatementDetailMetricsRequest{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *QueryStatementDetailMetricsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*QueryStatementDetailMetricsRequest) ProtoMessage() {}
-
-func (x *QueryStatementDetailMetricsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use QueryStatementDetailMetricsRequest.ProtoReflect.Descriptor instead.
-func (*QueryStatementDetailMetricsRequest) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *QueryStatementDetailMetricsRequest) GetId() int64 {
-	if x != nil {
-		return x.Id
-	}
-	return 0
-}
-
-func (x *QueryStatementDetailMetricsRequest) GetFrom() *timestamppb.Timestamp {
-	if x != nil {
-		return x.From
-	}
-	return nil
-}
-
-func (x *QueryStatementDetailMetricsRequest) GetTo() *timestamppb.Timestamp {
-	if x != nil {
-		return x.To
-	}
-	return nil
-}
-
-type QueryStatementDetailMetricsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Metrics       *StatementMetrics      `protobuf:"bytes,1,opt,name=metrics,proto3" json:"metrics,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *QueryStatementDetailMetricsResponse) Reset() {
-	*x = QueryStatementDetailMetricsResponse{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[14]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *QueryStatementDetailMetricsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*QueryStatementDetailMetricsResponse) ProtoMessage() {}
-
-func (x *QueryStatementDetailMetricsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[14]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use QueryStatementDetailMetricsResponse.ProtoReflect.Descriptor instead.
-func (*QueryStatementDetailMetricsResponse) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{14}
-}
-
-func (x *QueryStatementDetailMetricsResponse) GetMetrics() *StatementMetrics {
-	if x != nil {
-		return x.Metrics
-	}
-	return nil
-}
-
 type QueryStatementSamplesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Internal statement id.
@@ -1088,7 +1259,7 @@ type QueryStatementSamplesRequest struct {
 
 func (x *QueryStatementSamplesRequest) Reset() {
 	*x = QueryStatementSamplesRequest{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[15]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1100,7 +1271,7 @@ func (x *QueryStatementSamplesRequest) String() string {
 func (*QueryStatementSamplesRequest) ProtoMessage() {}
 
 func (x *QueryStatementSamplesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[15]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1113,7 +1284,7 @@ func (x *QueryStatementSamplesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryStatementSamplesRequest.ProtoReflect.Descriptor instead.
 func (*QueryStatementSamplesRequest) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{15}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *QueryStatementSamplesRequest) GetId() int64 {
@@ -1162,7 +1333,7 @@ type QueryStatementSamplesResponse struct {
 
 func (x *QueryStatementSamplesResponse) Reset() {
 	*x = QueryStatementSamplesResponse{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[16]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1174,7 +1345,7 @@ func (x *QueryStatementSamplesResponse) String() string {
 func (*QueryStatementSamplesResponse) ProtoMessage() {}
 
 func (x *QueryStatementSamplesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[16]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1187,7 +1358,7 @@ func (x *QueryStatementSamplesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryStatementSamplesResponse.ProtoReflect.Descriptor instead.
 func (*QueryStatementSamplesResponse) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{16}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *QueryStatementSamplesResponse) GetSamples() []*StatementSample {
@@ -1223,7 +1394,7 @@ type StatementSample struct {
 
 func (x *StatementSample) Reset() {
 	*x = StatementSample{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[17]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1235,7 +1406,7 @@ func (x *StatementSample) String() string {
 func (*StatementSample) ProtoMessage() {}
 
 func (x *StatementSample) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[17]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1248,7 +1419,7 @@ func (x *StatementSample) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatementSample.ProtoReflect.Descriptor instead.
 func (*StatementSample) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{17}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *StatementSample) GetId() int64 {
@@ -1303,7 +1474,7 @@ type GetStatementSamplePlanRequest struct {
 
 func (x *GetStatementSamplePlanRequest) Reset() {
 	*x = GetStatementSamplePlanRequest{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[18]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1315,7 +1486,7 @@ func (x *GetStatementSamplePlanRequest) String() string {
 func (*GetStatementSamplePlanRequest) ProtoMessage() {}
 
 func (x *GetStatementSamplePlanRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[18]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1328,7 +1499,7 @@ func (x *GetStatementSamplePlanRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatementSamplePlanRequest.ProtoReflect.Descriptor instead.
 func (*GetStatementSamplePlanRequest) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{18}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GetStatementSamplePlanRequest) GetSampleId() int64 {
@@ -1350,7 +1521,7 @@ type GetStatementSamplePlanResponse struct {
 
 func (x *GetStatementSamplePlanResponse) Reset() {
 	*x = GetStatementSamplePlanResponse{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[19]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1362,7 +1533,7 @@ func (x *GetStatementSamplePlanResponse) String() string {
 func (*GetStatementSamplePlanResponse) ProtoMessage() {}
 
 func (x *GetStatementSamplePlanResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[19]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1375,7 +1546,7 @@ func (x *GetStatementSamplePlanResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatementSamplePlanResponse.ProtoReflect.Descriptor instead.
 func (*GetStatementSamplePlanResponse) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{19}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GetStatementSamplePlanResponse) GetQuery() string {
@@ -1402,7 +1573,7 @@ type GetStatementSampleTextRequest struct {
 
 func (x *GetStatementSampleTextRequest) Reset() {
 	*x = GetStatementSampleTextRequest{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[20]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1414,7 +1585,7 @@ func (x *GetStatementSampleTextRequest) String() string {
 func (*GetStatementSampleTextRequest) ProtoMessage() {}
 
 func (x *GetStatementSampleTextRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[20]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1427,7 +1598,7 @@ func (x *GetStatementSampleTextRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatementSampleTextRequest.ProtoReflect.Descriptor instead.
 func (*GetStatementSampleTextRequest) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{20}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *GetStatementSampleTextRequest) GetSampleId() int64 {
@@ -1446,7 +1617,7 @@ type GetStatementSampleTextResponse struct {
 
 func (x *GetStatementSampleTextResponse) Reset() {
 	*x = GetStatementSampleTextResponse{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[21]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1458,7 +1629,7 @@ func (x *GetStatementSampleTextResponse) String() string {
 func (*GetStatementSampleTextResponse) ProtoMessage() {}
 
 func (x *GetStatementSampleTextResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[21]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1471,7 +1642,7 @@ func (x *GetStatementSampleTextResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatementSampleTextResponse.ProtoReflect.Descriptor instead.
 func (*GetStatementSampleTextResponse) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{21}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GetStatementSampleTextResponse) GetQuery() string {
@@ -1491,7 +1662,7 @@ type GetStatementTextRequest struct {
 
 func (x *GetStatementTextRequest) Reset() {
 	*x = GetStatementTextRequest{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[22]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1503,7 +1674,7 @@ func (x *GetStatementTextRequest) String() string {
 func (*GetStatementTextRequest) ProtoMessage() {}
 
 func (x *GetStatementTextRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[22]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1516,7 +1687,7 @@ func (x *GetStatementTextRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatementTextRequest.ProtoReflect.Descriptor instead.
 func (*GetStatementTextRequest) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{22}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *GetStatementTextRequest) GetId() int64 {
@@ -1536,7 +1707,7 @@ type GetStatementTextResponse struct {
 
 func (x *GetStatementTextResponse) Reset() {
 	*x = GetStatementTextResponse{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[23]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1548,7 +1719,7 @@ func (x *GetStatementTextResponse) String() string {
 func (*GetStatementTextResponse) ProtoMessage() {}
 
 func (x *GetStatementTextResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[23]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1561,7 +1732,7 @@ func (x *GetStatementTextResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatementTextResponse.ProtoReflect.Descriptor instead.
 func (*GetStatementTextResponse) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{23}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetStatementTextResponse) GetQuery() string {
@@ -1569,98 +1740,6 @@ func (x *GetStatementTextResponse) GetQuery() string {
 		return x.Query
 	}
 	return ""
-}
-
-type StatementMetrics struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Calls         *StatementMetric       `protobuf:"bytes,1,opt,name=calls,proto3" json:"calls,omitempty"`
-	Avg           *StatementMetric       `protobuf:"bytes,2,opt,name=avg,proto3" json:"avg,omitempty"`
-	AvgIo         *StatementMetric       `protobuf:"bytes,3,opt,name=avg_io,json=avgIo,proto3" json:"avg_io,omitempty"`
-	P90           *StatementMetric       `protobuf:"bytes,4,opt,name=p90,proto3" json:"p90,omitempty"`
-	P95           *StatementMetric       `protobuf:"bytes,5,opt,name=p95,proto3" json:"p95,omitempty"`
-	P99           *StatementMetric       `protobuf:"bytes,6,opt,name=p99,proto3" json:"p99,omitempty"`
-	BucketMs      int64                  `protobuf:"varint,7,opt,name=bucket_ms,json=bucketMs,proto3" json:"bucket_ms,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *StatementMetrics) Reset() {
-	*x = StatementMetrics{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[24]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *StatementMetrics) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*StatementMetrics) ProtoMessage() {}
-
-func (x *StatementMetrics) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[24]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use StatementMetrics.ProtoReflect.Descriptor instead.
-func (*StatementMetrics) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{24}
-}
-
-func (x *StatementMetrics) GetCalls() *StatementMetric {
-	if x != nil {
-		return x.Calls
-	}
-	return nil
-}
-
-func (x *StatementMetrics) GetAvg() *StatementMetric {
-	if x != nil {
-		return x.Avg
-	}
-	return nil
-}
-
-func (x *StatementMetrics) GetAvgIo() *StatementMetric {
-	if x != nil {
-		return x.AvgIo
-	}
-	return nil
-}
-
-func (x *StatementMetrics) GetP90() *StatementMetric {
-	if x != nil {
-		return x.P90
-	}
-	return nil
-}
-
-func (x *StatementMetrics) GetP95() *StatementMetric {
-	if x != nil {
-		return x.P95
-	}
-	return nil
-}
-
-func (x *StatementMetrics) GetP99() *StatementMetric {
-	if x != nil {
-		return x.P99
-	}
-	return nil
-}
-
-func (x *StatementMetrics) GetBucketMs() int64 {
-	if x != nil {
-		return x.BucketMs
-	}
-	return 0
 }
 
 type StatementMetric struct {
@@ -1672,7 +1751,7 @@ type StatementMetric struct {
 
 func (x *StatementMetric) Reset() {
 	*x = StatementMetric{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[25]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1684,7 +1763,7 @@ func (x *StatementMetric) String() string {
 func (*StatementMetric) ProtoMessage() {}
 
 func (x *StatementMetric) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[25]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1697,7 +1776,7 @@ func (x *StatementMetric) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatementMetric.ProtoReflect.Descriptor instead.
 func (*StatementMetric) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{25}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *StatementMetric) GetSeries() []*MetricPoint {
@@ -1717,7 +1796,7 @@ type MetricPoint struct {
 
 func (x *MetricPoint) Reset() {
 	*x = MetricPoint{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[26]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1729,7 +1808,7 @@ func (x *MetricPoint) String() string {
 func (*MetricPoint) ProtoMessage() {}
 
 func (x *MetricPoint) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[26]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1742,7 +1821,7 @@ func (x *MetricPoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MetricPoint.ProtoReflect.Descriptor instead.
 func (*MetricPoint) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{26}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *MetricPoint) GetAt() *timestamppb.Timestamp {
@@ -1782,7 +1861,7 @@ type StatementStat struct {
 
 func (x *StatementStat) Reset() {
 	*x = StatementStat{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[27]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1794,7 +1873,7 @@ func (x *StatementStat) String() string {
 func (*StatementStat) ProtoMessage() {}
 
 func (x *StatementStat) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[27]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1807,7 +1886,7 @@ func (x *StatementStat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatementStat.ProtoReflect.Descriptor instead.
 func (*StatementStat) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{27}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *StatementStat) GetId() int64 {
@@ -1903,7 +1982,7 @@ type StatementDelta struct {
 
 func (x *StatementDelta) Reset() {
 	*x = StatementDelta{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[28]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1915,7 +1994,7 @@ func (x *StatementDelta) String() string {
 func (*StatementDelta) ProtoMessage() {}
 
 func (x *StatementDelta) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[28]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1928,7 +2007,7 @@ func (x *StatementDelta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatementDelta.ProtoReflect.Descriptor instead.
 func (*StatementDelta) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{28}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *StatementDelta) GetUserName() string {
@@ -1992,7 +2071,7 @@ type ListTagKeysRequest struct {
 
 func (x *ListTagKeysRequest) Reset() {
 	*x = ListTagKeysRequest{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[29]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2004,7 +2083,7 @@ func (x *ListTagKeysRequest) String() string {
 func (*ListTagKeysRequest) ProtoMessage() {}
 
 func (x *ListTagKeysRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[29]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2017,7 +2096,7 @@ func (x *ListTagKeysRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTagKeysRequest.ProtoReflect.Descriptor instead.
 func (*ListTagKeysRequest) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{29}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ListTagKeysRequest) GetServerName() string {
@@ -2057,7 +2136,7 @@ type ListTagKeysResponse struct {
 
 func (x *ListTagKeysResponse) Reset() {
 	*x = ListTagKeysResponse{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[30]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2069,7 +2148,7 @@ func (x *ListTagKeysResponse) String() string {
 func (*ListTagKeysResponse) ProtoMessage() {}
 
 func (x *ListTagKeysResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[30]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2082,7 +2161,7 @@ func (x *ListTagKeysResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTagKeysResponse.ProtoReflect.Descriptor instead.
 func (*ListTagKeysResponse) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{30}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ListTagKeysResponse) GetKeys() []*TagKey {
@@ -2103,7 +2182,7 @@ type TagKey struct {
 
 func (x *TagKey) Reset() {
 	*x = TagKey{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[31]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2115,7 +2194,7 @@ func (x *TagKey) String() string {
 func (*TagKey) ProtoMessage() {}
 
 func (x *TagKey) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[31]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2128,7 +2207,7 @@ func (x *TagKey) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TagKey.ProtoReflect.Descriptor instead.
 func (*TagKey) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{31}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *TagKey) GetKey() string {
@@ -2158,7 +2237,7 @@ type ListTagValuesRequest struct {
 
 func (x *ListTagValuesRequest) Reset() {
 	*x = ListTagValuesRequest{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[32]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2170,7 +2249,7 @@ func (x *ListTagValuesRequest) String() string {
 func (*ListTagValuesRequest) ProtoMessage() {}
 
 func (x *ListTagValuesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[32]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2183,7 +2262,7 @@ func (x *ListTagValuesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTagValuesRequest.ProtoReflect.Descriptor instead.
 func (*ListTagValuesRequest) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{32}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ListTagValuesRequest) GetServerName() string {
@@ -2230,7 +2309,7 @@ type ListTagValuesResponse struct {
 
 func (x *ListTagValuesResponse) Reset() {
 	*x = ListTagValuesResponse{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[33]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2242,7 +2321,7 @@ func (x *ListTagValuesResponse) String() string {
 func (*ListTagValuesResponse) ProtoMessage() {}
 
 func (x *ListTagValuesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[33]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2255,7 +2334,7 @@ func (x *ListTagValuesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTagValuesResponse.ProtoReflect.Descriptor instead.
 func (*ListTagValuesResponse) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{33}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ListTagValuesResponse) GetValues() []*TagValue {
@@ -2276,7 +2355,7 @@ type TagValue struct {
 
 func (x *TagValue) Reset() {
 	*x = TagValue{}
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[34]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2288,7 +2367,7 @@ func (x *TagValue) String() string {
 func (*TagValue) ProtoMessage() {}
 
 func (x *TagValue) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_statement_proto_msgTypes[34]
+	mi := &file_querysheriff_v1_statement_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2301,7 +2380,7 @@ func (x *TagValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TagValue.ProtoReflect.Descriptor instead.
 func (*TagValue) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{34}
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *TagValue) GetValue() string {
@@ -2363,15 +2442,32 @@ const file_querysheriff_v1_statement_proto_rawDesc = "" +
 	"\n" +
 	"statements\x18\x01 \x03(\v2\x1e.querysheriff.v1.StatementStatR\n" +
 	"statements\x12\x19\n" +
-	"\bhas_more\x18\x02 \x01(\bR\ahasMore\"\xc0\x01\n" +
-	"\x1cQueryStatementMetricsRequest\x12\x1f\n" +
+	"\bhas_more\x18\x02 \x01(\bR\ahasMore\"\xd2\x01\n" +
+	"\vSeriesScope\x12\x1f\n" +
 	"\vserver_name\x18\x01 \x01(\tR\n" +
 	"serverName\x12#\n" +
-	"\rdatabase_name\x18\x02 \x01(\tR\fdatabaseName\x12.\n" +
-	"\x04from\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
-	"\x02to\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\"\\\n" +
-	"\x1dQueryStatementMetricsResponse\x12;\n" +
-	"\ametrics\x18\x01 \x01(\v2!.querysheriff.v1.StatementMetricsR\ametrics\"\x89\x01\n" +
+	"\rdatabase_name\x18\x02 \x01(\tR\fdatabaseName\x12!\n" +
+	"\fstatement_id\x18\x03 \x01(\x03R\vstatementId\x12.\n" +
+	"\x04from\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
+	"\x02to\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\"V\n" +
+	" QueryStatementCallsSeriesRequest\x122\n" +
+	"\x05scope\x18\x01 \x01(\v2\x1c.querysheriff.v1.SeriesScopeR\x05scope\"x\n" +
+	"!QueryStatementCallsSeriesResponse\x126\n" +
+	"\x05calls\x18\x01 \x01(\v2 .querysheriff.v1.StatementMetricR\x05calls\x12\x1b\n" +
+	"\tbucket_ms\x18\x02 \x01(\x03R\bbucketMs\"[\n" +
+	"%QueryStatementPercentileSeriesRequest\x122\n" +
+	"\x05scope\x18\x01 \x01(\v2\x1c.querysheriff.v1.SeriesScopeR\x05scope\"\xe1\x01\n" +
+	"&QueryStatementPercentileSeriesResponse\x122\n" +
+	"\x03p90\x18\x01 \x01(\v2 .querysheriff.v1.StatementMetricR\x03p90\x122\n" +
+	"\x03p95\x18\x02 \x01(\v2 .querysheriff.v1.StatementMetricR\x03p95\x122\n" +
+	"\x03p99\x18\x03 \x01(\v2 .querysheriff.v1.StatementMetricR\x03p99\x12\x1b\n" +
+	"\tbucket_ms\x18\x04 \x01(\x03R\bbucketMs\"W\n" +
+	"!QueryStatementTimingSeriesRequest\x122\n" +
+	"\x05scope\x18\x01 \x01(\v2\x1c.querysheriff.v1.SeriesScopeR\x05scope\"\xae\x01\n" +
+	"\"QueryStatementTimingSeriesResponse\x122\n" +
+	"\x03avg\x18\x01 \x01(\v2 .querysheriff.v1.StatementMetricR\x03avg\x127\n" +
+	"\x06avg_io\x18\x02 \x01(\v2 .querysheriff.v1.StatementMetricR\x05avgIo\x12\x1b\n" +
+	"\tbucket_ms\x18\x03 \x01(\x03R\bbucketMs\"\x89\x01\n" +
 	"\x1bQueryStatementDetailRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12.\n" +
 	"\x04from\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
@@ -2384,13 +2480,7 @@ const file_querysheriff_v1_statement_proto_rawDesc = "" +
 	"\rdatabase_name\x18\x06 \x01(\tR\fdatabaseName\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x90\x01\n" +
-	"\"QueryStatementDetailMetricsRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x12.\n" +
-	"\x04from\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
-	"\x02to\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\"b\n" +
-	"#QueryStatementDetailMetricsResponse\x12;\n" +
-	"\ametrics\x18\x01 \x01(\v2!.querysheriff.v1.StatementMetricsR\ametrics\"\xb8\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb8\x01\n" +
 	"\x1cQueryStatementSamplesRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12.\n" +
 	"\x04from\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
@@ -2424,15 +2514,7 @@ const file_querysheriff_v1_statement_proto_rawDesc = "" +
 	"\x17GetStatementTextRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\"0\n" +
 	"\x18GetStatementTextResponse\x12\x14\n" +
-	"\x05query\x18\x01 \x01(\tR\x05query\"\xf0\x02\n" +
-	"\x10StatementMetrics\x126\n" +
-	"\x05calls\x18\x01 \x01(\v2 .querysheriff.v1.StatementMetricR\x05calls\x122\n" +
-	"\x03avg\x18\x02 \x01(\v2 .querysheriff.v1.StatementMetricR\x03avg\x127\n" +
-	"\x06avg_io\x18\x03 \x01(\v2 .querysheriff.v1.StatementMetricR\x05avgIo\x122\n" +
-	"\x03p90\x18\x04 \x01(\v2 .querysheriff.v1.StatementMetricR\x03p90\x122\n" +
-	"\x03p95\x18\x05 \x01(\v2 .querysheriff.v1.StatementMetricR\x03p95\x122\n" +
-	"\x03p99\x18\x06 \x01(\v2 .querysheriff.v1.StatementMetricR\x03p99\x12\x1b\n" +
-	"\tbucket_ms\x18\a \x01(\x03R\bbucketMs\"G\n" +
+	"\x05query\x18\x01 \x01(\tR\x05query\"G\n" +
 	"\x0fStatementMetric\x124\n" +
 	"\x06series\x18\x01 \x03(\v2\x1c.querysheriff.v1.MetricPointR\x06series\"O\n" +
 	"\vMetricPoint\x12*\n" +
@@ -2504,15 +2586,15 @@ const file_querysheriff_v1_statement_proto_rawDesc = "" +
 	"\x1bSTATEMENT_SORT_COLUMN_CALLS\x10\x04\x12'\n" +
 	"#STATEMENT_SORT_COLUMN_ROWS_PER_CALL\x10\x05\x12 \n" +
 	"\x1cSTATEMENT_SORT_COLUMN_PCT_IO\x10\x06\x12\"\n" +
-	"\x1eSTATEMENT_SORT_COLUMN_PCT_TIME\x10\a2\xf7\n" +
-	"\n" +
+	"\x1eSTATEMENT_SORT_COLUMN_PCT_TIME\x10\a2\x97\f\n" +
 	"\x10StatementService\x12i\n" +
 	"\x10ReportStatements\x12(.querysheriff.v1.ReportStatementsRequest\x1a).querysheriff.v1.ReportStatementsResponse\"\x00\x12u\n" +
 	"\x14ReportStatementTexts\x12,.querysheriff.v1.ReportStatementTextsRequest\x1a-.querysheriff.v1.ReportStatementTextsResponse\"\x00\x12f\n" +
-	"\x0fQueryStatements\x12'.querysheriff.v1.QueryStatementsRequest\x1a(.querysheriff.v1.QueryStatementsResponse\"\x00\x12x\n" +
-	"\x15QueryStatementMetrics\x12-.querysheriff.v1.QueryStatementMetricsRequest\x1a..querysheriff.v1.QueryStatementMetricsResponse\"\x00\x12u\n" +
-	"\x14QueryStatementDetail\x12,.querysheriff.v1.QueryStatementDetailRequest\x1a-.querysheriff.v1.QueryStatementDetailResponse\"\x00\x12\x8a\x01\n" +
-	"\x1bQueryStatementDetailMetrics\x123.querysheriff.v1.QueryStatementDetailMetricsRequest\x1a4.querysheriff.v1.QueryStatementDetailMetricsResponse\"\x00\x12x\n" +
+	"\x0fQueryStatements\x12'.querysheriff.v1.QueryStatementsRequest\x1a(.querysheriff.v1.QueryStatementsResponse\"\x00\x12\x84\x01\n" +
+	"\x19QueryStatementCallsSeries\x121.querysheriff.v1.QueryStatementCallsSeriesRequest\x1a2.querysheriff.v1.QueryStatementCallsSeriesResponse\"\x00\x12\x93\x01\n" +
+	"\x1eQueryStatementPercentileSeries\x126.querysheriff.v1.QueryStatementPercentileSeriesRequest\x1a7.querysheriff.v1.QueryStatementPercentileSeriesResponse\"\x00\x12\x87\x01\n" +
+	"\x1aQueryStatementTimingSeries\x122.querysheriff.v1.QueryStatementTimingSeriesRequest\x1a3.querysheriff.v1.QueryStatementTimingSeriesResponse\"\x00\x12u\n" +
+	"\x14QueryStatementDetail\x12,.querysheriff.v1.QueryStatementDetailRequest\x1a-.querysheriff.v1.QueryStatementDetailResponse\"\x00\x12x\n" +
 	"\x15QueryStatementSamples\x12-.querysheriff.v1.QueryStatementSamplesRequest\x1a..querysheriff.v1.QueryStatementSamplesResponse\"\x00\x12{\n" +
 	"\x16GetStatementSamplePlan\x12..querysheriff.v1.GetStatementSamplePlanRequest\x1a/.querysheriff.v1.GetStatementSamplePlanResponse\"\x00\x12{\n" +
 	"\x16GetStatementSampleText\x12..querysheriff.v1.GetStatementSampleTextRequest\x1a/.querysheriff.v1.GetStatementSampleTextResponse\"\x00\x12i\n" +
@@ -2533,122 +2615,125 @@ func file_querysheriff_v1_statement_proto_rawDescGZIP() []byte {
 }
 
 var file_querysheriff_v1_statement_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_querysheriff_v1_statement_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_querysheriff_v1_statement_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
 var file_querysheriff_v1_statement_proto_goTypes = []any{
-	(TagFilterOperator)(0),                      // 0: querysheriff.v1.TagFilterOperator
-	(QueryKind)(0),                              // 1: querysheriff.v1.QueryKind
-	(StatementSortColumn)(0),                    // 2: querysheriff.v1.StatementSortColumn
-	(*TagFilter)(nil),                           // 3: querysheriff.v1.TagFilter
-	(*ReportStatementsRequest)(nil),             // 4: querysheriff.v1.ReportStatementsRequest
-	(*ReportStatementsResponse)(nil),            // 5: querysheriff.v1.ReportStatementsResponse
-	(*StatementIdentity)(nil),                   // 6: querysheriff.v1.StatementIdentity
-	(*ReportStatementTextsRequest)(nil),         // 7: querysheriff.v1.ReportStatementTextsRequest
-	(*ReportStatementTextsResponse)(nil),        // 8: querysheriff.v1.ReportStatementTextsResponse
-	(*StatementText)(nil),                       // 9: querysheriff.v1.StatementText
-	(*QueryStatementsRequest)(nil),              // 10: querysheriff.v1.QueryStatementsRequest
-	(*QueryStatementsResponse)(nil),             // 11: querysheriff.v1.QueryStatementsResponse
-	(*QueryStatementMetricsRequest)(nil),        // 12: querysheriff.v1.QueryStatementMetricsRequest
-	(*QueryStatementMetricsResponse)(nil),       // 13: querysheriff.v1.QueryStatementMetricsResponse
-	(*QueryStatementDetailRequest)(nil),         // 14: querysheriff.v1.QueryStatementDetailRequest
-	(*QueryStatementDetailResponse)(nil),        // 15: querysheriff.v1.QueryStatementDetailResponse
-	(*QueryStatementDetailMetricsRequest)(nil),  // 16: querysheriff.v1.QueryStatementDetailMetricsRequest
-	(*QueryStatementDetailMetricsResponse)(nil), // 17: querysheriff.v1.QueryStatementDetailMetricsResponse
-	(*QueryStatementSamplesRequest)(nil),        // 18: querysheriff.v1.QueryStatementSamplesRequest
-	(*QueryStatementSamplesResponse)(nil),       // 19: querysheriff.v1.QueryStatementSamplesResponse
-	(*StatementSample)(nil),                     // 20: querysheriff.v1.StatementSample
-	(*GetStatementSamplePlanRequest)(nil),       // 21: querysheriff.v1.GetStatementSamplePlanRequest
-	(*GetStatementSamplePlanResponse)(nil),      // 22: querysheriff.v1.GetStatementSamplePlanResponse
-	(*GetStatementSampleTextRequest)(nil),       // 23: querysheriff.v1.GetStatementSampleTextRequest
-	(*GetStatementSampleTextResponse)(nil),      // 24: querysheriff.v1.GetStatementSampleTextResponse
-	(*GetStatementTextRequest)(nil),             // 25: querysheriff.v1.GetStatementTextRequest
-	(*GetStatementTextResponse)(nil),            // 26: querysheriff.v1.GetStatementTextResponse
-	(*StatementMetrics)(nil),                    // 27: querysheriff.v1.StatementMetrics
-	(*StatementMetric)(nil),                     // 28: querysheriff.v1.StatementMetric
-	(*MetricPoint)(nil),                         // 29: querysheriff.v1.MetricPoint
-	(*StatementStat)(nil),                       // 30: querysheriff.v1.StatementStat
-	(*StatementDelta)(nil),                      // 31: querysheriff.v1.StatementDelta
-	(*ListTagKeysRequest)(nil),                  // 32: querysheriff.v1.ListTagKeysRequest
-	(*ListTagKeysResponse)(nil),                 // 33: querysheriff.v1.ListTagKeysResponse
-	(*TagKey)(nil),                              // 34: querysheriff.v1.TagKey
-	(*ListTagValuesRequest)(nil),                // 35: querysheriff.v1.ListTagValuesRequest
-	(*ListTagValuesResponse)(nil),               // 36: querysheriff.v1.ListTagValuesResponse
-	(*TagValue)(nil),                            // 37: querysheriff.v1.TagValue
-	nil,                                         // 38: querysheriff.v1.QueryStatementDetailResponse.TagsEntry
-	nil,                                         // 39: querysheriff.v1.StatementSample.TagsEntry
-	nil,                                         // 40: querysheriff.v1.StatementStat.TagsEntry
-	(*timestamppb.Timestamp)(nil),               // 41: google.protobuf.Timestamp
+	(TagFilterOperator)(0),                         // 0: querysheriff.v1.TagFilterOperator
+	(QueryKind)(0),                                 // 1: querysheriff.v1.QueryKind
+	(StatementSortColumn)(0),                       // 2: querysheriff.v1.StatementSortColumn
+	(*TagFilter)(nil),                              // 3: querysheriff.v1.TagFilter
+	(*ReportStatementsRequest)(nil),                // 4: querysheriff.v1.ReportStatementsRequest
+	(*ReportStatementsResponse)(nil),               // 5: querysheriff.v1.ReportStatementsResponse
+	(*StatementIdentity)(nil),                      // 6: querysheriff.v1.StatementIdentity
+	(*ReportStatementTextsRequest)(nil),            // 7: querysheriff.v1.ReportStatementTextsRequest
+	(*ReportStatementTextsResponse)(nil),           // 8: querysheriff.v1.ReportStatementTextsResponse
+	(*StatementText)(nil),                          // 9: querysheriff.v1.StatementText
+	(*QueryStatementsRequest)(nil),                 // 10: querysheriff.v1.QueryStatementsRequest
+	(*QueryStatementsResponse)(nil),                // 11: querysheriff.v1.QueryStatementsResponse
+	(*SeriesScope)(nil),                            // 12: querysheriff.v1.SeriesScope
+	(*QueryStatementCallsSeriesRequest)(nil),       // 13: querysheriff.v1.QueryStatementCallsSeriesRequest
+	(*QueryStatementCallsSeriesResponse)(nil),      // 14: querysheriff.v1.QueryStatementCallsSeriesResponse
+	(*QueryStatementPercentileSeriesRequest)(nil),  // 15: querysheriff.v1.QueryStatementPercentileSeriesRequest
+	(*QueryStatementPercentileSeriesResponse)(nil), // 16: querysheriff.v1.QueryStatementPercentileSeriesResponse
+	(*QueryStatementTimingSeriesRequest)(nil),      // 17: querysheriff.v1.QueryStatementTimingSeriesRequest
+	(*QueryStatementTimingSeriesResponse)(nil),     // 18: querysheriff.v1.QueryStatementTimingSeriesResponse
+	(*QueryStatementDetailRequest)(nil),            // 19: querysheriff.v1.QueryStatementDetailRequest
+	(*QueryStatementDetailResponse)(nil),           // 20: querysheriff.v1.QueryStatementDetailResponse
+	(*QueryStatementSamplesRequest)(nil),           // 21: querysheriff.v1.QueryStatementSamplesRequest
+	(*QueryStatementSamplesResponse)(nil),          // 22: querysheriff.v1.QueryStatementSamplesResponse
+	(*StatementSample)(nil),                        // 23: querysheriff.v1.StatementSample
+	(*GetStatementSamplePlanRequest)(nil),          // 24: querysheriff.v1.GetStatementSamplePlanRequest
+	(*GetStatementSamplePlanResponse)(nil),         // 25: querysheriff.v1.GetStatementSamplePlanResponse
+	(*GetStatementSampleTextRequest)(nil),          // 26: querysheriff.v1.GetStatementSampleTextRequest
+	(*GetStatementSampleTextResponse)(nil),         // 27: querysheriff.v1.GetStatementSampleTextResponse
+	(*GetStatementTextRequest)(nil),                // 28: querysheriff.v1.GetStatementTextRequest
+	(*GetStatementTextResponse)(nil),               // 29: querysheriff.v1.GetStatementTextResponse
+	(*StatementMetric)(nil),                        // 30: querysheriff.v1.StatementMetric
+	(*MetricPoint)(nil),                            // 31: querysheriff.v1.MetricPoint
+	(*StatementStat)(nil),                          // 32: querysheriff.v1.StatementStat
+	(*StatementDelta)(nil),                         // 33: querysheriff.v1.StatementDelta
+	(*ListTagKeysRequest)(nil),                     // 34: querysheriff.v1.ListTagKeysRequest
+	(*ListTagKeysResponse)(nil),                    // 35: querysheriff.v1.ListTagKeysResponse
+	(*TagKey)(nil),                                 // 36: querysheriff.v1.TagKey
+	(*ListTagValuesRequest)(nil),                   // 37: querysheriff.v1.ListTagValuesRequest
+	(*ListTagValuesResponse)(nil),                  // 38: querysheriff.v1.ListTagValuesResponse
+	(*TagValue)(nil),                               // 39: querysheriff.v1.TagValue
+	nil,                                            // 40: querysheriff.v1.QueryStatementDetailResponse.TagsEntry
+	nil,                                            // 41: querysheriff.v1.StatementSample.TagsEntry
+	nil,                                            // 42: querysheriff.v1.StatementStat.TagsEntry
+	(*timestamppb.Timestamp)(nil),                  // 43: google.protobuf.Timestamp
 }
 var file_querysheriff_v1_statement_proto_depIdxs = []int32{
 	0,  // 0: querysheriff.v1.TagFilter.op:type_name -> querysheriff.v1.TagFilterOperator
-	41, // 1: querysheriff.v1.ReportStatementsRequest.collected_at:type_name -> google.protobuf.Timestamp
-	31, // 2: querysheriff.v1.ReportStatementsRequest.statement_deltas:type_name -> querysheriff.v1.StatementDelta
+	43, // 1: querysheriff.v1.ReportStatementsRequest.collected_at:type_name -> google.protobuf.Timestamp
+	33, // 2: querysheriff.v1.ReportStatementsRequest.statement_deltas:type_name -> querysheriff.v1.StatementDelta
 	6,  // 3: querysheriff.v1.ReportStatementsResponse.unknown_statements:type_name -> querysheriff.v1.StatementIdentity
 	9,  // 4: querysheriff.v1.ReportStatementTextsRequest.statement_texts:type_name -> querysheriff.v1.StatementText
 	6,  // 5: querysheriff.v1.StatementText.identity:type_name -> querysheriff.v1.StatementIdentity
-	41, // 6: querysheriff.v1.QueryStatementsRequest.from:type_name -> google.protobuf.Timestamp
-	41, // 7: querysheriff.v1.QueryStatementsRequest.to:type_name -> google.protobuf.Timestamp
+	43, // 6: querysheriff.v1.QueryStatementsRequest.from:type_name -> google.protobuf.Timestamp
+	43, // 7: querysheriff.v1.QueryStatementsRequest.to:type_name -> google.protobuf.Timestamp
 	3,  // 8: querysheriff.v1.QueryStatementsRequest.tag_filters:type_name -> querysheriff.v1.TagFilter
 	1,  // 9: querysheriff.v1.QueryStatementsRequest.kinds:type_name -> querysheriff.v1.QueryKind
 	2,  // 10: querysheriff.v1.QueryStatementsRequest.sort_column:type_name -> querysheriff.v1.StatementSortColumn
-	30, // 11: querysheriff.v1.QueryStatementsResponse.statements:type_name -> querysheriff.v1.StatementStat
-	41, // 12: querysheriff.v1.QueryStatementMetricsRequest.from:type_name -> google.protobuf.Timestamp
-	41, // 13: querysheriff.v1.QueryStatementMetricsRequest.to:type_name -> google.protobuf.Timestamp
-	27, // 14: querysheriff.v1.QueryStatementMetricsResponse.metrics:type_name -> querysheriff.v1.StatementMetrics
-	41, // 15: querysheriff.v1.QueryStatementDetailRequest.from:type_name -> google.protobuf.Timestamp
-	41, // 16: querysheriff.v1.QueryStatementDetailRequest.to:type_name -> google.protobuf.Timestamp
-	38, // 17: querysheriff.v1.QueryStatementDetailResponse.tags:type_name -> querysheriff.v1.QueryStatementDetailResponse.TagsEntry
-	41, // 18: querysheriff.v1.QueryStatementDetailMetricsRequest.from:type_name -> google.protobuf.Timestamp
-	41, // 19: querysheriff.v1.QueryStatementDetailMetricsRequest.to:type_name -> google.protobuf.Timestamp
-	27, // 20: querysheriff.v1.QueryStatementDetailMetricsResponse.metrics:type_name -> querysheriff.v1.StatementMetrics
-	41, // 21: querysheriff.v1.QueryStatementSamplesRequest.from:type_name -> google.protobuf.Timestamp
-	41, // 22: querysheriff.v1.QueryStatementSamplesRequest.to:type_name -> google.protobuf.Timestamp
-	20, // 23: querysheriff.v1.QueryStatementSamplesResponse.samples:type_name -> querysheriff.v1.StatementSample
-	41, // 24: querysheriff.v1.StatementSample.occurred_at:type_name -> google.protobuf.Timestamp
-	39, // 25: querysheriff.v1.StatementSample.tags:type_name -> querysheriff.v1.StatementSample.TagsEntry
-	28, // 26: querysheriff.v1.StatementMetrics.calls:type_name -> querysheriff.v1.StatementMetric
-	28, // 27: querysheriff.v1.StatementMetrics.avg:type_name -> querysheriff.v1.StatementMetric
-	28, // 28: querysheriff.v1.StatementMetrics.avg_io:type_name -> querysheriff.v1.StatementMetric
-	28, // 29: querysheriff.v1.StatementMetrics.p90:type_name -> querysheriff.v1.StatementMetric
-	28, // 30: querysheriff.v1.StatementMetrics.p95:type_name -> querysheriff.v1.StatementMetric
-	28, // 31: querysheriff.v1.StatementMetrics.p99:type_name -> querysheriff.v1.StatementMetric
-	29, // 32: querysheriff.v1.StatementMetric.series:type_name -> querysheriff.v1.MetricPoint
-	41, // 33: querysheriff.v1.MetricPoint.at:type_name -> google.protobuf.Timestamp
-	40, // 34: querysheriff.v1.StatementStat.tags:type_name -> querysheriff.v1.StatementStat.TagsEntry
-	41, // 35: querysheriff.v1.ListTagKeysRequest.from:type_name -> google.protobuf.Timestamp
-	41, // 36: querysheriff.v1.ListTagKeysRequest.to:type_name -> google.protobuf.Timestamp
-	34, // 37: querysheriff.v1.ListTagKeysResponse.keys:type_name -> querysheriff.v1.TagKey
-	41, // 38: querysheriff.v1.ListTagValuesRequest.from:type_name -> google.protobuf.Timestamp
-	41, // 39: querysheriff.v1.ListTagValuesRequest.to:type_name -> google.protobuf.Timestamp
-	37, // 40: querysheriff.v1.ListTagValuesResponse.values:type_name -> querysheriff.v1.TagValue
-	4,  // 41: querysheriff.v1.StatementService.ReportStatements:input_type -> querysheriff.v1.ReportStatementsRequest
-	7,  // 42: querysheriff.v1.StatementService.ReportStatementTexts:input_type -> querysheriff.v1.ReportStatementTextsRequest
-	10, // 43: querysheriff.v1.StatementService.QueryStatements:input_type -> querysheriff.v1.QueryStatementsRequest
-	12, // 44: querysheriff.v1.StatementService.QueryStatementMetrics:input_type -> querysheriff.v1.QueryStatementMetricsRequest
-	14, // 45: querysheriff.v1.StatementService.QueryStatementDetail:input_type -> querysheriff.v1.QueryStatementDetailRequest
-	16, // 46: querysheriff.v1.StatementService.QueryStatementDetailMetrics:input_type -> querysheriff.v1.QueryStatementDetailMetricsRequest
-	18, // 47: querysheriff.v1.StatementService.QueryStatementSamples:input_type -> querysheriff.v1.QueryStatementSamplesRequest
-	21, // 48: querysheriff.v1.StatementService.GetStatementSamplePlan:input_type -> querysheriff.v1.GetStatementSamplePlanRequest
-	23, // 49: querysheriff.v1.StatementService.GetStatementSampleText:input_type -> querysheriff.v1.GetStatementSampleTextRequest
-	25, // 50: querysheriff.v1.StatementService.GetStatementText:input_type -> querysheriff.v1.GetStatementTextRequest
-	32, // 51: querysheriff.v1.StatementService.ListTagKeys:input_type -> querysheriff.v1.ListTagKeysRequest
-	35, // 52: querysheriff.v1.StatementService.ListTagValues:input_type -> querysheriff.v1.ListTagValuesRequest
+	32, // 11: querysheriff.v1.QueryStatementsResponse.statements:type_name -> querysheriff.v1.StatementStat
+	43, // 12: querysheriff.v1.SeriesScope.from:type_name -> google.protobuf.Timestamp
+	43, // 13: querysheriff.v1.SeriesScope.to:type_name -> google.protobuf.Timestamp
+	12, // 14: querysheriff.v1.QueryStatementCallsSeriesRequest.scope:type_name -> querysheriff.v1.SeriesScope
+	30, // 15: querysheriff.v1.QueryStatementCallsSeriesResponse.calls:type_name -> querysheriff.v1.StatementMetric
+	12, // 16: querysheriff.v1.QueryStatementPercentileSeriesRequest.scope:type_name -> querysheriff.v1.SeriesScope
+	30, // 17: querysheriff.v1.QueryStatementPercentileSeriesResponse.p90:type_name -> querysheriff.v1.StatementMetric
+	30, // 18: querysheriff.v1.QueryStatementPercentileSeriesResponse.p95:type_name -> querysheriff.v1.StatementMetric
+	30, // 19: querysheriff.v1.QueryStatementPercentileSeriesResponse.p99:type_name -> querysheriff.v1.StatementMetric
+	12, // 20: querysheriff.v1.QueryStatementTimingSeriesRequest.scope:type_name -> querysheriff.v1.SeriesScope
+	30, // 21: querysheriff.v1.QueryStatementTimingSeriesResponse.avg:type_name -> querysheriff.v1.StatementMetric
+	30, // 22: querysheriff.v1.QueryStatementTimingSeriesResponse.avg_io:type_name -> querysheriff.v1.StatementMetric
+	43, // 23: querysheriff.v1.QueryStatementDetailRequest.from:type_name -> google.protobuf.Timestamp
+	43, // 24: querysheriff.v1.QueryStatementDetailRequest.to:type_name -> google.protobuf.Timestamp
+	40, // 25: querysheriff.v1.QueryStatementDetailResponse.tags:type_name -> querysheriff.v1.QueryStatementDetailResponse.TagsEntry
+	43, // 26: querysheriff.v1.QueryStatementSamplesRequest.from:type_name -> google.protobuf.Timestamp
+	43, // 27: querysheriff.v1.QueryStatementSamplesRequest.to:type_name -> google.protobuf.Timestamp
+	23, // 28: querysheriff.v1.QueryStatementSamplesResponse.samples:type_name -> querysheriff.v1.StatementSample
+	43, // 29: querysheriff.v1.StatementSample.occurred_at:type_name -> google.protobuf.Timestamp
+	41, // 30: querysheriff.v1.StatementSample.tags:type_name -> querysheriff.v1.StatementSample.TagsEntry
+	31, // 31: querysheriff.v1.StatementMetric.series:type_name -> querysheriff.v1.MetricPoint
+	43, // 32: querysheriff.v1.MetricPoint.at:type_name -> google.protobuf.Timestamp
+	42, // 33: querysheriff.v1.StatementStat.tags:type_name -> querysheriff.v1.StatementStat.TagsEntry
+	43, // 34: querysheriff.v1.ListTagKeysRequest.from:type_name -> google.protobuf.Timestamp
+	43, // 35: querysheriff.v1.ListTagKeysRequest.to:type_name -> google.protobuf.Timestamp
+	36, // 36: querysheriff.v1.ListTagKeysResponse.keys:type_name -> querysheriff.v1.TagKey
+	43, // 37: querysheriff.v1.ListTagValuesRequest.from:type_name -> google.protobuf.Timestamp
+	43, // 38: querysheriff.v1.ListTagValuesRequest.to:type_name -> google.protobuf.Timestamp
+	39, // 39: querysheriff.v1.ListTagValuesResponse.values:type_name -> querysheriff.v1.TagValue
+	4,  // 40: querysheriff.v1.StatementService.ReportStatements:input_type -> querysheriff.v1.ReportStatementsRequest
+	7,  // 41: querysheriff.v1.StatementService.ReportStatementTexts:input_type -> querysheriff.v1.ReportStatementTextsRequest
+	10, // 42: querysheriff.v1.StatementService.QueryStatements:input_type -> querysheriff.v1.QueryStatementsRequest
+	13, // 43: querysheriff.v1.StatementService.QueryStatementCallsSeries:input_type -> querysheriff.v1.QueryStatementCallsSeriesRequest
+	15, // 44: querysheriff.v1.StatementService.QueryStatementPercentileSeries:input_type -> querysheriff.v1.QueryStatementPercentileSeriesRequest
+	17, // 45: querysheriff.v1.StatementService.QueryStatementTimingSeries:input_type -> querysheriff.v1.QueryStatementTimingSeriesRequest
+	19, // 46: querysheriff.v1.StatementService.QueryStatementDetail:input_type -> querysheriff.v1.QueryStatementDetailRequest
+	21, // 47: querysheriff.v1.StatementService.QueryStatementSamples:input_type -> querysheriff.v1.QueryStatementSamplesRequest
+	24, // 48: querysheriff.v1.StatementService.GetStatementSamplePlan:input_type -> querysheriff.v1.GetStatementSamplePlanRequest
+	26, // 49: querysheriff.v1.StatementService.GetStatementSampleText:input_type -> querysheriff.v1.GetStatementSampleTextRequest
+	28, // 50: querysheriff.v1.StatementService.GetStatementText:input_type -> querysheriff.v1.GetStatementTextRequest
+	34, // 51: querysheriff.v1.StatementService.ListTagKeys:input_type -> querysheriff.v1.ListTagKeysRequest
+	37, // 52: querysheriff.v1.StatementService.ListTagValues:input_type -> querysheriff.v1.ListTagValuesRequest
 	5,  // 53: querysheriff.v1.StatementService.ReportStatements:output_type -> querysheriff.v1.ReportStatementsResponse
 	8,  // 54: querysheriff.v1.StatementService.ReportStatementTexts:output_type -> querysheriff.v1.ReportStatementTextsResponse
 	11, // 55: querysheriff.v1.StatementService.QueryStatements:output_type -> querysheriff.v1.QueryStatementsResponse
-	13, // 56: querysheriff.v1.StatementService.QueryStatementMetrics:output_type -> querysheriff.v1.QueryStatementMetricsResponse
-	15, // 57: querysheriff.v1.StatementService.QueryStatementDetail:output_type -> querysheriff.v1.QueryStatementDetailResponse
-	17, // 58: querysheriff.v1.StatementService.QueryStatementDetailMetrics:output_type -> querysheriff.v1.QueryStatementDetailMetricsResponse
-	19, // 59: querysheriff.v1.StatementService.QueryStatementSamples:output_type -> querysheriff.v1.QueryStatementSamplesResponse
-	22, // 60: querysheriff.v1.StatementService.GetStatementSamplePlan:output_type -> querysheriff.v1.GetStatementSamplePlanResponse
-	24, // 61: querysheriff.v1.StatementService.GetStatementSampleText:output_type -> querysheriff.v1.GetStatementSampleTextResponse
-	26, // 62: querysheriff.v1.StatementService.GetStatementText:output_type -> querysheriff.v1.GetStatementTextResponse
-	33, // 63: querysheriff.v1.StatementService.ListTagKeys:output_type -> querysheriff.v1.ListTagKeysResponse
-	36, // 64: querysheriff.v1.StatementService.ListTagValues:output_type -> querysheriff.v1.ListTagValuesResponse
-	53, // [53:65] is the sub-list for method output_type
-	41, // [41:53] is the sub-list for method input_type
-	41, // [41:41] is the sub-list for extension type_name
-	41, // [41:41] is the sub-list for extension extendee
-	0,  // [0:41] is the sub-list for field type_name
+	14, // 56: querysheriff.v1.StatementService.QueryStatementCallsSeries:output_type -> querysheriff.v1.QueryStatementCallsSeriesResponse
+	16, // 57: querysheriff.v1.StatementService.QueryStatementPercentileSeries:output_type -> querysheriff.v1.QueryStatementPercentileSeriesResponse
+	18, // 58: querysheriff.v1.StatementService.QueryStatementTimingSeries:output_type -> querysheriff.v1.QueryStatementTimingSeriesResponse
+	20, // 59: querysheriff.v1.StatementService.QueryStatementDetail:output_type -> querysheriff.v1.QueryStatementDetailResponse
+	22, // 60: querysheriff.v1.StatementService.QueryStatementSamples:output_type -> querysheriff.v1.QueryStatementSamplesResponse
+	25, // 61: querysheriff.v1.StatementService.GetStatementSamplePlan:output_type -> querysheriff.v1.GetStatementSamplePlanResponse
+	27, // 62: querysheriff.v1.StatementService.GetStatementSampleText:output_type -> querysheriff.v1.GetStatementSampleTextResponse
+	29, // 63: querysheriff.v1.StatementService.GetStatementText:output_type -> querysheriff.v1.GetStatementTextResponse
+	35, // 64: querysheriff.v1.StatementService.ListTagKeys:output_type -> querysheriff.v1.ListTagKeysResponse
+	38, // 65: querysheriff.v1.StatementService.ListTagValues:output_type -> querysheriff.v1.ListTagValuesResponse
+	53, // [53:66] is the sub-list for method output_type
+	40, // [40:53] is the sub-list for method input_type
+	40, // [40:40] is the sub-list for extension type_name
+	40, // [40:40] is the sub-list for extension extendee
+	0,  // [0:40] is the sub-list for field type_name
 }
 
 func init() { file_querysheriff_v1_statement_proto_init() }
@@ -2662,7 +2747,7 @@ func file_querysheriff_v1_statement_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_querysheriff_v1_statement_proto_rawDesc), len(file_querysheriff_v1_statement_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   38,
+			NumMessages:   40,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

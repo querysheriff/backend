@@ -253,37 +253,95 @@ func (s *StatementServer) QueryStatements(
 	}), nil
 }
 
-func (s *StatementServer) QueryStatementMetrics(
+type seriesRequest struct {
+	statementID              pgtype.Int8
+	serverName, databaseName pgtype.Text
+	allowedServers           []string
+	from, to                 time.Time
+}
+
+func (s *StatementServer) resolveSeriesRequest(
 	ctx context.Context,
-	req *connect.Request[querysheriffv1.QueryStatementMetricsRequest],
-) (*connect.Response[querysheriffv1.QueryStatementMetricsResponse], error) {
-	msg := req.Msg
+	scope *querysheriffv1.SeriesScope,
+) (seriesRequest, error) {
+	principal, err := s.authorizeStatementQuery(ctx, scope.GetServerName(), scope.GetFrom(), scope.GetTo())
+	if err != nil {
+		return seriesRequest{}, err
+	}
 
-	principal, err := s.authorizeStatementQuery(ctx, msg.GetServerName(), msg.GetFrom(), msg.GetTo())
+	return seriesRequest{
+		statementID:    int8FromProto(scope.GetStatementId()),
+		serverName:     textFilter(scope.GetServerName()),
+		databaseName:   textFilter(scope.GetDatabaseName()),
+		allowedServers: principal.AllowedServerFilter(),
+		from:           scope.GetFrom().AsTime(),
+		to:             scope.GetTo().AsTime(),
+	}, nil
+}
+
+func (s *StatementServer) QueryStatementCallsSeries(
+	ctx context.Context,
+	req *connect.Request[querysheriffv1.QueryStatementCallsSeriesRequest],
+) (*connect.Response[querysheriffv1.QueryStatementCallsSeriesResponse], error) {
+	scope, err := s.resolveSeriesRequest(ctx, req.Msg.GetScope())
 	if err != nil {
 		return nil, err
 	}
 
-	serverName := textFilter(msg.GetServerName())
-	databaseName := textFilter(msg.GetDatabaseName())
-	allowedServers := principal.AllowedServerFilter()
-	from, to := msg.GetFrom().AsTime(), msg.GetTo().AsTime()
+	series, bucket, err := s.statementSums(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
 
-	metrics, err := s.statementMetrics(
-		ctx, pgtype.Int8{}, serverName, databaseName, statementFilter{}, from, to, allowedServers,
+	return connect.NewResponse(&querysheriffv1.QueryStatementCallsSeriesResponse{
+		Calls:    series.calls,
+		BucketMs: bucket.Milliseconds(),
+	}), nil
+}
+
+func (s *StatementServer) QueryStatementTimingSeries(
+	ctx context.Context,
+	req *connect.Request[querysheriffv1.QueryStatementTimingSeriesRequest],
+) (*connect.Response[querysheriffv1.QueryStatementTimingSeriesResponse], error) {
+	scope, err := s.resolveSeriesRequest(ctx, req.Msg.GetScope())
+	if err != nil {
+		return nil, err
+	}
+
+	series, bucket, err := s.statementSums(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&querysheriffv1.QueryStatementTimingSeriesResponse{
+		Avg:      series.avg,
+		AvgIo:    series.avgIo,
+		BucketMs: bucket.Milliseconds(),
+	}), nil
+}
+
+func (s *StatementServer) QueryStatementPercentileSeries(
+	ctx context.Context,
+	req *connect.Request[querysheriffv1.QueryStatementPercentileSeriesRequest],
+) (*connect.Response[querysheriffv1.QueryStatementPercentileSeriesResponse], error) {
+	scope, err := s.resolveSeriesRequest(ctx, req.Msg.GetScope())
+	if err != nil {
+		return nil, err
+	}
+
+	p90, p95, p99, err := s.statementPercentiles(
+		ctx, scope.serverName, scope.databaseName, scope.from, scope.to, scope.allowedServers,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	metrics.P90, metrics.P95, metrics.P99, err = s.statementPercentiles(
-		ctx, serverName, databaseName, from, to, allowedServers,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return connect.NewResponse(&querysheriffv1.QueryStatementMetricsResponse{Metrics: metrics}), nil
+	return connect.NewResponse(&querysheriffv1.QueryStatementPercentileSeriesResponse{
+		P90:      p90,
+		P95:      p95,
+		P99:      p99,
+		BucketMs: metricBucket(scope.to.Sub(scope.from)).Milliseconds(),
+	}), nil
 }
 
 func (s *StatementServer) authorizeStatementQuery(
@@ -352,44 +410,6 @@ func (s *StatementServer) QueryStatementDetail(
 		DatabaseName: detail.DatabaseName,
 		Tags:         tags,
 	}), nil
-}
-
-func (s *StatementServer) QueryStatementDetailMetrics(
-	ctx context.Context,
-	req *connect.Request[querysheriffv1.QueryStatementDetailMetricsRequest],
-) (*connect.Response[querysheriffv1.QueryStatementDetailMetricsResponse], error) {
-	msg := req.Msg
-
-	id := msg.GetId()
-	if id == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
-	}
-
-	principal, err := requirePrincipal(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	from, to := msg.GetFrom(), msg.GetTo()
-	if err = requireRange(from, to); err != nil {
-		return nil, err
-	}
-
-	metrics, err := s.statementMetrics(
-		ctx,
-		int8FromProto(id),
-		pgtype.Text{},
-		pgtype.Text{},
-		statementFilter{},
-		from.AsTime(),
-		to.AsTime(),
-		principal.AllowedServerFilter(),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return connect.NewResponse(&querysheriffv1.QueryStatementDetailMetricsResponse{Metrics: metrics}), nil
 }
 
 func (s *StatementServer) QueryStatementSamples(
@@ -787,30 +807,28 @@ func sortKey(col querysheriffv1.StatementSortColumn) string {
 	return "pct_time"
 }
 
-func (s *StatementServer) statementMetrics(
+type sumSeries struct {
+	calls, avg, avgIo *querysheriffv1.StatementMetric
+}
+
+func (s *StatementServer) statementSums(
 	ctx context.Context,
-	statementID pgtype.Int8,
-	serverName, databaseName pgtype.Text,
-	filter statementFilter,
-	from, to time.Time,
-	allowedServers []string,
-) (*querysheriffv1.StatementMetrics, error) {
-	bounds := newSeriesBounds(from, to, time.Now())
+	scope seriesRequest,
+) (sumSeries, time.Duration, error) {
+	bounds := newSeriesBounds(scope.from, scope.to, time.Now())
 
 	buckets, err := s.queries.StatementMetricSeries(ctx, db.StatementMetricSeriesParams{
 		RangeStart:     pgtype.Timestamptz{Time: bounds.rangeStart, Valid: true},
 		RangeEnd:       pgtype.Timestamptz{Time: bounds.anchor, Valid: true},
 		Anchor:         pgtype.Timestamptz{Time: bounds.anchor, Valid: true},
 		Bucket:         pgtype.Interval{Microseconds: bounds.bucket.Microseconds(), Valid: true},
-		ServerName:     serverName,
-		DatabaseName:   databaseName,
-		AllowedServers: allowedServers,
-		TextFilter:     filter.text,
-		StatementIds:   filter.statementIDs,
-		StatementID:    statementID,
+		ServerName:     scope.serverName,
+		DatabaseName:   scope.databaseName,
+		AllowedServers: scope.allowedServers,
+		StatementID:    scope.statementID,
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return sumSeries{}, 0, connect.NewError(connect.CodeInternal, err)
 	}
 
 	n := len(buckets)
@@ -825,12 +843,11 @@ func (s *StatementServer) statementMetrics(
 		avgIo[i] = &querysheriffv1.MetricPoint{At: at, Value: avgExecTime(b.TotalIoTime, b.Calls)}
 	}
 
-	return &querysheriffv1.StatementMetrics{
-		Calls:    statementMetric(calls),
-		Avg:      statementMetric(avg),
-		AvgIo:    statementMetric(avgIo),
-		BucketMs: bounds.bucket.Milliseconds(),
-	}, nil
+	return sumSeries{
+		calls: statementMetric(calls),
+		avg:   statementMetric(avg),
+		avgIo: statementMetric(avgIo),
+	}, bounds.bucket, nil
 }
 
 func (s *StatementServer) statementPercentiles(
@@ -841,11 +858,32 @@ func (s *StatementServer) statementPercentiles(
 ) (*querysheriffv1.StatementMetric, *querysheriffv1.StatementMetric, *querysheriffv1.StatementMetric, error) {
 	bounds := newSeriesBounds(from, to, time.Now())
 
-	rows, err := s.queries.StatementPercentileSeries(ctx, db.StatementPercentileSeriesParams{
+	rolled, err := s.queries.StatementLatencyBins(ctx, db.StatementLatencyBinsParams{
 		RangeStart:     pgtype.Timestamptz{Time: bounds.rangeStart, Valid: true},
 		RangeEnd:       pgtype.Timestamptz{Time: bounds.anchor, Valid: true},
-		Anchor:         pgtype.Timestamptz{Time: bounds.anchor, Valid: true},
-		Bucket:         pgtype.Interval{Microseconds: bounds.bucket.Microseconds(), Valid: true},
+		ServerName:     serverName,
+		DatabaseName:   databaseName,
+		AllowedServers: allowedServers,
+	})
+	if err != nil {
+		return nil, nil, nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	minutes := make([]latencyMinute, 0, len(rolled))
+
+	tailStart := bounds.rangeStart.Add(-time.Minute)
+
+	for _, r := range rolled {
+		minutes = append(minutes, latencyMinute{start: r.MinuteStart.Time, bins: r.Bins, weights: r.Weights})
+
+		if r.MinuteStart.Time.After(tailStart) {
+			tailStart = r.MinuteStart.Time
+		}
+	}
+
+	tail, err := s.queries.StatementLatencyTailBins(ctx, db.StatementLatencyTailBinsParams{
+		TailStart:      pgtype.Timestamptz{Time: tailStart, Valid: true},
+		RangeEnd:       pgtype.Timestamptz{Time: bounds.anchor, Valid: true},
 		ServerName:     serverName,
 		DatabaseName:   databaseName,
 		AllowedServers: allowedServers,
@@ -855,21 +893,14 @@ func (s *StatementServer) statementPercentiles(
 		return nil, nil, nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	n := len(rows)
-	s90 := make([]*querysheriffv1.MetricPoint, n)
-	s95 := make([]*querysheriffv1.MetricPoint, n)
-	s99 := make([]*querysheriffv1.MetricPoint, n)
-
-	for i, r := range rows {
-		at := protoFromTimestamptz(r.BucketEnd)
-		s90[i] = &querysheriffv1.MetricPoint{At: at, Value: r.P90}
-		s95[i] = &querysheriffv1.MetricPoint{At: at, Value: r.P95}
-		s99[i] = &querysheriffv1.MetricPoint{At: at, Value: r.P99}
+	for _, r := range tail {
+		minutes = append(minutes, latencyMinute{start: r.MinuteStart.Time, bins: r.Bins, weights: r.Weights})
 	}
 
-	return statementMetric(s90), statementMetric(s95), statementMetric(s99), nil
-}
+	p90, p95, p99 := latencyPercentiles(bounds, minutes)
 
+	return p90, p95, p99, nil
+}
 func metricBucket(d time.Duration) time.Duration {
 	bucket := d / metricSeriesPoints
 	if bucket < minMetricBucket {

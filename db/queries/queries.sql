@@ -223,57 +223,6 @@ FROM scoped
 GROUP BY bucket_end
 ORDER BY bucket_end;
 
--- name: StatementPercentileSeries :many
-WITH scoped AS (
-    SELECT
-        date_bin(sqlc.arg('bucket')::interval,
-                 d.collected_at - interval '1 microsecond',
-                 sqlc.arg('anchor')::timestamptz) + sqlc.arg('bucket')::interval AS bucket_end,
-        (d.total_exec_time / nullif(d.calls, 0))::double precision AS mean_ms,
-        d.calls AS weight,
-        (d.calls > 0
-         AND s.query_kind <> sqlc.arg('utility_kind')::int
-         AND (sqlc.narg('database_name')::text IS NULL
-              OR s.database_name = sqlc.narg('database_name'))) AS matched
-    FROM statement_deltas d
-    JOIN statements s ON s.id = d.statement_id
-    WHERE d.collected_at >  sqlc.arg('range_start')::timestamptz
-      AND d.collected_at <= sqlc.arg('range_end')::timestamptz
-      AND (sqlc.narg('server_name')::text IS NULL OR s.server_name = sqlc.narg('server_name'))
-      AND (sqlc.narg('allowed_servers')::text[] IS NULL
-           OR s.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
-),
-live AS (
-    SELECT bucket_end FROM scoped GROUP BY bucket_end
-),
-ordered AS (
-    SELECT
-        bucket_end,
-        mean_ms,
-        sum(weight) OVER (PARTITION BY bucket_end ORDER BY mean_ms
-                          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_weight,
-        sum(weight) OVER (PARTITION BY bucket_end) AS total_weight
-    FROM scoped
-    WHERE matched
-),
-agg AS (
-    SELECT
-        bucket_end,
-        min(mean_ms) FILTER (WHERE cum_weight >= 0.90 * total_weight) AS p90,
-        min(mean_ms) FILTER (WHERE cum_weight >= 0.95 * total_weight) AS p95,
-        min(mean_ms) FILTER (WHERE cum_weight >= 0.99 * total_weight) AS p99
-    FROM ordered
-    GROUP BY bucket_end
-)
-SELECT
-    l.bucket_end::timestamptz AS bucket_end,
-    coalesce(a.p90, 0)::double precision AS p90,
-    coalesce(a.p95, 0)::double precision AS p95,
-    coalesce(a.p99, 0)::double precision AS p99
-FROM live l
-LEFT JOIN agg a ON a.bucket_end = l.bucket_end
-ORDER BY l.bucket_end;
-
 -- name: FilterStatementIDsByTags :many
 WITH scoped AS (
     SELECT s.id
@@ -371,23 +320,16 @@ GROUP BY value
 ORDER BY statement_count DESC, value;
 
 -- name: ListStatementStats :many
-WITH totals AS (
-    SELECT
-        sum(d.total_exec_time)::double precision AS total_exec_time,
-        sum(d.total_io_time)::double precision   AS total_io_time
-    FROM statement_deltas d
-    JOIN statements s ON s.id = d.statement_id
-    WHERE (sqlc.narg('server_name')::text IS NULL OR s.server_name = sqlc.narg('server_name'))
-      AND (sqlc.narg('database_name')::text IS NULL OR s.database_name = sqlc.narg('database_name'))
-      AND (sqlc.narg('allowed_servers')::text[] IS NULL OR s.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
-      AND (sqlc.narg('since')::timestamptz IS NULL OR d.collected_at >= sqlc.narg('since'))
-      AND (sqlc.narg('until')::timestamptz IS NULL OR d.collected_at <= sqlc.narg('until'))
-),
-per_statement AS (
+WITH per_all AS (
     SELECT
         s.id,
         s.query_short AS preview,
         s.user_name,
+        ((sqlc.narg('text_filter')::text IS NULL
+          OR s.query_full ILIKE '%' || sqlc.narg('text_filter')::text || '%')
+         AND (sqlc.narg('statement_ids')::bigint[] IS NULL
+              OR s.id = ANY(sqlc.narg('statement_ids')::bigint[]))
+         AND s.query_kind = ANY(sqlc.arg('kinds')::int[])) AS matched,
         sum(d.calls)::bigint                     AS calls,
         sum(d.rows)::bigint                      AS rows,
         sum(d.total_exec_time)::double precision AS total_exec_time,
@@ -399,12 +341,18 @@ per_statement AS (
       AND (sqlc.narg('allowed_servers')::text[] IS NULL OR s.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
       AND (sqlc.narg('since')::timestamptz IS NULL OR d.collected_at >= sqlc.narg('since'))
       AND (sqlc.narg('until')::timestamptz IS NULL OR d.collected_at <= sqlc.narg('until'))
-      AND (sqlc.narg('text_filter')::text IS NULL
-           OR s.query_full ILIKE '%' || sqlc.narg('text_filter')::text || '%')
-      AND (sqlc.narg('statement_ids')::bigint[] IS NULL
-           OR s.id = ANY(sqlc.narg('statement_ids')::bigint[]))
-      AND s.query_kind = ANY(sqlc.arg('kinds')::int[])
-    GROUP BY s.id
+    GROUP BY s.id, 4
+),
+totals AS (
+    SELECT
+        sum(total_exec_time)::double precision AS total_exec_time,
+        sum(total_io_time)::double precision   AS total_io_time
+    FROM per_all
+),
+per_statement AS (
+    SELECT id, preview, user_name, calls, rows, total_exec_time, total_io_time
+    FROM per_all
+    WHERE matched
 ),
 statement_tags AS (
     SELECT statement_id, jsonb_object_agg(key, value) AS tags
@@ -770,3 +718,75 @@ WHERE s.server_name = sqlc.arg('server_name')
 GROUP BY s.query_full
 ORDER BY total_exec_time DESC
 LIMIT 5;
+
+-- name: RollupStatementLatencyBins :exec
+-- Turns raw deltas from a time range into one summed latency histogram per minute.
+WITH cleared AS (
+    DELETE FROM statement_latency_bins
+    WHERE minute_start >= sqlc.arg('range_start')::timestamptz
+      AND minute_start <  sqlc.arg('range_end')::timestamptz
+    RETURNING 1
+),
+binned AS (
+    SELECT date_trunc('minute', d.collected_at - interval '1 microsecond') AS minute_start,
+           s.server_name,
+           s.database_name,
+           floor(ln(greatest(d.total_exec_time / d.calls, 0.001)) / ln(1.01))::smallint AS bin,
+           sum(d.calls)::integer AS weight
+    FROM statement_deltas d
+    JOIN statements s ON s.id = d.statement_id
+    WHERE d.collected_at >  sqlc.arg('range_start')::timestamptz
+      AND d.collected_at <= sqlc.arg('range_end')::timestamptz
+      AND d.calls > 0
+      AND s.query_kind <> sqlc.arg('utility_kind')::int
+      AND (SELECT count(*) FROM cleared) >= 0
+    GROUP BY 1, 2, 3, 4
+)
+INSERT INTO statement_latency_bins (minute_start, server_name, database_name, bins, weights)
+SELECT minute_start, server_name, database_name,
+       array_agg(bin ORDER BY bin), array_agg(weight ORDER BY bin)
+FROM binned
+GROUP BY minute_start, server_name, database_name;
+
+-- name: StatementLatencyRollupResume :one
+-- Where the rollup job picks up.
+SELECT coalesce(
+    (SELECT max(minute_start) FROM statement_latency_bins),
+    (SELECT min(collected_at) FROM statement_deltas),
+    now()
+)::timestamptz AS resume_from;
+
+-- name: StatementLatencyBins :many
+-- Fetches those ready-made histograms for the chart's time window.
+SELECT minute_start, bins, weights
+FROM statement_latency_bins
+WHERE minute_start >= sqlc.arg('range_start')::timestamptz
+  AND minute_start <  sqlc.arg('range_end')::timestamptz
+  AND (sqlc.narg('server_name')::text IS NULL OR server_name = sqlc.narg('server_name'))
+  AND (sqlc.narg('database_name')::text IS NULL OR database_name = sqlc.narg('database_name'))
+  AND (sqlc.narg('allowed_servers')::text[] IS NULL
+       OR server_name = ANY(sqlc.narg('allowed_servers')::text[]));
+
+-- name: StatementLatencyTailBins :many
+-- Fills the last minute or two the writer hasn't reached yet, straight from raw deltas, so fresh data still shows up.
+WITH binned AS (
+    SELECT date_trunc('minute', d.collected_at - interval '1 microsecond') AS minute_start,
+           floor(ln(greatest(d.total_exec_time / d.calls, 0.001)) / ln(1.01))::smallint AS bin,
+           sum(d.calls)::integer AS weight
+    FROM statement_deltas d
+    JOIN statements s ON s.id = d.statement_id
+    WHERE d.collected_at >  sqlc.arg('tail_start')::timestamptz + interval '1 minute'
+      AND d.collected_at <= sqlc.arg('range_end')::timestamptz
+      AND d.calls > 0
+      AND s.query_kind <> sqlc.arg('utility_kind')::int
+      AND (sqlc.narg('server_name')::text IS NULL OR s.server_name = sqlc.narg('server_name'))
+      AND (sqlc.narg('database_name')::text IS NULL OR s.database_name = sqlc.narg('database_name'))
+      AND (sqlc.narg('allowed_servers')::text[] IS NULL
+           OR s.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
+    GROUP BY 1, 2
+)
+SELECT minute_start::timestamptz AS minute_start,
+       array_agg(bin ORDER BY bin)::smallint[]   AS bins,
+       array_agg(weight ORDER BY bin)::integer[] AS weights
+FROM binned
+GROUP BY minute_start;
