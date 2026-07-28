@@ -606,8 +606,6 @@ type InsertLogEventsParams struct {
 type InsertStatementDeltasParams struct {
 	StatementID   int64
 	CollectedAt   pgtype.Timestamptz
-	ServerName    string
-	DatabaseName  string
 	Calls         int64
 	Rows          int64
 	TotalExecTime float64
@@ -1644,19 +1642,19 @@ WITH scoped AS (
         d.total_exec_time,
         d.total_io_time,
         d.calls,
-        (($3::bigint IS NULL OR d.statement_id = $3)
-         AND ($4::text IS NULL
-              OR s.query_full ILIKE '%' || $4::text || '%')
-         AND ($5::bigint[] IS NULL
-              OR d.statement_id = ANY($5::bigint[]))) AS matched
+        (($3::text IS NULL OR s.database_name = $3)
+         AND ($4::bigint IS NULL OR d.statement_id = $4)
+         AND ($5::text IS NULL
+              OR s.query_full ILIKE '%' || $5::text || '%')
+         AND ($6::bigint[] IS NULL
+              OR d.statement_id = ANY($6::bigint[]))) AS matched
     FROM statement_deltas d
     JOIN statements s ON s.id = d.statement_id
-    WHERE d.collected_at >  $6::timestamptz
-      AND d.collected_at <= $7::timestamptz
-      AND ($8::text IS NULL OR d.server_name = $8)
-      AND ($9::text IS NULL OR d.database_name = $9)
+    WHERE d.collected_at >  $7::timestamptz
+      AND d.collected_at <= $8::timestamptz
+      AND ($9::text IS NULL OR s.server_name = $9)
       AND ($10::text[] IS NULL
-           OR d.server_name = ANY($10::text[]))
+           OR s.server_name = ANY($10::text[]))
 )
 SELECT
     bucket_end::timestamptz AS bucket_end,
@@ -1671,13 +1669,13 @@ ORDER BY bucket_end
 type StatementMetricSeriesParams struct {
 	Bucket         pgtype.Interval
 	Anchor         pgtype.Timestamptz
+	DatabaseName   pgtype.Text
 	StatementID    pgtype.Int8
 	TextFilter     pgtype.Text
 	StatementIds   []int64
 	RangeStart     pgtype.Timestamptz
 	RangeEnd       pgtype.Timestamptz
 	ServerName     pgtype.Text
-	DatabaseName   pgtype.Text
 	AllowedServers []string
 }
 
@@ -1692,13 +1690,13 @@ func (q *Queries) StatementMetricSeries(ctx context.Context, arg StatementMetric
 	rows, err := q.db.Query(ctx, statementMetricSeries,
 		arg.Bucket,
 		arg.Anchor,
+		arg.DatabaseName,
 		arg.StatementID,
 		arg.TextFilter,
 		arg.StatementIds,
 		arg.RangeStart,
 		arg.RangeEnd,
 		arg.ServerName,
-		arg.DatabaseName,
 		arg.AllowedServers,
 	)
 	if err != nil {
@@ -1732,15 +1730,17 @@ WITH scoped AS (
                  $2::timestamptz) + $1::interval AS bucket_end,
         (d.total_exec_time / nullif(d.calls, 0))::double precision AS mean_ms,
         d.calls AS weight,
-        (d.calls > 0 AND s.query_kind <> $3::int) AS matched
+        (d.calls > 0
+         AND s.query_kind <> $3::int
+         AND ($4::text IS NULL
+              OR s.database_name = $4)) AS matched
     FROM statement_deltas d
     JOIN statements s ON s.id = d.statement_id
-    WHERE d.collected_at >  $4::timestamptz
-      AND d.collected_at <= $5::timestamptz
-      AND ($6::text IS NULL OR d.server_name = $6)
-      AND ($7::text IS NULL OR d.database_name = $7)
+    WHERE d.collected_at >  $5::timestamptz
+      AND d.collected_at <= $6::timestamptz
+      AND ($7::text IS NULL OR s.server_name = $7)
       AND ($8::text[] IS NULL
-           OR d.server_name = ANY($8::text[]))
+           OR s.server_name = ANY($8::text[]))
 ),
 live AS (
     SELECT bucket_end FROM scoped GROUP BY bucket_end
@@ -1778,10 +1778,10 @@ type StatementPercentileSeriesParams struct {
 	Bucket         pgtype.Interval
 	Anchor         pgtype.Timestamptz
 	UtilityKind    int32
+	DatabaseName   pgtype.Text
 	RangeStart     pgtype.Timestamptz
 	RangeEnd       pgtype.Timestamptz
 	ServerName     pgtype.Text
-	DatabaseName   pgtype.Text
 	AllowedServers []string
 }
 
@@ -1797,10 +1797,10 @@ func (q *Queries) StatementPercentileSeries(ctx context.Context, arg StatementPe
 		arg.Bucket,
 		arg.Anchor,
 		arg.UtilityKind,
+		arg.DatabaseName,
 		arg.RangeStart,
 		arg.RangeEnd,
 		arg.ServerName,
-		arg.DatabaseName,
 		arg.AllowedServers,
 	)
 	if err != nil {

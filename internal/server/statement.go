@@ -84,8 +84,6 @@ func (s *StatementServer) ReportStatements(
 		deltaParams[i] = db.InsertStatementDeltasParams{
 			StatementID:   statementIDs[i],
 			CollectedAt:   collectedAt,
-			ServerName:    serverName,
-			DatabaseName:  delta.GetDatabaseName(),
 			Calls:         delta.GetCalls(),
 			Rows:          delta.GetRows(),
 			TotalExecTime: delta.GetTotalExecTime(),

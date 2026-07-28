@@ -186,9 +186,9 @@ WHERE id = sqlc.arg('id')
 
 -- name: InsertStatementDeltas :copyfrom
 INSERT INTO statement_deltas (
-    statement_id, collected_at, server_name, database_name, calls, rows, total_exec_time, total_io_time
+    statement_id, collected_at, calls, rows, total_exec_time, total_io_time
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
+    $1, $2, $3, $4, $5, $6
 );
 
 -- name: StatementMetricSeries :many
@@ -200,7 +200,8 @@ WITH scoped AS (
         d.total_exec_time,
         d.total_io_time,
         d.calls,
-        ((sqlc.narg('statement_id')::bigint IS NULL OR d.statement_id = sqlc.narg('statement_id'))
+        ((sqlc.narg('database_name')::text IS NULL OR s.database_name = sqlc.narg('database_name'))
+         AND (sqlc.narg('statement_id')::bigint IS NULL OR d.statement_id = sqlc.narg('statement_id'))
          AND (sqlc.narg('text_filter')::text IS NULL
               OR s.query_full ILIKE '%' || sqlc.narg('text_filter')::text || '%')
          AND (sqlc.narg('statement_ids')::bigint[] IS NULL
@@ -209,10 +210,9 @@ WITH scoped AS (
     JOIN statements s ON s.id = d.statement_id
     WHERE d.collected_at >  sqlc.arg('range_start')::timestamptz
       AND d.collected_at <= sqlc.arg('range_end')::timestamptz
-      AND (sqlc.narg('server_name')::text IS NULL OR d.server_name = sqlc.narg('server_name'))
-      AND (sqlc.narg('database_name')::text IS NULL OR d.database_name = sqlc.narg('database_name'))
+      AND (sqlc.narg('server_name')::text IS NULL OR s.server_name = sqlc.narg('server_name'))
       AND (sqlc.narg('allowed_servers')::text[] IS NULL
-           OR d.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
+           OR s.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
 )
 SELECT
     bucket_end::timestamptz AS bucket_end,
@@ -231,15 +231,17 @@ WITH scoped AS (
                  sqlc.arg('anchor')::timestamptz) + sqlc.arg('bucket')::interval AS bucket_end,
         (d.total_exec_time / nullif(d.calls, 0))::double precision AS mean_ms,
         d.calls AS weight,
-        (d.calls > 0 AND s.query_kind <> sqlc.arg('utility_kind')::int) AS matched
+        (d.calls > 0
+         AND s.query_kind <> sqlc.arg('utility_kind')::int
+         AND (sqlc.narg('database_name')::text IS NULL
+              OR s.database_name = sqlc.narg('database_name'))) AS matched
     FROM statement_deltas d
     JOIN statements s ON s.id = d.statement_id
     WHERE d.collected_at >  sqlc.arg('range_start')::timestamptz
       AND d.collected_at <= sqlc.arg('range_end')::timestamptz
-      AND (sqlc.narg('server_name')::text IS NULL OR d.server_name = sqlc.narg('server_name'))
-      AND (sqlc.narg('database_name')::text IS NULL OR d.database_name = sqlc.narg('database_name'))
+      AND (sqlc.narg('server_name')::text IS NULL OR s.server_name = sqlc.narg('server_name'))
       AND (sqlc.narg('allowed_servers')::text[] IS NULL
-           OR d.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
+           OR s.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
 ),
 live AS (
     SELECT bucket_end FROM scoped GROUP BY bucket_end

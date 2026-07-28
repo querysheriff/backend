@@ -97,8 +97,6 @@ type StatementDelta struct {
 	Rows          int64
 	TotalExecTime float64
 	TotalIoTime   float64
-	ServerName    string
-	DatabaseName  string
 }
 
 type StatementDeltasDefault struct {
