@@ -320,28 +320,25 @@ GROUP BY value
 ORDER BY statement_count DESC, value;
 
 -- name: ListStatementStats :many
-WITH per_all AS (
+WITH scoped AS (
+    SELECT s.id
+    FROM statements s
+    WHERE (sqlc.narg('server_name')::text IS NULL OR s.server_name = sqlc.narg('server_name'))
+      AND (sqlc.narg('database_name')::text IS NULL OR s.database_name = sqlc.narg('database_name'))
+      AND (sqlc.narg('allowed_servers')::text[] IS NULL OR s.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
+),
+per_all AS (
     SELECT
-        s.id,
-        s.query_short AS preview,
-        s.user_name,
-        ((sqlc.narg('text_filter')::text IS NULL
-          OR s.query_full ILIKE '%' || sqlc.narg('text_filter')::text || '%')
-         AND (sqlc.narg('statement_ids')::bigint[] IS NULL
-              OR s.id = ANY(sqlc.narg('statement_ids')::bigint[]))
-         AND s.query_kind = ANY(sqlc.arg('kinds')::int[])) AS matched,
+        d.statement_id,
         sum(d.calls)::bigint                     AS calls,
         sum(d.rows)::bigint                      AS rows,
         sum(d.total_exec_time)::double precision AS total_exec_time,
         sum(d.total_io_time)::double precision   AS total_io_time
     FROM statement_deltas d
-    JOIN statements s ON s.id = d.statement_id
-    WHERE (sqlc.narg('server_name')::text IS NULL OR s.server_name = sqlc.narg('server_name'))
-      AND (sqlc.narg('database_name')::text IS NULL OR s.database_name = sqlc.narg('database_name'))
-      AND (sqlc.narg('allowed_servers')::text[] IS NULL OR s.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
+    WHERE d.statement_id IN (SELECT id FROM scoped)
       AND (sqlc.narg('since')::timestamptz IS NULL OR d.collected_at >= sqlc.narg('since'))
       AND (sqlc.narg('until')::timestamptz IS NULL OR d.collected_at <= sqlc.narg('until'))
-    GROUP BY s.id, 4
+    GROUP BY d.statement_id
 ),
 totals AS (
     SELECT
@@ -349,68 +346,81 @@ totals AS (
         sum(total_io_time)::double precision   AS total_io_time
     FROM per_all
 ),
-per_statement AS (
-    SELECT id, preview, user_name, calls, rows, total_exec_time, total_io_time
-    FROM per_all
-    WHERE matched
+filtered AS (
+    SELECT
+        pa.statement_id AS id,
+        s.query_short   AS preview,
+        s.user_name,
+        pa.calls,
+        pa.rows,
+        pa.total_exec_time,
+        pa.total_io_time,
+        CASE sqlc.arg('sort_key')::text
+            WHEN 'query' THEN s.query_short
+            WHEN 'user' THEN s.user_name
+        END AS sort_text,
+        CASE sqlc.arg('sort_key')::text
+            WHEN 'avg' THEN pa.total_exec_time / NULLIF(pa.calls, 0)
+            WHEN 'calls' THEN pa.calls::double precision
+            WHEN 'rows_per_call' THEN pa.rows::double precision / NULLIF(pa.calls, 0)
+            WHEN 'pct_io' THEN pa.total_io_time
+            ELSE pa.total_exec_time
+        END AS sort_num
+    FROM per_all pa
+    JOIN statements s ON s.id = pa.statement_id
+    WHERE (sqlc.narg('text_filter')::text IS NULL
+           OR s.query_full ILIKE '%' || sqlc.narg('text_filter')::text || '%')
+      AND (sqlc.narg('statement_ids')::bigint[] IS NULL
+           OR s.id = ANY(sqlc.narg('statement_ids')::bigint[]))
+      AND s.query_kind = ANY(sqlc.arg('kinds')::int[])
 ),
-statement_tags AS (
-    SELECT statement_id, jsonb_object_agg(key, value) AS tags
+page AS (
+    SELECT *
+    FROM filtered
+    ORDER BY
+        CASE WHEN sqlc.arg('sort_desc')::bool THEN sort_text END DESC,
+        CASE WHEN NOT sqlc.arg('sort_desc')::bool THEN sort_text END ASC,
+        CASE WHEN sqlc.arg('sort_desc')::bool THEN sort_num END DESC,
+        CASE WHEN NOT sqlc.arg('sort_desc')::bool THEN sort_num END ASC,
+        id DESC
+    LIMIT sqlc.arg('row_limit')
+    OFFSET sqlc.arg('offset_rows')
+)
+SELECT
+    p.id,
+    p.preview,
+    p.user_name,
+    p.calls,
+    p.rows,
+    p.total_exec_time,
+    (coalesce(p.total_exec_time / NULLIF((SELECT total_exec_time FROM totals), 0), 0) * 100)::double precision AS pct_of_total,
+    (coalesce(p.total_io_time / NULLIF((SELECT total_io_time FROM totals), 0), 0) * 100)::double precision AS pct_io,
+    coalesce(st.tags, '{}'::jsonb) AS tags
+FROM page p
+LEFT JOIN LATERAL (
+    SELECT jsonb_object_agg(per_key.key, per_key.value) AS tags
     FROM (
-        SELECT dt.statement_id, kv.key, min(kv.value) AS value
+        SELECT kv.key, min(kv.value) AS value
         FROM (
-            SELECT DISTINCT qs.statement_id, qs.tags
+            SELECT DISTINCT qs.tags
             FROM statement_samples qs
-            WHERE qs.tags IS NOT NULL
-              AND qs.statement_id IN (SELECT id FROM per_statement)
+            WHERE qs.statement_id = p.id
+              AND qs.tags IS NOT NULL
               AND (sqlc.narg('since')::timestamptz IS NULL OR qs.collected_at >= sqlc.narg('since'))
               AND (sqlc.narg('until')::timestamptz IS NULL OR qs.collected_at <= sqlc.narg('until'))
         ) dt
         CROSS JOIN LATERAL jsonb_each_text(dt.tags) AS kv(key, value)
         WHERE kv.key NOT LIKE '%\_id'
-        GROUP BY dt.statement_id, kv.key
+        GROUP BY kv.key
         HAVING min(kv.value) = max(kv.value)
     ) per_key
-    GROUP BY statement_id
-)
-SELECT
-    ps.id,
-    ps.preview,
-    ps.user_name,
-    ps.calls,
-    ps.rows,
-    ps.total_exec_time,
-    (coalesce(ps.total_exec_time / NULLIF((SELECT total_exec_time FROM totals), 0), 0) * 100)::double precision AS pct_of_total,
-    (coalesce(ps.total_io_time / NULLIF((SELECT total_io_time FROM totals), 0), 0) * 100)::double precision AS pct_io,
-    coalesce(st.tags, '{}'::jsonb) AS tags
-FROM per_statement ps
-LEFT JOIN statement_tags st ON st.statement_id = ps.id
+) st ON true
 ORDER BY
-    CASE WHEN sqlc.arg('sort_key')::text = 'query' AND sqlc.arg('sort_desc')::bool THEN ps.preview END DESC,
-    CASE WHEN sqlc.arg('sort_key')::text = 'query' AND NOT sqlc.arg('sort_desc')::bool THEN ps.preview END ASC,
-    CASE WHEN sqlc.arg('sort_key')::text = 'user' AND sqlc.arg('sort_desc')::bool THEN ps.user_name END DESC,
-    CASE WHEN sqlc.arg('sort_key')::text = 'user' AND NOT sqlc.arg('sort_desc')::bool THEN ps.user_name END ASC,
-    CASE WHEN sqlc.arg('sort_desc')::bool THEN
-        CASE sqlc.arg('sort_key')::text
-            WHEN 'avg' THEN ps.total_exec_time / NULLIF(ps.calls, 0)
-            WHEN 'calls' THEN ps.calls::double precision
-            WHEN 'rows_per_call' THEN ps.rows::double precision / NULLIF(ps.calls, 0)
-            WHEN 'pct_io' THEN ps.total_io_time
-            ELSE ps.total_exec_time
-        END
-    END DESC,
-    CASE WHEN NOT sqlc.arg('sort_desc')::bool THEN
-        CASE sqlc.arg('sort_key')::text
-            WHEN 'avg' THEN ps.total_exec_time / NULLIF(ps.calls, 0)
-            WHEN 'calls' THEN ps.calls::double precision
-            WHEN 'rows_per_call' THEN ps.rows::double precision / NULLIF(ps.calls, 0)
-            WHEN 'pct_io' THEN ps.total_io_time
-            ELSE ps.total_exec_time
-        END
-    END ASC,
-    ps.id DESC
-LIMIT sqlc.arg('row_limit')
-OFFSET sqlc.arg('offset_rows');
+    CASE WHEN sqlc.arg('sort_desc')::bool THEN p.sort_text END DESC,
+    CASE WHEN NOT sqlc.arg('sort_desc')::bool THEN p.sort_text END ASC,
+    CASE WHEN sqlc.arg('sort_desc')::bool THEN p.sort_num END DESC,
+    CASE WHEN NOT sqlc.arg('sort_desc')::bool THEN p.sort_num END ASC,
+    p.id DESC;
 
 -- name: GetStatementDetail :one
 SELECT

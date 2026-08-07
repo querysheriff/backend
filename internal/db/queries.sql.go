@@ -1068,28 +1068,25 @@ func (q *Queries) ListStatementSamples(ctx context.Context, arg ListStatementSam
 }
 
 const listStatementStats = `-- name: ListStatementStats :many
-WITH per_all AS (
+WITH scoped AS (
+    SELECT s.id
+    FROM statements s
+    WHERE ($4::text IS NULL OR s.server_name = $4)
+      AND ($5::text IS NULL OR s.database_name = $5)
+      AND ($6::text[] IS NULL OR s.server_name = ANY($6::text[]))
+),
+per_all AS (
     SELECT
-        s.id,
-        s.query_short AS preview,
-        s.user_name,
-        (($5::text IS NULL
-          OR s.query_full ILIKE '%' || $5::text || '%')
-         AND ($6::bigint[] IS NULL
-              OR s.id = ANY($6::bigint[]))
-         AND s.query_kind = ANY($7::int[])) AS matched,
+        d.statement_id,
         sum(d.calls)::bigint                     AS calls,
         sum(d.rows)::bigint                      AS rows,
         sum(d.total_exec_time)::double precision AS total_exec_time,
         sum(d.total_io_time)::double precision   AS total_io_time
     FROM statement_deltas d
-    JOIN statements s ON s.id = d.statement_id
-    WHERE ($8::text IS NULL OR s.server_name = $8)
-      AND ($9::text IS NULL OR s.database_name = $9)
-      AND ($10::text[] IS NULL OR s.server_name = ANY($10::text[]))
-      AND ($11::timestamptz IS NULL OR d.collected_at >= $11)
-      AND ($12::timestamptz IS NULL OR d.collected_at <= $12)
-    GROUP BY s.id, 4
+    WHERE d.statement_id IN (SELECT id FROM scoped)
+      AND ($1::timestamptz IS NULL OR d.collected_at >= $1)
+      AND ($2::timestamptz IS NULL OR d.collected_at <= $2)
+    GROUP BY d.statement_id
 ),
 totals AS (
     SELECT
@@ -1097,83 +1094,96 @@ totals AS (
         sum(total_io_time)::double precision   AS total_io_time
     FROM per_all
 ),
-per_statement AS (
-    SELECT id, preview, user_name, calls, rows, total_exec_time, total_io_time
-    FROM per_all
-    WHERE matched
+filtered AS (
+    SELECT
+        pa.statement_id AS id,
+        s.query_short   AS preview,
+        s.user_name,
+        pa.calls,
+        pa.rows,
+        pa.total_exec_time,
+        pa.total_io_time,
+        CASE $7::text
+            WHEN 'query' THEN s.query_short
+            WHEN 'user' THEN s.user_name
+        END AS sort_text,
+        CASE $7::text
+            WHEN 'avg' THEN pa.total_exec_time / NULLIF(pa.calls, 0)
+            WHEN 'calls' THEN pa.calls::double precision
+            WHEN 'rows_per_call' THEN pa.rows::double precision / NULLIF(pa.calls, 0)
+            WHEN 'pct_io' THEN pa.total_io_time
+            ELSE pa.total_exec_time
+        END AS sort_num
+    FROM per_all pa
+    JOIN statements s ON s.id = pa.statement_id
+    WHERE ($8::text IS NULL
+           OR s.query_full ILIKE '%' || $8::text || '%')
+      AND ($9::bigint[] IS NULL
+           OR s.id = ANY($9::bigint[]))
+      AND s.query_kind = ANY($10::int[])
 ),
-statement_tags AS (
-    SELECT statement_id, jsonb_object_agg(key, value) AS tags
+page AS (
+    SELECT id, preview, user_name, calls, rows, total_exec_time, total_io_time, sort_text, sort_num
+    FROM filtered
+    ORDER BY
+        CASE WHEN $3::bool THEN sort_text END DESC,
+        CASE WHEN NOT $3::bool THEN sort_text END ASC,
+        CASE WHEN $3::bool THEN sort_num END DESC,
+        CASE WHEN NOT $3::bool THEN sort_num END ASC,
+        id DESC
+    LIMIT $12
+    OFFSET $11
+)
+SELECT
+    p.id,
+    p.preview,
+    p.user_name,
+    p.calls,
+    p.rows,
+    p.total_exec_time,
+    (coalesce(p.total_exec_time / NULLIF((SELECT total_exec_time FROM totals), 0), 0) * 100)::double precision AS pct_of_total,
+    (coalesce(p.total_io_time / NULLIF((SELECT total_io_time FROM totals), 0), 0) * 100)::double precision AS pct_io,
+    coalesce(st.tags, '{}'::jsonb) AS tags
+FROM page p
+LEFT JOIN LATERAL (
+    SELECT jsonb_object_agg(per_key.key, per_key.value) AS tags
     FROM (
-        SELECT dt.statement_id, kv.key, min(kv.value) AS value
+        SELECT kv.key, min(kv.value) AS value
         FROM (
-            SELECT DISTINCT qs.statement_id, qs.tags
+            SELECT DISTINCT qs.tags
             FROM statement_samples qs
-            WHERE qs.tags IS NOT NULL
-              AND qs.statement_id IN (SELECT id FROM per_statement)
-              AND ($11::timestamptz IS NULL OR qs.collected_at >= $11)
-              AND ($12::timestamptz IS NULL OR qs.collected_at <= $12)
+            WHERE qs.statement_id = p.id
+              AND qs.tags IS NOT NULL
+              AND ($1::timestamptz IS NULL OR qs.collected_at >= $1)
+              AND ($2::timestamptz IS NULL OR qs.collected_at <= $2)
         ) dt
         CROSS JOIN LATERAL jsonb_each_text(dt.tags) AS kv(key, value)
         WHERE kv.key NOT LIKE '%\_id'
-        GROUP BY dt.statement_id, kv.key
+        GROUP BY kv.key
         HAVING min(kv.value) = max(kv.value)
     ) per_key
-    GROUP BY statement_id
-)
-SELECT
-    ps.id,
-    ps.preview,
-    ps.user_name,
-    ps.calls,
-    ps.rows,
-    ps.total_exec_time,
-    (coalesce(ps.total_exec_time / NULLIF((SELECT total_exec_time FROM totals), 0), 0) * 100)::double precision AS pct_of_total,
-    (coalesce(ps.total_io_time / NULLIF((SELECT total_io_time FROM totals), 0), 0) * 100)::double precision AS pct_io,
-    coalesce(st.tags, '{}'::jsonb) AS tags
-FROM per_statement ps
-LEFT JOIN statement_tags st ON st.statement_id = ps.id
+) st ON true
 ORDER BY
-    CASE WHEN $1::text = 'query' AND $2::bool THEN ps.preview END DESC,
-    CASE WHEN $1::text = 'query' AND NOT $2::bool THEN ps.preview END ASC,
-    CASE WHEN $1::text = 'user' AND $2::bool THEN ps.user_name END DESC,
-    CASE WHEN $1::text = 'user' AND NOT $2::bool THEN ps.user_name END ASC,
-    CASE WHEN $2::bool THEN
-        CASE $1::text
-            WHEN 'avg' THEN ps.total_exec_time / NULLIF(ps.calls, 0)
-            WHEN 'calls' THEN ps.calls::double precision
-            WHEN 'rows_per_call' THEN ps.rows::double precision / NULLIF(ps.calls, 0)
-            WHEN 'pct_io' THEN ps.total_io_time
-            ELSE ps.total_exec_time
-        END
-    END DESC,
-    CASE WHEN NOT $2::bool THEN
-        CASE $1::text
-            WHEN 'avg' THEN ps.total_exec_time / NULLIF(ps.calls, 0)
-            WHEN 'calls' THEN ps.calls::double precision
-            WHEN 'rows_per_call' THEN ps.rows::double precision / NULLIF(ps.calls, 0)
-            WHEN 'pct_io' THEN ps.total_io_time
-            ELSE ps.total_exec_time
-        END
-    END ASC,
-    ps.id DESC
-LIMIT $4
-OFFSET $3
+    CASE WHEN $3::bool THEN p.sort_text END DESC,
+    CASE WHEN NOT $3::bool THEN p.sort_text END ASC,
+    CASE WHEN $3::bool THEN p.sort_num END DESC,
+    CASE WHEN NOT $3::bool THEN p.sort_num END ASC,
+    p.id DESC
 `
 
 type ListStatementStatsParams struct {
-	SortKey        string
+	Since          pgtype.Timestamptz
+	Until          pgtype.Timestamptz
 	SortDesc       bool
-	OffsetRows     int32
-	RowLimit       int32
-	TextFilter     pgtype.Text
-	StatementIds   []int64
-	Kinds          []int32
 	ServerName     pgtype.Text
 	DatabaseName   pgtype.Text
 	AllowedServers []string
-	Since          pgtype.Timestamptz
-	Until          pgtype.Timestamptz
+	SortKey        string
+	TextFilter     pgtype.Text
+	StatementIds   []int64
+	Kinds          []int32
+	OffsetRows     int32
+	RowLimit       int32
 }
 
 type ListStatementStatsRow struct {
@@ -1190,18 +1200,18 @@ type ListStatementStatsRow struct {
 
 func (q *Queries) ListStatementStats(ctx context.Context, arg ListStatementStatsParams) ([]ListStatementStatsRow, error) {
 	rows, err := q.db.Query(ctx, listStatementStats,
-		arg.SortKey,
+		arg.Since,
+		arg.Until,
 		arg.SortDesc,
-		arg.OffsetRows,
-		arg.RowLimit,
-		arg.TextFilter,
-		arg.StatementIds,
-		arg.Kinds,
 		arg.ServerName,
 		arg.DatabaseName,
 		arg.AllowedServers,
-		arg.Since,
-		arg.Until,
+		arg.SortKey,
+		arg.TextFilter,
+		arg.StatementIds,
+		arg.Kinds,
+		arg.OffsetRows,
+		arg.RowLimit,
 	)
 	if err != nil {
 		return nil, err
