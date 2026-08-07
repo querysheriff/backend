@@ -472,9 +472,10 @@ WITH filtered AS (
                 AND e.explain_plan_json IS NOT NULL
                 AND e.query = s.query
                 AND e.parameters IS NOT DISTINCT FROM s.parameters
+                AND e.tags IS NOT DISTINCT FROM s.tags
                 AND e.occurred_at BETWEEN s.occurred_at - interval '1 second'
                                       AND s.occurred_at + interval '1 second'
-                AND abs(e.duration_ms - s.duration_ms) <= 1
+                AND s.duration_ms >= e.duration_ms - 50
                 AND (sqlc.narg('since')::timestamptz IS NULL OR e.collected_at >= sqlc.narg('since'))
                 AND (sqlc.narg('until')::timestamptz IS NULL OR e.collected_at <= sqlc.narg('until'))
           )
