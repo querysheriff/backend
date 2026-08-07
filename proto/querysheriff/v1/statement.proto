@@ -48,6 +48,14 @@ enum StatementSortColumn {
   STATEMENT_SORT_COLUMN_PCT_TIME = 7;
 }
 
+// Column the captured samples table is ordered by.
+enum SampleSortColumn {
+  SAMPLE_SORT_COLUMN_UNSPECIFIED = 0;
+  SAMPLE_SORT_COLUMN_AT = 1;
+  SAMPLE_SORT_COLUMN_DURATION = 2;
+  SAMPLE_SORT_COLUMN_PLAN = 3;
+}
+
 // Values within a filter are ORed, separate filters are ANDed.
 message TagFilter {
   string key = 1;
@@ -182,6 +190,9 @@ message QueryStatementSamplesRequest {
 
   // Number of leading rows to skip, for pagination.
   int32 offset = 5;
+
+  SampleSortColumn sort_column = 6;
+  bool sort_desc = 7;
 }
 
 message QueryStatementSamplesResponse {

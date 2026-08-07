@@ -450,30 +450,44 @@ WHERE s.id = sqlc.arg('statement_id')
   AND (sqlc.narg('allowed_servers')::text[] IS NULL OR s.server_name = ANY(sqlc.narg('allowed_servers')::text[]));
 
 -- name: ListStatementSamples :many
-SELECT id, occurred_at, query, duration_ms, parameters, explain_plan_json, tags
-FROM statement_samples s
-WHERE s.statement_id = sqlc.arg('statement_id')
-  AND (sqlc.narg('allowed_servers')::text[] IS NULL OR s.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
-  AND (sqlc.narg('since')::timestamptz IS NULL OR s.collected_at >= sqlc.narg('since'))
-  AND (sqlc.narg('until')::timestamptz IS NULL OR s.collected_at <= sqlc.narg('until'))
-  AND NOT (
-      -- Drop this log_min_duration row when auto_explain logged the same run.
-      s.explain_plan_json IS NULL
-      AND EXISTS (
-          SELECT 1
-          FROM statement_samples e
-          WHERE e.statement_id = s.statement_id
-            AND e.explain_plan_json IS NOT NULL
-            AND e.query = s.query
-            AND e.parameters IS NOT DISTINCT FROM s.parameters
-            AND e.occurred_at BETWEEN s.occurred_at - interval '1 second'
-                                  AND s.occurred_at + interval '1 second'
-            AND abs(e.duration_ms - s.duration_ms) <= 1
-            AND (sqlc.narg('since')::timestamptz IS NULL OR e.collected_at >= sqlc.narg('since'))
-            AND (sqlc.narg('until')::timestamptz IS NULL OR e.collected_at <= sqlc.narg('until'))
+WITH filtered AS (
+    SELECT id, occurred_at, query, duration_ms, parameters, explain_plan_json, tags,
+        CASE WHEN sqlc.arg('sort_key')::text = 'at' THEN s.occurred_at END AS sort_time,
+        CASE sqlc.arg('sort_key')::text
+            WHEN 'duration' THEN s.duration_ms
+            WHEN 'plan' THEN (s.explain_plan_json IS NOT NULL)::int::double precision
+        END AS sort_num
+    FROM statement_samples s
+    WHERE s.statement_id = sqlc.arg('statement_id')
+      AND (sqlc.narg('allowed_servers')::text[] IS NULL OR s.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
+      AND (sqlc.narg('since')::timestamptz IS NULL OR s.collected_at >= sqlc.narg('since'))
+      AND (sqlc.narg('until')::timestamptz IS NULL OR s.collected_at <= sqlc.narg('until'))
+      AND NOT (
+          -- Drop this log_min_duration row when auto_explain logged the same run.
+          s.explain_plan_json IS NULL
+          AND EXISTS (
+              SELECT 1
+              FROM statement_samples e
+              WHERE e.statement_id = s.statement_id
+                AND e.explain_plan_json IS NOT NULL
+                AND e.query = s.query
+                AND e.parameters IS NOT DISTINCT FROM s.parameters
+                AND e.occurred_at BETWEEN s.occurred_at - interval '1 second'
+                                      AND s.occurred_at + interval '1 second'
+                AND abs(e.duration_ms - s.duration_ms) <= 1
+                AND (sqlc.narg('since')::timestamptz IS NULL OR e.collected_at >= sqlc.narg('since'))
+                AND (sqlc.narg('until')::timestamptz IS NULL OR e.collected_at <= sqlc.narg('until'))
+          )
       )
-  )
-ORDER BY s.occurred_at DESC, s.id DESC
+)
+SELECT id, occurred_at, query, duration_ms, parameters, explain_plan_json, tags
+FROM filtered
+ORDER BY
+    CASE WHEN sqlc.arg('sort_desc')::bool THEN sort_time END DESC NULLS LAST,
+    CASE WHEN NOT sqlc.arg('sort_desc')::bool THEN sort_time END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_desc')::bool THEN sort_num END DESC,
+    CASE WHEN NOT sqlc.arg('sort_desc')::bool THEN sort_num END ASC,
+    id DESC
 LIMIT sqlc.arg('row_limit')
 OFFSET sqlc.arg('offset_rows');
 

@@ -440,6 +440,8 @@ func (s *StatementServer) QueryStatementSamples(
 		AllowedServers: principal.AllowedServerFilter(),
 		Since:          timestamptzFromProto(from),
 		Until:          timestamptzFromProto(to),
+		SortKey:        sampleSortKey(msg.GetSortColumn()),
+		SortDesc:       msg.GetSortDesc(),
 		RowLimit:       limit + 1,
 		OffsetRows:     resolveOffset(msg.GetOffset()),
 	})
@@ -805,6 +807,20 @@ func sortKey(col querysheriffv1.StatementSortColumn) string {
 	}
 
 	return "pct_time"
+}
+
+func sampleSortKey(col querysheriffv1.SampleSortColumn) string {
+	switch col {
+	case querysheriffv1.SampleSortColumn_SAMPLE_SORT_COLUMN_DURATION:
+		return "duration"
+	case querysheriffv1.SampleSortColumn_SAMPLE_SORT_COLUMN_PLAN:
+		return "plan"
+	case querysheriffv1.SampleSortColumn_SAMPLE_SORT_COLUMN_AT,
+		querysheriffv1.SampleSortColumn_SAMPLE_SORT_COLUMN_UNSPECIFIED:
+		return "at"
+	}
+
+	return "at"
 }
 
 type sumSeries struct {

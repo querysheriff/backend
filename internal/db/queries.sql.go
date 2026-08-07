@@ -985,41 +985,57 @@ func (q *Queries) ListStaleServers(ctx context.Context, staleAfter pgtype.Interv
 }
 
 const listStatementSamples = `-- name: ListStatementSamples :many
-SELECT id, occurred_at, query, duration_ms, parameters, explain_plan_json, tags
-FROM statement_samples s
-WHERE s.statement_id = $1
-  AND ($2::text[] IS NULL OR s.server_name = ANY($2::text[]))
-  AND ($3::timestamptz IS NULL OR s.collected_at >= $3)
-  AND ($4::timestamptz IS NULL OR s.collected_at <= $4)
-  AND NOT (
-      -- Drop this log_min_duration row when auto_explain logged the same run.
-      s.explain_plan_json IS NULL
-      AND EXISTS (
-          SELECT 1
-          FROM statement_samples e
-          WHERE e.statement_id = s.statement_id
-            AND e.explain_plan_json IS NOT NULL
-            AND e.query = s.query
-            AND e.parameters IS NOT DISTINCT FROM s.parameters
-            AND e.occurred_at BETWEEN s.occurred_at - interval '1 second'
-                                  AND s.occurred_at + interval '1 second'
-            AND abs(e.duration_ms - s.duration_ms) <= 1
-            AND ($3::timestamptz IS NULL OR e.collected_at >= $3)
-            AND ($4::timestamptz IS NULL OR e.collected_at <= $4)
+WITH filtered AS (
+    SELECT id, occurred_at, query, duration_ms, parameters, explain_plan_json, tags,
+        CASE WHEN $4::text = 'at' THEN s.occurred_at END AS sort_time,
+        CASE $4::text
+            WHEN 'duration' THEN s.duration_ms
+            WHEN 'plan' THEN (s.explain_plan_json IS NOT NULL)::int::double precision
+        END AS sort_num
+    FROM statement_samples s
+    WHERE s.statement_id = $5
+      AND ($6::text[] IS NULL OR s.server_name = ANY($6::text[]))
+      AND ($7::timestamptz IS NULL OR s.collected_at >= $7)
+      AND ($8::timestamptz IS NULL OR s.collected_at <= $8)
+      AND NOT (
+          -- Drop this log_min_duration row when auto_explain logged the same run.
+          s.explain_plan_json IS NULL
+          AND EXISTS (
+              SELECT 1
+              FROM statement_samples e
+              WHERE e.statement_id = s.statement_id
+                AND e.explain_plan_json IS NOT NULL
+                AND e.query = s.query
+                AND e.parameters IS NOT DISTINCT FROM s.parameters
+                AND e.occurred_at BETWEEN s.occurred_at - interval '1 second'
+                                      AND s.occurred_at + interval '1 second'
+                AND abs(e.duration_ms - s.duration_ms) <= 1
+                AND ($7::timestamptz IS NULL OR e.collected_at >= $7)
+                AND ($8::timestamptz IS NULL OR e.collected_at <= $8)
+          )
       )
-  )
-ORDER BY s.occurred_at DESC, s.id DESC
-LIMIT $6
-OFFSET $5
+)
+SELECT id, occurred_at, query, duration_ms, parameters, explain_plan_json, tags
+FROM filtered
+ORDER BY
+    CASE WHEN $1::bool THEN sort_time END DESC NULLS LAST,
+    CASE WHEN NOT $1::bool THEN sort_time END ASC NULLS LAST,
+    CASE WHEN $1::bool THEN sort_num END DESC,
+    CASE WHEN NOT $1::bool THEN sort_num END ASC,
+    id DESC
+LIMIT $3
+OFFSET $2
 `
 
 type ListStatementSamplesParams struct {
+	SortDesc       bool
+	OffsetRows     int32
+	RowLimit       int32
+	SortKey        string
 	StatementID    pgtype.Int8
 	AllowedServers []string
 	Since          pgtype.Timestamptz
 	Until          pgtype.Timestamptz
-	OffsetRows     int32
-	RowLimit       int32
 }
 
 type ListStatementSamplesRow struct {
@@ -1034,12 +1050,14 @@ type ListStatementSamplesRow struct {
 
 func (q *Queries) ListStatementSamples(ctx context.Context, arg ListStatementSamplesParams) ([]ListStatementSamplesRow, error) {
 	rows, err := q.db.Query(ctx, listStatementSamples,
+		arg.SortDesc,
+		arg.OffsetRows,
+		arg.RowLimit,
+		arg.SortKey,
 		arg.StatementID,
 		arg.AllowedServers,
 		arg.Since,
 		arg.Until,
-		arg.OffsetRows,
-		arg.RowLimit,
 	)
 	if err != nil {
 		return nil, err

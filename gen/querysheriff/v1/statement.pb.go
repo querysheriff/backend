@@ -191,6 +191,59 @@ func (StatementSortColumn) EnumDescriptor() ([]byte, []int) {
 	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{2}
 }
 
+// Column the captured samples table is ordered by.
+type SampleSortColumn int32
+
+const (
+	SampleSortColumn_SAMPLE_SORT_COLUMN_UNSPECIFIED SampleSortColumn = 0
+	SampleSortColumn_SAMPLE_SORT_COLUMN_AT          SampleSortColumn = 1
+	SampleSortColumn_SAMPLE_SORT_COLUMN_DURATION    SampleSortColumn = 2
+	SampleSortColumn_SAMPLE_SORT_COLUMN_PLAN        SampleSortColumn = 3
+)
+
+// Enum value maps for SampleSortColumn.
+var (
+	SampleSortColumn_name = map[int32]string{
+		0: "SAMPLE_SORT_COLUMN_UNSPECIFIED",
+		1: "SAMPLE_SORT_COLUMN_AT",
+		2: "SAMPLE_SORT_COLUMN_DURATION",
+		3: "SAMPLE_SORT_COLUMN_PLAN",
+	}
+	SampleSortColumn_value = map[string]int32{
+		"SAMPLE_SORT_COLUMN_UNSPECIFIED": 0,
+		"SAMPLE_SORT_COLUMN_AT":          1,
+		"SAMPLE_SORT_COLUMN_DURATION":    2,
+		"SAMPLE_SORT_COLUMN_PLAN":        3,
+	}
+)
+
+func (x SampleSortColumn) Enum() *SampleSortColumn {
+	p := new(SampleSortColumn)
+	*p = x
+	return p
+}
+
+func (x SampleSortColumn) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SampleSortColumn) Descriptor() protoreflect.EnumDescriptor {
+	return file_querysheriff_v1_statement_proto_enumTypes[3].Descriptor()
+}
+
+func (SampleSortColumn) Type() protoreflect.EnumType {
+	return &file_querysheriff_v1_statement_proto_enumTypes[3]
+}
+
+func (x SampleSortColumn) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SampleSortColumn.Descriptor instead.
+func (SampleSortColumn) EnumDescriptor() ([]byte, []int) {
+	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{3}
+}
+
 // Values within a filter are ORed, separate filters are ANDed.
 type TagFilter struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1252,7 +1305,9 @@ type QueryStatementSamplesRequest struct {
 	// Page size. Defaults to 50 when unset.
 	Limit int32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
 	// Number of leading rows to skip, for pagination.
-	Offset        int32 `protobuf:"varint,5,opt,name=offset,proto3" json:"offset,omitempty"`
+	Offset        int32            `protobuf:"varint,5,opt,name=offset,proto3" json:"offset,omitempty"`
+	SortColumn    SampleSortColumn `protobuf:"varint,6,opt,name=sort_column,json=sortColumn,proto3,enum=querysheriff.v1.SampleSortColumn" json:"sort_column,omitempty"`
+	SortDesc      bool             `protobuf:"varint,7,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1320,6 +1375,20 @@ func (x *QueryStatementSamplesRequest) GetOffset() int32 {
 		return x.Offset
 	}
 	return 0
+}
+
+func (x *QueryStatementSamplesRequest) GetSortColumn() SampleSortColumn {
+	if x != nil {
+		return x.SortColumn
+	}
+	return SampleSortColumn_SAMPLE_SORT_COLUMN_UNSPECIFIED
+}
+
+func (x *QueryStatementSamplesRequest) GetSortDesc() bool {
+	if x != nil {
+		return x.SortDesc
+	}
+	return false
 }
 
 type QueryStatementSamplesResponse struct {
@@ -2480,13 +2549,16 @@ const file_querysheriff_v1_statement_proto_rawDesc = "" +
 	"\rdatabase_name\x18\x06 \x01(\tR\fdatabaseName\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb8\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x99\x02\n" +
 	"\x1cQueryStatementSamplesRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12.\n" +
 	"\x04from\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
 	"\x02to\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\x12\x14\n" +
 	"\x05limit\x18\x04 \x01(\x05R\x05limit\x12\x16\n" +
-	"\x06offset\x18\x05 \x01(\x05R\x06offset\"v\n" +
+	"\x06offset\x18\x05 \x01(\x05R\x06offset\x12B\n" +
+	"\vsort_column\x18\x06 \x01(\x0e2!.querysheriff.v1.SampleSortColumnR\n" +
+	"sortColumn\x12\x1b\n" +
+	"\tsort_desc\x18\a \x01(\bR\bsortDesc\"v\n" +
 	"\x1dQueryStatementSamplesResponse\x12:\n" +
 	"\asamples\x18\x01 \x03(\v2 .querysheriff.v1.StatementSampleR\asamples\x12\x19\n" +
 	"\bhas_more\x18\x02 \x01(\bR\ahasMore\"\xa9\x02\n" +
@@ -2586,7 +2658,12 @@ const file_querysheriff_v1_statement_proto_rawDesc = "" +
 	"\x1bSTATEMENT_SORT_COLUMN_CALLS\x10\x04\x12'\n" +
 	"#STATEMENT_SORT_COLUMN_ROWS_PER_CALL\x10\x05\x12 \n" +
 	"\x1cSTATEMENT_SORT_COLUMN_PCT_IO\x10\x06\x12\"\n" +
-	"\x1eSTATEMENT_SORT_COLUMN_PCT_TIME\x10\a2\x97\f\n" +
+	"\x1eSTATEMENT_SORT_COLUMN_PCT_TIME\x10\a*\x8f\x01\n" +
+	"\x10SampleSortColumn\x12\"\n" +
+	"\x1eSAMPLE_SORT_COLUMN_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15SAMPLE_SORT_COLUMN_AT\x10\x01\x12\x1f\n" +
+	"\x1bSAMPLE_SORT_COLUMN_DURATION\x10\x02\x12\x1b\n" +
+	"\x17SAMPLE_SORT_COLUMN_PLAN\x10\x032\x97\f\n" +
 	"\x10StatementService\x12i\n" +
 	"\x10ReportStatements\x12(.querysheriff.v1.ReportStatementsRequest\x1a).querysheriff.v1.ReportStatementsResponse\"\x00\x12u\n" +
 	"\x14ReportStatementTexts\x12,.querysheriff.v1.ReportStatementTextsRequest\x1a-.querysheriff.v1.ReportStatementTextsResponse\"\x00\x12f\n" +
@@ -2614,126 +2691,128 @@ func file_querysheriff_v1_statement_proto_rawDescGZIP() []byte {
 	return file_querysheriff_v1_statement_proto_rawDescData
 }
 
-var file_querysheriff_v1_statement_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_querysheriff_v1_statement_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
 var file_querysheriff_v1_statement_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
 var file_querysheriff_v1_statement_proto_goTypes = []any{
 	(TagFilterOperator)(0),                         // 0: querysheriff.v1.TagFilterOperator
 	(QueryKind)(0),                                 // 1: querysheriff.v1.QueryKind
 	(StatementSortColumn)(0),                       // 2: querysheriff.v1.StatementSortColumn
-	(*TagFilter)(nil),                              // 3: querysheriff.v1.TagFilter
-	(*ReportStatementsRequest)(nil),                // 4: querysheriff.v1.ReportStatementsRequest
-	(*ReportStatementsResponse)(nil),               // 5: querysheriff.v1.ReportStatementsResponse
-	(*StatementIdentity)(nil),                      // 6: querysheriff.v1.StatementIdentity
-	(*ReportStatementTextsRequest)(nil),            // 7: querysheriff.v1.ReportStatementTextsRequest
-	(*ReportStatementTextsResponse)(nil),           // 8: querysheriff.v1.ReportStatementTextsResponse
-	(*StatementText)(nil),                          // 9: querysheriff.v1.StatementText
-	(*QueryStatementsRequest)(nil),                 // 10: querysheriff.v1.QueryStatementsRequest
-	(*QueryStatementsResponse)(nil),                // 11: querysheriff.v1.QueryStatementsResponse
-	(*SeriesScope)(nil),                            // 12: querysheriff.v1.SeriesScope
-	(*QueryStatementCallsSeriesRequest)(nil),       // 13: querysheriff.v1.QueryStatementCallsSeriesRequest
-	(*QueryStatementCallsSeriesResponse)(nil),      // 14: querysheriff.v1.QueryStatementCallsSeriesResponse
-	(*QueryStatementPercentileSeriesRequest)(nil),  // 15: querysheriff.v1.QueryStatementPercentileSeriesRequest
-	(*QueryStatementPercentileSeriesResponse)(nil), // 16: querysheriff.v1.QueryStatementPercentileSeriesResponse
-	(*QueryStatementTimingSeriesRequest)(nil),      // 17: querysheriff.v1.QueryStatementTimingSeriesRequest
-	(*QueryStatementTimingSeriesResponse)(nil),     // 18: querysheriff.v1.QueryStatementTimingSeriesResponse
-	(*QueryStatementDetailRequest)(nil),            // 19: querysheriff.v1.QueryStatementDetailRequest
-	(*QueryStatementDetailResponse)(nil),           // 20: querysheriff.v1.QueryStatementDetailResponse
-	(*QueryStatementSamplesRequest)(nil),           // 21: querysheriff.v1.QueryStatementSamplesRequest
-	(*QueryStatementSamplesResponse)(nil),          // 22: querysheriff.v1.QueryStatementSamplesResponse
-	(*StatementSample)(nil),                        // 23: querysheriff.v1.StatementSample
-	(*GetStatementSamplePlanRequest)(nil),          // 24: querysheriff.v1.GetStatementSamplePlanRequest
-	(*GetStatementSamplePlanResponse)(nil),         // 25: querysheriff.v1.GetStatementSamplePlanResponse
-	(*GetStatementSampleTextRequest)(nil),          // 26: querysheriff.v1.GetStatementSampleTextRequest
-	(*GetStatementSampleTextResponse)(nil),         // 27: querysheriff.v1.GetStatementSampleTextResponse
-	(*GetStatementTextRequest)(nil),                // 28: querysheriff.v1.GetStatementTextRequest
-	(*GetStatementTextResponse)(nil),               // 29: querysheriff.v1.GetStatementTextResponse
-	(*StatementMetric)(nil),                        // 30: querysheriff.v1.StatementMetric
-	(*MetricPoint)(nil),                            // 31: querysheriff.v1.MetricPoint
-	(*StatementStat)(nil),                          // 32: querysheriff.v1.StatementStat
-	(*StatementDelta)(nil),                         // 33: querysheriff.v1.StatementDelta
-	(*ListTagKeysRequest)(nil),                     // 34: querysheriff.v1.ListTagKeysRequest
-	(*ListTagKeysResponse)(nil),                    // 35: querysheriff.v1.ListTagKeysResponse
-	(*TagKey)(nil),                                 // 36: querysheriff.v1.TagKey
-	(*ListTagValuesRequest)(nil),                   // 37: querysheriff.v1.ListTagValuesRequest
-	(*ListTagValuesResponse)(nil),                  // 38: querysheriff.v1.ListTagValuesResponse
-	(*TagValue)(nil),                               // 39: querysheriff.v1.TagValue
-	nil,                                            // 40: querysheriff.v1.QueryStatementDetailResponse.TagsEntry
-	nil,                                            // 41: querysheriff.v1.StatementSample.TagsEntry
-	nil,                                            // 42: querysheriff.v1.StatementStat.TagsEntry
-	(*timestamppb.Timestamp)(nil),                  // 43: google.protobuf.Timestamp
+	(SampleSortColumn)(0),                          // 3: querysheriff.v1.SampleSortColumn
+	(*TagFilter)(nil),                              // 4: querysheriff.v1.TagFilter
+	(*ReportStatementsRequest)(nil),                // 5: querysheriff.v1.ReportStatementsRequest
+	(*ReportStatementsResponse)(nil),               // 6: querysheriff.v1.ReportStatementsResponse
+	(*StatementIdentity)(nil),                      // 7: querysheriff.v1.StatementIdentity
+	(*ReportStatementTextsRequest)(nil),            // 8: querysheriff.v1.ReportStatementTextsRequest
+	(*ReportStatementTextsResponse)(nil),           // 9: querysheriff.v1.ReportStatementTextsResponse
+	(*StatementText)(nil),                          // 10: querysheriff.v1.StatementText
+	(*QueryStatementsRequest)(nil),                 // 11: querysheriff.v1.QueryStatementsRequest
+	(*QueryStatementsResponse)(nil),                // 12: querysheriff.v1.QueryStatementsResponse
+	(*SeriesScope)(nil),                            // 13: querysheriff.v1.SeriesScope
+	(*QueryStatementCallsSeriesRequest)(nil),       // 14: querysheriff.v1.QueryStatementCallsSeriesRequest
+	(*QueryStatementCallsSeriesResponse)(nil),      // 15: querysheriff.v1.QueryStatementCallsSeriesResponse
+	(*QueryStatementPercentileSeriesRequest)(nil),  // 16: querysheriff.v1.QueryStatementPercentileSeriesRequest
+	(*QueryStatementPercentileSeriesResponse)(nil), // 17: querysheriff.v1.QueryStatementPercentileSeriesResponse
+	(*QueryStatementTimingSeriesRequest)(nil),      // 18: querysheriff.v1.QueryStatementTimingSeriesRequest
+	(*QueryStatementTimingSeriesResponse)(nil),     // 19: querysheriff.v1.QueryStatementTimingSeriesResponse
+	(*QueryStatementDetailRequest)(nil),            // 20: querysheriff.v1.QueryStatementDetailRequest
+	(*QueryStatementDetailResponse)(nil),           // 21: querysheriff.v1.QueryStatementDetailResponse
+	(*QueryStatementSamplesRequest)(nil),           // 22: querysheriff.v1.QueryStatementSamplesRequest
+	(*QueryStatementSamplesResponse)(nil),          // 23: querysheriff.v1.QueryStatementSamplesResponse
+	(*StatementSample)(nil),                        // 24: querysheriff.v1.StatementSample
+	(*GetStatementSamplePlanRequest)(nil),          // 25: querysheriff.v1.GetStatementSamplePlanRequest
+	(*GetStatementSamplePlanResponse)(nil),         // 26: querysheriff.v1.GetStatementSamplePlanResponse
+	(*GetStatementSampleTextRequest)(nil),          // 27: querysheriff.v1.GetStatementSampleTextRequest
+	(*GetStatementSampleTextResponse)(nil),         // 28: querysheriff.v1.GetStatementSampleTextResponse
+	(*GetStatementTextRequest)(nil),                // 29: querysheriff.v1.GetStatementTextRequest
+	(*GetStatementTextResponse)(nil),               // 30: querysheriff.v1.GetStatementTextResponse
+	(*StatementMetric)(nil),                        // 31: querysheriff.v1.StatementMetric
+	(*MetricPoint)(nil),                            // 32: querysheriff.v1.MetricPoint
+	(*StatementStat)(nil),                          // 33: querysheriff.v1.StatementStat
+	(*StatementDelta)(nil),                         // 34: querysheriff.v1.StatementDelta
+	(*ListTagKeysRequest)(nil),                     // 35: querysheriff.v1.ListTagKeysRequest
+	(*ListTagKeysResponse)(nil),                    // 36: querysheriff.v1.ListTagKeysResponse
+	(*TagKey)(nil),                                 // 37: querysheriff.v1.TagKey
+	(*ListTagValuesRequest)(nil),                   // 38: querysheriff.v1.ListTagValuesRequest
+	(*ListTagValuesResponse)(nil),                  // 39: querysheriff.v1.ListTagValuesResponse
+	(*TagValue)(nil),                               // 40: querysheriff.v1.TagValue
+	nil,                                            // 41: querysheriff.v1.QueryStatementDetailResponse.TagsEntry
+	nil,                                            // 42: querysheriff.v1.StatementSample.TagsEntry
+	nil,                                            // 43: querysheriff.v1.StatementStat.TagsEntry
+	(*timestamppb.Timestamp)(nil),                  // 44: google.protobuf.Timestamp
 }
 var file_querysheriff_v1_statement_proto_depIdxs = []int32{
 	0,  // 0: querysheriff.v1.TagFilter.op:type_name -> querysheriff.v1.TagFilterOperator
-	43, // 1: querysheriff.v1.ReportStatementsRequest.collected_at:type_name -> google.protobuf.Timestamp
-	33, // 2: querysheriff.v1.ReportStatementsRequest.statement_deltas:type_name -> querysheriff.v1.StatementDelta
-	6,  // 3: querysheriff.v1.ReportStatementsResponse.unknown_statements:type_name -> querysheriff.v1.StatementIdentity
-	9,  // 4: querysheriff.v1.ReportStatementTextsRequest.statement_texts:type_name -> querysheriff.v1.StatementText
-	6,  // 5: querysheriff.v1.StatementText.identity:type_name -> querysheriff.v1.StatementIdentity
-	43, // 6: querysheriff.v1.QueryStatementsRequest.from:type_name -> google.protobuf.Timestamp
-	43, // 7: querysheriff.v1.QueryStatementsRequest.to:type_name -> google.protobuf.Timestamp
-	3,  // 8: querysheriff.v1.QueryStatementsRequest.tag_filters:type_name -> querysheriff.v1.TagFilter
+	44, // 1: querysheriff.v1.ReportStatementsRequest.collected_at:type_name -> google.protobuf.Timestamp
+	34, // 2: querysheriff.v1.ReportStatementsRequest.statement_deltas:type_name -> querysheriff.v1.StatementDelta
+	7,  // 3: querysheriff.v1.ReportStatementsResponse.unknown_statements:type_name -> querysheriff.v1.StatementIdentity
+	10, // 4: querysheriff.v1.ReportStatementTextsRequest.statement_texts:type_name -> querysheriff.v1.StatementText
+	7,  // 5: querysheriff.v1.StatementText.identity:type_name -> querysheriff.v1.StatementIdentity
+	44, // 6: querysheriff.v1.QueryStatementsRequest.from:type_name -> google.protobuf.Timestamp
+	44, // 7: querysheriff.v1.QueryStatementsRequest.to:type_name -> google.protobuf.Timestamp
+	4,  // 8: querysheriff.v1.QueryStatementsRequest.tag_filters:type_name -> querysheriff.v1.TagFilter
 	1,  // 9: querysheriff.v1.QueryStatementsRequest.kinds:type_name -> querysheriff.v1.QueryKind
 	2,  // 10: querysheriff.v1.QueryStatementsRequest.sort_column:type_name -> querysheriff.v1.StatementSortColumn
-	32, // 11: querysheriff.v1.QueryStatementsResponse.statements:type_name -> querysheriff.v1.StatementStat
-	43, // 12: querysheriff.v1.SeriesScope.from:type_name -> google.protobuf.Timestamp
-	43, // 13: querysheriff.v1.SeriesScope.to:type_name -> google.protobuf.Timestamp
-	12, // 14: querysheriff.v1.QueryStatementCallsSeriesRequest.scope:type_name -> querysheriff.v1.SeriesScope
-	30, // 15: querysheriff.v1.QueryStatementCallsSeriesResponse.calls:type_name -> querysheriff.v1.StatementMetric
-	12, // 16: querysheriff.v1.QueryStatementPercentileSeriesRequest.scope:type_name -> querysheriff.v1.SeriesScope
-	30, // 17: querysheriff.v1.QueryStatementPercentileSeriesResponse.p90:type_name -> querysheriff.v1.StatementMetric
-	30, // 18: querysheriff.v1.QueryStatementPercentileSeriesResponse.p95:type_name -> querysheriff.v1.StatementMetric
-	30, // 19: querysheriff.v1.QueryStatementPercentileSeriesResponse.p99:type_name -> querysheriff.v1.StatementMetric
-	12, // 20: querysheriff.v1.QueryStatementTimingSeriesRequest.scope:type_name -> querysheriff.v1.SeriesScope
-	30, // 21: querysheriff.v1.QueryStatementTimingSeriesResponse.avg:type_name -> querysheriff.v1.StatementMetric
-	30, // 22: querysheriff.v1.QueryStatementTimingSeriesResponse.avg_io:type_name -> querysheriff.v1.StatementMetric
-	43, // 23: querysheriff.v1.QueryStatementDetailRequest.from:type_name -> google.protobuf.Timestamp
-	43, // 24: querysheriff.v1.QueryStatementDetailRequest.to:type_name -> google.protobuf.Timestamp
-	40, // 25: querysheriff.v1.QueryStatementDetailResponse.tags:type_name -> querysheriff.v1.QueryStatementDetailResponse.TagsEntry
-	43, // 26: querysheriff.v1.QueryStatementSamplesRequest.from:type_name -> google.protobuf.Timestamp
-	43, // 27: querysheriff.v1.QueryStatementSamplesRequest.to:type_name -> google.protobuf.Timestamp
-	23, // 28: querysheriff.v1.QueryStatementSamplesResponse.samples:type_name -> querysheriff.v1.StatementSample
-	43, // 29: querysheriff.v1.StatementSample.occurred_at:type_name -> google.protobuf.Timestamp
-	41, // 30: querysheriff.v1.StatementSample.tags:type_name -> querysheriff.v1.StatementSample.TagsEntry
-	31, // 31: querysheriff.v1.StatementMetric.series:type_name -> querysheriff.v1.MetricPoint
-	43, // 32: querysheriff.v1.MetricPoint.at:type_name -> google.protobuf.Timestamp
-	42, // 33: querysheriff.v1.StatementStat.tags:type_name -> querysheriff.v1.StatementStat.TagsEntry
-	43, // 34: querysheriff.v1.ListTagKeysRequest.from:type_name -> google.protobuf.Timestamp
-	43, // 35: querysheriff.v1.ListTagKeysRequest.to:type_name -> google.protobuf.Timestamp
-	36, // 36: querysheriff.v1.ListTagKeysResponse.keys:type_name -> querysheriff.v1.TagKey
-	43, // 37: querysheriff.v1.ListTagValuesRequest.from:type_name -> google.protobuf.Timestamp
-	43, // 38: querysheriff.v1.ListTagValuesRequest.to:type_name -> google.protobuf.Timestamp
-	39, // 39: querysheriff.v1.ListTagValuesResponse.values:type_name -> querysheriff.v1.TagValue
-	4,  // 40: querysheriff.v1.StatementService.ReportStatements:input_type -> querysheriff.v1.ReportStatementsRequest
-	7,  // 41: querysheriff.v1.StatementService.ReportStatementTexts:input_type -> querysheriff.v1.ReportStatementTextsRequest
-	10, // 42: querysheriff.v1.StatementService.QueryStatements:input_type -> querysheriff.v1.QueryStatementsRequest
-	13, // 43: querysheriff.v1.StatementService.QueryStatementCallsSeries:input_type -> querysheriff.v1.QueryStatementCallsSeriesRequest
-	15, // 44: querysheriff.v1.StatementService.QueryStatementPercentileSeries:input_type -> querysheriff.v1.QueryStatementPercentileSeriesRequest
-	17, // 45: querysheriff.v1.StatementService.QueryStatementTimingSeries:input_type -> querysheriff.v1.QueryStatementTimingSeriesRequest
-	19, // 46: querysheriff.v1.StatementService.QueryStatementDetail:input_type -> querysheriff.v1.QueryStatementDetailRequest
-	21, // 47: querysheriff.v1.StatementService.QueryStatementSamples:input_type -> querysheriff.v1.QueryStatementSamplesRequest
-	24, // 48: querysheriff.v1.StatementService.GetStatementSamplePlan:input_type -> querysheriff.v1.GetStatementSamplePlanRequest
-	26, // 49: querysheriff.v1.StatementService.GetStatementSampleText:input_type -> querysheriff.v1.GetStatementSampleTextRequest
-	28, // 50: querysheriff.v1.StatementService.GetStatementText:input_type -> querysheriff.v1.GetStatementTextRequest
-	34, // 51: querysheriff.v1.StatementService.ListTagKeys:input_type -> querysheriff.v1.ListTagKeysRequest
-	37, // 52: querysheriff.v1.StatementService.ListTagValues:input_type -> querysheriff.v1.ListTagValuesRequest
-	5,  // 53: querysheriff.v1.StatementService.ReportStatements:output_type -> querysheriff.v1.ReportStatementsResponse
-	8,  // 54: querysheriff.v1.StatementService.ReportStatementTexts:output_type -> querysheriff.v1.ReportStatementTextsResponse
-	11, // 55: querysheriff.v1.StatementService.QueryStatements:output_type -> querysheriff.v1.QueryStatementsResponse
-	14, // 56: querysheriff.v1.StatementService.QueryStatementCallsSeries:output_type -> querysheriff.v1.QueryStatementCallsSeriesResponse
-	16, // 57: querysheriff.v1.StatementService.QueryStatementPercentileSeries:output_type -> querysheriff.v1.QueryStatementPercentileSeriesResponse
-	18, // 58: querysheriff.v1.StatementService.QueryStatementTimingSeries:output_type -> querysheriff.v1.QueryStatementTimingSeriesResponse
-	20, // 59: querysheriff.v1.StatementService.QueryStatementDetail:output_type -> querysheriff.v1.QueryStatementDetailResponse
-	22, // 60: querysheriff.v1.StatementService.QueryStatementSamples:output_type -> querysheriff.v1.QueryStatementSamplesResponse
-	25, // 61: querysheriff.v1.StatementService.GetStatementSamplePlan:output_type -> querysheriff.v1.GetStatementSamplePlanResponse
-	27, // 62: querysheriff.v1.StatementService.GetStatementSampleText:output_type -> querysheriff.v1.GetStatementSampleTextResponse
-	29, // 63: querysheriff.v1.StatementService.GetStatementText:output_type -> querysheriff.v1.GetStatementTextResponse
-	35, // 64: querysheriff.v1.StatementService.ListTagKeys:output_type -> querysheriff.v1.ListTagKeysResponse
-	38, // 65: querysheriff.v1.StatementService.ListTagValues:output_type -> querysheriff.v1.ListTagValuesResponse
-	53, // [53:66] is the sub-list for method output_type
-	40, // [40:53] is the sub-list for method input_type
-	40, // [40:40] is the sub-list for extension type_name
-	40, // [40:40] is the sub-list for extension extendee
-	0,  // [0:40] is the sub-list for field type_name
+	33, // 11: querysheriff.v1.QueryStatementsResponse.statements:type_name -> querysheriff.v1.StatementStat
+	44, // 12: querysheriff.v1.SeriesScope.from:type_name -> google.protobuf.Timestamp
+	44, // 13: querysheriff.v1.SeriesScope.to:type_name -> google.protobuf.Timestamp
+	13, // 14: querysheriff.v1.QueryStatementCallsSeriesRequest.scope:type_name -> querysheriff.v1.SeriesScope
+	31, // 15: querysheriff.v1.QueryStatementCallsSeriesResponse.calls:type_name -> querysheriff.v1.StatementMetric
+	13, // 16: querysheriff.v1.QueryStatementPercentileSeriesRequest.scope:type_name -> querysheriff.v1.SeriesScope
+	31, // 17: querysheriff.v1.QueryStatementPercentileSeriesResponse.p90:type_name -> querysheriff.v1.StatementMetric
+	31, // 18: querysheriff.v1.QueryStatementPercentileSeriesResponse.p95:type_name -> querysheriff.v1.StatementMetric
+	31, // 19: querysheriff.v1.QueryStatementPercentileSeriesResponse.p99:type_name -> querysheriff.v1.StatementMetric
+	13, // 20: querysheriff.v1.QueryStatementTimingSeriesRequest.scope:type_name -> querysheriff.v1.SeriesScope
+	31, // 21: querysheriff.v1.QueryStatementTimingSeriesResponse.avg:type_name -> querysheriff.v1.StatementMetric
+	31, // 22: querysheriff.v1.QueryStatementTimingSeriesResponse.avg_io:type_name -> querysheriff.v1.StatementMetric
+	44, // 23: querysheriff.v1.QueryStatementDetailRequest.from:type_name -> google.protobuf.Timestamp
+	44, // 24: querysheriff.v1.QueryStatementDetailRequest.to:type_name -> google.protobuf.Timestamp
+	41, // 25: querysheriff.v1.QueryStatementDetailResponse.tags:type_name -> querysheriff.v1.QueryStatementDetailResponse.TagsEntry
+	44, // 26: querysheriff.v1.QueryStatementSamplesRequest.from:type_name -> google.protobuf.Timestamp
+	44, // 27: querysheriff.v1.QueryStatementSamplesRequest.to:type_name -> google.protobuf.Timestamp
+	3,  // 28: querysheriff.v1.QueryStatementSamplesRequest.sort_column:type_name -> querysheriff.v1.SampleSortColumn
+	24, // 29: querysheriff.v1.QueryStatementSamplesResponse.samples:type_name -> querysheriff.v1.StatementSample
+	44, // 30: querysheriff.v1.StatementSample.occurred_at:type_name -> google.protobuf.Timestamp
+	42, // 31: querysheriff.v1.StatementSample.tags:type_name -> querysheriff.v1.StatementSample.TagsEntry
+	32, // 32: querysheriff.v1.StatementMetric.series:type_name -> querysheriff.v1.MetricPoint
+	44, // 33: querysheriff.v1.MetricPoint.at:type_name -> google.protobuf.Timestamp
+	43, // 34: querysheriff.v1.StatementStat.tags:type_name -> querysheriff.v1.StatementStat.TagsEntry
+	44, // 35: querysheriff.v1.ListTagKeysRequest.from:type_name -> google.protobuf.Timestamp
+	44, // 36: querysheriff.v1.ListTagKeysRequest.to:type_name -> google.protobuf.Timestamp
+	37, // 37: querysheriff.v1.ListTagKeysResponse.keys:type_name -> querysheriff.v1.TagKey
+	44, // 38: querysheriff.v1.ListTagValuesRequest.from:type_name -> google.protobuf.Timestamp
+	44, // 39: querysheriff.v1.ListTagValuesRequest.to:type_name -> google.protobuf.Timestamp
+	40, // 40: querysheriff.v1.ListTagValuesResponse.values:type_name -> querysheriff.v1.TagValue
+	5,  // 41: querysheriff.v1.StatementService.ReportStatements:input_type -> querysheriff.v1.ReportStatementsRequest
+	8,  // 42: querysheriff.v1.StatementService.ReportStatementTexts:input_type -> querysheriff.v1.ReportStatementTextsRequest
+	11, // 43: querysheriff.v1.StatementService.QueryStatements:input_type -> querysheriff.v1.QueryStatementsRequest
+	14, // 44: querysheriff.v1.StatementService.QueryStatementCallsSeries:input_type -> querysheriff.v1.QueryStatementCallsSeriesRequest
+	16, // 45: querysheriff.v1.StatementService.QueryStatementPercentileSeries:input_type -> querysheriff.v1.QueryStatementPercentileSeriesRequest
+	18, // 46: querysheriff.v1.StatementService.QueryStatementTimingSeries:input_type -> querysheriff.v1.QueryStatementTimingSeriesRequest
+	20, // 47: querysheriff.v1.StatementService.QueryStatementDetail:input_type -> querysheriff.v1.QueryStatementDetailRequest
+	22, // 48: querysheriff.v1.StatementService.QueryStatementSamples:input_type -> querysheriff.v1.QueryStatementSamplesRequest
+	25, // 49: querysheriff.v1.StatementService.GetStatementSamplePlan:input_type -> querysheriff.v1.GetStatementSamplePlanRequest
+	27, // 50: querysheriff.v1.StatementService.GetStatementSampleText:input_type -> querysheriff.v1.GetStatementSampleTextRequest
+	29, // 51: querysheriff.v1.StatementService.GetStatementText:input_type -> querysheriff.v1.GetStatementTextRequest
+	35, // 52: querysheriff.v1.StatementService.ListTagKeys:input_type -> querysheriff.v1.ListTagKeysRequest
+	38, // 53: querysheriff.v1.StatementService.ListTagValues:input_type -> querysheriff.v1.ListTagValuesRequest
+	6,  // 54: querysheriff.v1.StatementService.ReportStatements:output_type -> querysheriff.v1.ReportStatementsResponse
+	9,  // 55: querysheriff.v1.StatementService.ReportStatementTexts:output_type -> querysheriff.v1.ReportStatementTextsResponse
+	12, // 56: querysheriff.v1.StatementService.QueryStatements:output_type -> querysheriff.v1.QueryStatementsResponse
+	15, // 57: querysheriff.v1.StatementService.QueryStatementCallsSeries:output_type -> querysheriff.v1.QueryStatementCallsSeriesResponse
+	17, // 58: querysheriff.v1.StatementService.QueryStatementPercentileSeries:output_type -> querysheriff.v1.QueryStatementPercentileSeriesResponse
+	19, // 59: querysheriff.v1.StatementService.QueryStatementTimingSeries:output_type -> querysheriff.v1.QueryStatementTimingSeriesResponse
+	21, // 60: querysheriff.v1.StatementService.QueryStatementDetail:output_type -> querysheriff.v1.QueryStatementDetailResponse
+	23, // 61: querysheriff.v1.StatementService.QueryStatementSamples:output_type -> querysheriff.v1.QueryStatementSamplesResponse
+	26, // 62: querysheriff.v1.StatementService.GetStatementSamplePlan:output_type -> querysheriff.v1.GetStatementSamplePlanResponse
+	28, // 63: querysheriff.v1.StatementService.GetStatementSampleText:output_type -> querysheriff.v1.GetStatementSampleTextResponse
+	30, // 64: querysheriff.v1.StatementService.GetStatementText:output_type -> querysheriff.v1.GetStatementTextResponse
+	36, // 65: querysheriff.v1.StatementService.ListTagKeys:output_type -> querysheriff.v1.ListTagKeysResponse
+	39, // 66: querysheriff.v1.StatementService.ListTagValues:output_type -> querysheriff.v1.ListTagValuesResponse
+	54, // [54:67] is the sub-list for method output_type
+	41, // [41:54] is the sub-list for method input_type
+	41, // [41:41] is the sub-list for extension type_name
+	41, // [41:41] is the sub-list for extension extendee
+	0,  // [0:41] is the sub-list for field type_name
 }
 
 func init() { file_querysheriff_v1_statement_proto_init() }
@@ -2746,7 +2825,7 @@ func file_querysheriff_v1_statement_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_querysheriff_v1_statement_proto_rawDesc), len(file_querysheriff_v1_statement_proto_rawDesc)),
-			NumEnums:      3,
+			NumEnums:      4,
 			NumMessages:   40,
 			NumExtensions: 0,
 			NumServices:   1,
