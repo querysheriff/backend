@@ -3,6 +3,7 @@ package server
 import (
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
@@ -28,6 +29,7 @@ type reconstructedEvent struct {
 	lockMode      string
 	query         string
 	queryTags     map[string]string
+	queryStart    pgtype.Timestamptz
 	firstSeen     time.Time
 	lastSeen      time.Time
 }
@@ -45,6 +47,7 @@ func reconstructedEventFromRow(row db.ListTransactionEventsRow) (reconstructedEv
 		lockMode:      protoFromText(row.LockMode),
 		query:         row.Query,
 		queryTags:     queryTags,
+		queryStart:    row.QueryStart,
 		firstSeen:     row.FirstSeenAt.Time,
 		lastSeen:      row.LastSeenAt.Time,
 	}, nil
@@ -63,22 +66,17 @@ func buildTransactionEvents(start time.Time, events []reconstructedEvent) []*que
 			to = events[i+1].firstSeen
 		}
 
-		status := eventStatus(e.state)
-		event := &querysheriffv1.TransactionEvent{
+		out[i] = &querysheriffv1.TransactionEvent{
 			From:          timestamppb.New(from),
 			To:            timestamppb.New(to),
-			Status:        status,
+			Status:        eventStatus(e.state),
 			WaitEventType: e.waitEventType,
 			WaitEvent:     e.waitEvent,
 			LockMode:      e.lockMode,
+			Query:         e.query,
+			QueryTags:     e.queryTags,
+			QueryStart:    protoFromTimestamptz(e.queryStart),
 		}
-
-		if isRunningStatus(status) {
-			event.Query = e.query
-			event.QueryTags = e.queryTags
-		}
-
-		out[i] = event
 	}
 
 	return out
@@ -93,8 +91,4 @@ func eventStatus(state string) querysheriffv1.TransactionEventStatus {
 	default:
 		return statusActive
 	}
-}
-
-func isRunningStatus(status querysheriffv1.TransactionEventStatus) bool {
-	return status == statusActive
 }

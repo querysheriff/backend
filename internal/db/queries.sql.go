@@ -664,83 +664,6 @@ func (q *Queries) ListAlertWebhooks(ctx context.Context, allowedServers []string
 	return items, nil
 }
 
-const listBlockedEvents = `-- name: ListBlockedEvents :many
-SELECT t.pid AS victim_pid, t.application_name AS victim_app,
-       e.lock_wait_start, e.first_seen_at, e.last_seen_at,
-       e.lock_mode, e.blocked_by_pid, q.query,
-       COALESCE((SELECT bt.application_name FROM transactions bt
-         WHERE bt.server_name = t.server_name AND bt.database_name = t.database_name
-           AND bt.pid = e.blocked_by_pid
-           AND bt.xact_start <= e.last_seen_at AND bt.last_seen_at >= e.first_seen_at
-         ORDER BY bt.xact_start DESC LIMIT 1), '')::text AS blocker_app
-FROM transaction_events e
-JOIN transaction_queries q ON q.id = e.transaction_query_id
-JOIN transactions t        ON t.id = q.transaction_id
-WHERE e.blocked_by_pid IS NOT NULL
-  AND ($1::text   IS NULL OR t.server_name   = $1)
-  AND ($2::text IS NULL OR t.database_name = $2)
-  AND ($3::text[] IS NULL OR t.server_name = ANY($3::text[]))
-  AND e.first_seen_at <= $4
-  AND e.last_seen_at  >= $5
-ORDER BY e.lock_wait_start, e.id
-`
-
-type ListBlockedEventsParams struct {
-	ServerName     pgtype.Text
-	DatabaseName   pgtype.Text
-	AllowedServers []string
-	ToTime         pgtype.Timestamptz
-	FromTime       pgtype.Timestamptz
-}
-
-type ListBlockedEventsRow struct {
-	VictimPid     int32
-	VictimApp     string
-	LockWaitStart pgtype.Timestamptz
-	FirstSeenAt   pgtype.Timestamptz
-	LastSeenAt    pgtype.Timestamptz
-	LockMode      pgtype.Text
-	BlockedByPid  pgtype.Int4
-	Query         string
-	BlockerApp    string
-}
-
-func (q *Queries) ListBlockedEvents(ctx context.Context, arg ListBlockedEventsParams) ([]ListBlockedEventsRow, error) {
-	rows, err := q.db.Query(ctx, listBlockedEvents,
-		arg.ServerName,
-		arg.DatabaseName,
-		arg.AllowedServers,
-		arg.ToTime,
-		arg.FromTime,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListBlockedEventsRow
-	for rows.Next() {
-		var i ListBlockedEventsRow
-		if err := rows.Scan(
-			&i.VictimPid,
-			&i.VictimApp,
-			&i.LockWaitStart,
-			&i.FirstSeenAt,
-			&i.LastSeenAt,
-			&i.LockMode,
-			&i.BlockedByPid,
-			&i.Query,
-			&i.BlockerApp,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listCollectorTokens = `-- name: ListCollectorTokens :many
 SELECT id, server_name, created_at FROM collector_tokens ORDER BY created_at, id
 `
@@ -796,6 +719,147 @@ func (q *Queries) ListExistingStatementQueryIDs(ctx context.Context, arg ListExi
 			return nil, err
 		}
 		items = append(items, query_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLockWaits = `-- name: ListLockWaits :many
+WITH blocked AS (
+    SELECT t.server_name, t.database_name,
+           t.pid AS waiting_pid, t.application_name AS waiting_app,
+           e.blocked_by_pid, e.lock_mode,
+           coalesce(e.lock_wait_start, e.first_seen_at) AS wait_start,
+           e.first_seen_at, e.last_seen_at,
+           e.transaction_query_id, e.xact_start
+    FROM transaction_events e
+    JOIN transaction_queries q ON q.id = e.transaction_query_id AND q.xact_start = e.xact_start
+    JOIN transactions t        ON t.id = q.transaction_id       AND t.xact_start = q.xact_start
+    WHERE e.blocked_by_pid IS NOT NULL
+      AND ($2::text   IS NULL OR t.server_name   = $2)
+      AND ($3::text IS NULL OR t.database_name = $3)
+      AND ($4::text[] IS NULL OR t.server_name = ANY($4::text[]))
+      AND e.first_seen_at <= $5
+      AND e.last_seen_at  >= $6
+),
+episodes AS (
+    SELECT server_name, database_name, waiting_pid, blocked_by_pid, lock_mode, wait_start,
+           max(last_seen_at)::timestamptz                                          AS last_seen,
+           (array_agg(waiting_app ORDER BY first_seen_at))[1]::text                 AS waiting_app,
+           (array_agg(transaction_query_id ORDER BY first_seen_at))[1]::bigint      AS waiting_query_id,
+           (array_agg(xact_start ORDER BY first_seen_at))[1]::timestamptz           AS waiting_xact_start,
+           CASE $7::text
+               WHEN 'started' THEN extract(epoch FROM wait_start)
+               ELSE extract(epoch FROM (max(last_seen_at) - wait_start))
+           END AS sort_num
+    FROM blocked
+    GROUP BY server_name, database_name, waiting_pid, blocked_by_pid, lock_mode, wait_start
+),
+page AS (
+    SELECT server_name, database_name, waiting_pid, waiting_app, blocked_by_pid, lock_mode,
+           wait_start, last_seen, waiting_query_id, waiting_xact_start, sort_num
+    FROM episodes
+    ORDER BY sort_num * CASE WHEN $1::bool THEN -1 ELSE 1 END,
+             wait_start DESC, server_name, database_name, waiting_pid, blocked_by_pid, lock_mode
+    LIMIT $9
+    OFFSET $8
+)
+SELECT ep.waiting_pid, ep.waiting_app,
+       coalesce(wq.query, '')::text AS waiting_query,
+       wq.query_tags                AS waiting_tags,
+       ep.blocked_by_pid, ep.lock_mode, ep.wait_start, ep.last_seen,
+       coalesce(bt.application_name, '')::text AS blocking_app,
+       coalesce(bq.query, '')::text            AS blocking_query,
+       bq.query_tags                           AS blocking_tags
+FROM page ep
+LEFT JOIN transaction_queries wq
+       ON wq.id = ep.waiting_query_id AND wq.xact_start = ep.waiting_xact_start
+LEFT JOIN LATERAL (
+    SELECT b.id, b.xact_start, b.application_name
+    FROM transactions b
+    WHERE b.pid = ep.blocked_by_pid
+      AND b.server_name = ep.server_name AND b.database_name = ep.database_name
+      AND b.xact_start <= ep.wait_start AND b.last_seen_at >= ep.wait_start
+    ORDER BY b.xact_start DESC
+    LIMIT 1
+) bt ON true
+LEFT JOIN LATERAL (
+    SELECT q2.query, q2.query_tags
+    FROM transaction_queries q2
+    JOIN transaction_events e2 ON e2.transaction_query_id = q2.id AND e2.xact_start = q2.xact_start
+    WHERE q2.transaction_id = bt.id AND q2.xact_start = bt.xact_start
+    ORDER BY (e2.first_seen_at <= ep.wait_start) DESC,
+             abs(extract(epoch FROM e2.first_seen_at - ep.wait_start))
+    LIMIT 1
+) bq ON true
+ORDER BY ep.sort_num * CASE WHEN $1::bool THEN -1 ELSE 1 END,
+         ep.wait_start DESC, ep.server_name, ep.database_name,
+         ep.waiting_pid, ep.blocked_by_pid, ep.lock_mode
+`
+
+type ListLockWaitsParams struct {
+	SortDesc       bool
+	ServerName     pgtype.Text
+	DatabaseName   pgtype.Text
+	AllowedServers []string
+	ToTime         pgtype.Timestamptz
+	FromTime       pgtype.Timestamptz
+	SortKey        string
+	OffsetRows     int32
+	RowLimit       int32
+}
+
+type ListLockWaitsRow struct {
+	WaitingPid    int32
+	WaitingApp    string
+	WaitingQuery  string
+	WaitingTags   []byte
+	BlockedByPid  pgtype.Int4
+	LockMode      pgtype.Text
+	WaitStart     pgtype.Timestamptz
+	LastSeen      pgtype.Timestamptz
+	BlockingApp   string
+	BlockingQuery string
+	BlockingTags  []byte
+}
+
+func (q *Queries) ListLockWaits(ctx context.Context, arg ListLockWaitsParams) ([]ListLockWaitsRow, error) {
+	rows, err := q.db.Query(ctx, listLockWaits,
+		arg.SortDesc,
+		arg.ServerName,
+		arg.DatabaseName,
+		arg.AllowedServers,
+		arg.ToTime,
+		arg.FromTime,
+		arg.SortKey,
+		arg.OffsetRows,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLockWaitsRow
+	for rows.Next() {
+		var i ListLockWaitsRow
+		if err := rows.Scan(
+			&i.WaitingPid,
+			&i.WaitingApp,
+			&i.WaitingQuery,
+			&i.WaitingTags,
+			&i.BlockedByPid,
+			&i.LockMode,
+			&i.WaitStart,
+			&i.LastSeen,
+			&i.BlockingApp,
+			&i.BlockingQuery,
+			&i.BlockingTags,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1426,10 +1490,10 @@ func (q *Queries) ListTagValues(ctx context.Context, arg ListTagValuesParams) ([
 
 const listTransactionEvents = `-- name: ListTransactionEvents :many
 SELECT q.transaction_id, e.state, e.wait_event_type, e.wait_event, e.lock_mode,
-       q.query, q.query_tags, e.first_seen_at, e.last_seen_at
+       q.query, q.query_tags, q.query_start, e.first_seen_at, e.last_seen_at
 FROM transaction_events e
-JOIN transaction_queries q ON q.id = e.transaction_query_id
-JOIN transactions t ON t.id = q.transaction_id
+JOIN transaction_queries q ON q.id = e.transaction_query_id AND q.xact_start = e.xact_start
+JOIN transactions t        ON t.id = q.transaction_id       AND t.xact_start = q.xact_start
 WHERE q.transaction_id = ANY($1::bigint[])
   AND ($2::text[] IS NULL OR t.server_name = ANY($2::text[]))
 ORDER BY q.transaction_id, e.first_seen_at, e.id
@@ -1448,6 +1512,7 @@ type ListTransactionEventsRow struct {
 	LockMode      pgtype.Text
 	Query         string
 	QueryTags     []byte
+	QueryStart    pgtype.Timestamptz
 	FirstSeenAt   pgtype.Timestamptz
 	LastSeenAt    pgtype.Timestamptz
 }
@@ -1469,6 +1534,7 @@ func (q *Queries) ListTransactionEvents(ctx context.Context, arg ListTransaction
 			&i.LockMode,
 			&i.Query,
 			&i.QueryTags,
+			&i.QueryStart,
 			&i.FirstSeenAt,
 			&i.LastSeenAt,
 		); err != nil {
@@ -1483,24 +1549,41 @@ func (q *Queries) ListTransactionEvents(ctx context.Context, arg ListTransaction
 }
 
 const listTransactions = `-- name: ListTransactions :many
+WITH filtered AS (
+    SELECT id, pid, application_name, xact_start, last_seen_at,
+           CASE $4::text
+               WHEN 'started' THEN extract(epoch FROM xact_start)
+               ELSE extract(epoch FROM (last_seen_at - xact_start))
+           END AS sort_num
+    FROM transactions
+    WHERE ($5::text   IS NULL OR server_name   = $5)
+      AND ($6::text IS NULL OR database_name = $6)
+      AND ($7::text[] IS NULL OR server_name = ANY($7::text[]))
+      AND xact_start   <= $8
+      AND last_seen_at >= $9
+      AND last_seen_at - xact_start >= $10::interval
+)
 SELECT id, pid, application_name, xact_start, last_seen_at
-FROM transactions
-WHERE ($1::text   IS NULL OR server_name   = $1)
-  AND ($2::text IS NULL OR database_name = $2)
-  AND ($3::text[] IS NULL OR server_name = ANY($3::text[]))
-  AND xact_start   <= $4
-  AND last_seen_at >= $5
-ORDER BY (last_seen_at - xact_start) DESC, id DESC
-LIMIT $6
+FROM filtered
+ORDER BY
+    CASE WHEN $1::bool THEN sort_num END DESC,
+    CASE WHEN NOT $1::bool THEN sort_num END ASC,
+    id DESC
+LIMIT $3
+OFFSET $2
 `
 
 type ListTransactionsParams struct {
+	SortDesc       bool
+	OffsetRows     int32
+	RowLimit       int32
+	SortKey        string
 	ServerName     pgtype.Text
 	DatabaseName   pgtype.Text
 	AllowedServers []string
 	ToTime         pgtype.Timestamptz
 	FromTime       pgtype.Timestamptz
-	RowLimit       int32
+	MinOpen        pgtype.Interval
 }
 
 type ListTransactionsRow struct {
@@ -1511,15 +1594,18 @@ type ListTransactionsRow struct {
 	LastSeenAt      pgtype.Timestamptz
 }
 
-// Transactions overlapping [from, to], longest first.
 func (q *Queries) ListTransactions(ctx context.Context, arg ListTransactionsParams) ([]ListTransactionsRow, error) {
 	rows, err := q.db.Query(ctx, listTransactions,
+		arg.SortDesc,
+		arg.OffsetRows,
+		arg.RowLimit,
+		arg.SortKey,
 		arg.ServerName,
 		arg.DatabaseName,
 		arg.AllowedServers,
 		arg.ToTime,
 		arg.FromTime,
-		arg.RowLimit,
+		arg.MinOpen,
 	)
 	if err != nil {
 		return nil, err
@@ -1577,6 +1663,94 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 			&i.CreatedAt,
 			&i.AllowedServers,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockWaitSeries = `-- name: LockWaitSeries :many
+WITH waits AS (
+    SELECT t.server_name, t.database_name, t.pid AS waiting_pid,
+           e.blocked_by_pid, e.lock_mode,
+           coalesce(e.lock_wait_start, e.first_seen_at) AS wait_start,
+           e.last_seen_at
+    FROM transaction_events e
+    JOIN transaction_queries q ON q.id = e.transaction_query_id AND q.xact_start = e.xact_start
+    JOIN transactions t        ON t.id = q.transaction_id       AND t.xact_start = q.xact_start
+    WHERE e.blocked_by_pid IS NOT NULL
+      AND ($1::text   IS NULL OR t.server_name   = $1)
+      AND ($2::text IS NULL OR t.database_name = $2)
+      AND ($3::text[] IS NULL OR t.server_name = ANY($3::text[]))
+      AND e.first_seen_at <= $4::timestamptz
+      AND e.last_seen_at  >  $5::timestamptz
+),
+episodes AS (
+    SELECT wait_start, max(last_seen_at)::timestamptz AS last_seen
+    FROM waits
+    GROUP BY server_name, database_name, waiting_pid, blocked_by_pid, lock_mode, wait_start
+),
+spread AS (
+    SELECT b.bucket_end,
+           sum(extract(epoch FROM (
+               LEAST(w.last_seen, b.bucket_end)
+               - GREATEST(w.wait_start, b.bucket_end - $6::interval)
+           ))) AS wait_seconds
+    FROM episodes w
+    CROSS JOIN LATERAL generate_series(
+        date_bin($6::interval, w.wait_start - interval '1 microsecond',
+                 $7::timestamptz) + $6::interval,
+        date_bin($6::interval, w.last_seen - interval '1 microsecond',
+                 $7::timestamptz) + $6::interval,
+        $6::interval
+    ) AS b(bucket_end)
+    WHERE b.bucket_end >  $5::timestamptz
+      AND b.bucket_end <= $7::timestamptz
+    GROUP BY b.bucket_end
+)
+SELECT bucket_end::timestamptz        AS bucket_end,
+       wait_seconds::double precision AS wait_seconds
+FROM spread
+ORDER BY bucket_end
+`
+
+type LockWaitSeriesParams struct {
+	ServerName     pgtype.Text
+	DatabaseName   pgtype.Text
+	AllowedServers []string
+	RangeEnd       pgtype.Timestamptz
+	RangeStart     pgtype.Timestamptz
+	Bucket         pgtype.Interval
+	Anchor         pgtype.Timestamptz
+}
+
+type LockWaitSeriesRow struct {
+	BucketEnd   pgtype.Timestamptz
+	WaitSeconds float64
+}
+
+func (q *Queries) LockWaitSeries(ctx context.Context, arg LockWaitSeriesParams) ([]LockWaitSeriesRow, error) {
+	rows, err := q.db.Query(ctx, lockWaitSeries,
+		arg.ServerName,
+		arg.DatabaseName,
+		arg.AllowedServers,
+		arg.RangeEnd,
+		arg.RangeStart,
+		arg.Bucket,
+		arg.Anchor,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LockWaitSeriesRow
+	for rows.Next() {
+		var i LockWaitSeriesRow
+		if err := rows.Scan(&i.BucketEnd, &i.WaitSeconds); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1916,6 +2090,65 @@ func (q *Queries) StatementMetricSeries(ctx context.Context, arg StatementMetric
 			&i.TotalIoTime,
 			&i.Calls,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const transactionAgeSeries = `-- name: TransactionAgeSeries :many
+SELECT (date_bin($1::interval, t.last_seen_at - interval '1 microsecond',
+                 $2::timestamptz) + $1::interval)::timestamptz AS bucket_end,
+       max(extract(epoch FROM (t.last_seen_at - t.xact_start)))::double precision AS ended_age,
+       min(t.xact_start)::timestamptz AS oldest_start
+FROM transactions t
+WHERE ($3::text   IS NULL OR t.server_name   = $3)
+  AND ($4::text IS NULL OR t.database_name = $4)
+  AND ($5::text[] IS NULL OR t.server_name = ANY($5::text[]))
+  AND t.xact_start   <= $6::timestamptz
+  AND t.last_seen_at >  $7::timestamptz
+GROUP BY 1
+ORDER BY 1
+`
+
+type TransactionAgeSeriesParams struct {
+	Bucket         pgtype.Interval
+	Anchor         pgtype.Timestamptz
+	ServerName     pgtype.Text
+	DatabaseName   pgtype.Text
+	AllowedServers []string
+	RangeEnd       pgtype.Timestamptz
+	RangeStart     pgtype.Timestamptz
+}
+
+type TransactionAgeSeriesRow struct {
+	BucketEnd   pgtype.Timestamptz
+	EndedAge    float64
+	OldestStart pgtype.Timestamptz
+}
+
+func (q *Queries) TransactionAgeSeries(ctx context.Context, arg TransactionAgeSeriesParams) ([]TransactionAgeSeriesRow, error) {
+	rows, err := q.db.Query(ctx, transactionAgeSeries,
+		arg.Bucket,
+		arg.Anchor,
+		arg.ServerName,
+		arg.DatabaseName,
+		arg.AllowedServers,
+		arg.RangeEnd,
+		arg.RangeStart,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TransactionAgeSeriesRow
+	for rows.Next() {
+		var i TransactionAgeSeriesRow
+		if err := rows.Scan(&i.BucketEnd, &i.EndedAge, &i.OldestStart); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

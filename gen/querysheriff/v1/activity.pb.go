@@ -75,6 +75,106 @@ func (TransactionEventStatus) EnumDescriptor() ([]byte, []int) {
 	return file_querysheriff_v1_activity_proto_rawDescGZIP(), []int{0}
 }
 
+// Which column the server orders transactions by.
+type TransactionSortColumn int32
+
+const (
+	TransactionSortColumn_TRANSACTION_SORT_COLUMN_UNSPECIFIED TransactionSortColumn = 0
+	TransactionSortColumn_TRANSACTION_SORT_COLUMN_STARTED     TransactionSortColumn = 1
+	TransactionSortColumn_TRANSACTION_SORT_COLUMN_OPEN        TransactionSortColumn = 2
+)
+
+// Enum value maps for TransactionSortColumn.
+var (
+	TransactionSortColumn_name = map[int32]string{
+		0: "TRANSACTION_SORT_COLUMN_UNSPECIFIED",
+		1: "TRANSACTION_SORT_COLUMN_STARTED",
+		2: "TRANSACTION_SORT_COLUMN_OPEN",
+	}
+	TransactionSortColumn_value = map[string]int32{
+		"TRANSACTION_SORT_COLUMN_UNSPECIFIED": 0,
+		"TRANSACTION_SORT_COLUMN_STARTED":     1,
+		"TRANSACTION_SORT_COLUMN_OPEN":        2,
+	}
+)
+
+func (x TransactionSortColumn) Enum() *TransactionSortColumn {
+	p := new(TransactionSortColumn)
+	*p = x
+	return p
+}
+
+func (x TransactionSortColumn) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TransactionSortColumn) Descriptor() protoreflect.EnumDescriptor {
+	return file_querysheriff_v1_activity_proto_enumTypes[1].Descriptor()
+}
+
+func (TransactionSortColumn) Type() protoreflect.EnumType {
+	return &file_querysheriff_v1_activity_proto_enumTypes[1]
+}
+
+func (x TransactionSortColumn) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TransactionSortColumn.Descriptor instead.
+func (TransactionSortColumn) EnumDescriptor() ([]byte, []int) {
+	return file_querysheriff_v1_activity_proto_rawDescGZIP(), []int{1}
+}
+
+// Which column the server orders lock waits by.
+type LockWaitSortColumn int32
+
+const (
+	LockWaitSortColumn_LOCK_WAIT_SORT_COLUMN_UNSPECIFIED LockWaitSortColumn = 0
+	LockWaitSortColumn_LOCK_WAIT_SORT_COLUMN_STARTED     LockWaitSortColumn = 1
+	LockWaitSortColumn_LOCK_WAIT_SORT_COLUMN_WAITED      LockWaitSortColumn = 2
+)
+
+// Enum value maps for LockWaitSortColumn.
+var (
+	LockWaitSortColumn_name = map[int32]string{
+		0: "LOCK_WAIT_SORT_COLUMN_UNSPECIFIED",
+		1: "LOCK_WAIT_SORT_COLUMN_STARTED",
+		2: "LOCK_WAIT_SORT_COLUMN_WAITED",
+	}
+	LockWaitSortColumn_value = map[string]int32{
+		"LOCK_WAIT_SORT_COLUMN_UNSPECIFIED": 0,
+		"LOCK_WAIT_SORT_COLUMN_STARTED":     1,
+		"LOCK_WAIT_SORT_COLUMN_WAITED":      2,
+	}
+)
+
+func (x LockWaitSortColumn) Enum() *LockWaitSortColumn {
+	p := new(LockWaitSortColumn)
+	*p = x
+	return p
+}
+
+func (x LockWaitSortColumn) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (LockWaitSortColumn) Descriptor() protoreflect.EnumDescriptor {
+	return file_querysheriff_v1_activity_proto_enumTypes[2].Descriptor()
+}
+
+func (LockWaitSortColumn) Type() protoreflect.EnumType {
+	return &file_querysheriff_v1_activity_proto_enumTypes[2]
+}
+
+func (x LockWaitSortColumn) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use LockWaitSortColumn.Descriptor instead.
+func (LockWaitSortColumn) EnumDescriptor() ([]byte, []int) {
+	return file_querysheriff_v1_activity_proto_rawDescGZIP(), []int{2}
+}
+
 type ReportActivityRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	CollectedAt       *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=collected_at,json=collectedAt,proto3" json:"collected_at,omitempty"`
@@ -353,8 +453,14 @@ type QueryTransactionsRequest struct {
 	DatabaseName string                 `protobuf:"bytes,2,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
 	From         *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
 	To           *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
-	// Defaults to 50 when unset.
-	Limit         int32 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Page size. Defaults to 50 when unset.
+	Limit int32 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Number of leading rows to skip, for pagination.
+	Offset     int32                 `protobuf:"varint,6,opt,name=offset,proto3" json:"offset,omitempty"`
+	SortColumn TransactionSortColumn `protobuf:"varint,7,opt,name=sort_column,json=sortColumn,proto3,enum=querysheriff.v1.TransactionSortColumn" json:"sort_column,omitempty"`
+	SortDesc   bool                  `protobuf:"varint,8,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
+	// Transactions open for less than this are omitted.
+	MinOpenMs     int64 `protobuf:"varint,9,opt,name=min_open_ms,json=minOpenMs,proto3" json:"min_open_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -424,9 +530,39 @@ func (x *QueryTransactionsRequest) GetLimit() int32 {
 	return 0
 }
 
+func (x *QueryTransactionsRequest) GetOffset() int32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *QueryTransactionsRequest) GetSortColumn() TransactionSortColumn {
+	if x != nil {
+		return x.SortColumn
+	}
+	return TransactionSortColumn_TRANSACTION_SORT_COLUMN_UNSPECIFIED
+}
+
+func (x *QueryTransactionsRequest) GetSortDesc() bool {
+	if x != nil {
+		return x.SortDesc
+	}
+	return false
+}
+
+func (x *QueryTransactionsRequest) GetMinOpenMs() int64 {
+	if x != nil {
+		return x.MinOpenMs
+	}
+	return 0
+}
+
 type QueryTransactionsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Transactions  []*Transaction         `protobuf:"bytes,1,rep,name=transactions,proto3" json:"transactions,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Transactions []*Transaction         `protobuf:"bytes,1,rep,name=transactions,proto3" json:"transactions,omitempty"`
+	// Whether more rows exist beyond this page.
+	HasMore       bool `protobuf:"varint,2,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -466,6 +602,13 @@ func (x *QueryTransactionsResponse) GetTransactions() []*Transaction {
 		return x.Transactions
 	}
 	return nil
+}
+
+func (x *QueryTransactionsResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
 }
 
 // A reconstructed transaction from a series of activity snapshots.
@@ -559,7 +702,9 @@ type TransactionEvent struct {
 	WaitEvent     string `protobuf:"bytes,8,opt,name=wait_event,json=waitEvent,proto3" json:"wait_event,omitempty"`
 	LockMode      string `protobuf:"bytes,9,opt,name=lock_mode,json=lockMode,proto3" json:"lock_mode,omitempty"`
 	// The running query's tags.
-	QueryTags     map[string]string `protobuf:"bytes,10,rep,name=query_tags,json=queryTags,proto3" json:"query_tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	QueryTags map[string]string `protobuf:"bytes,10,rep,name=query_tags,json=queryTags,proto3" json:"query_tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// When the query being run started.
+	QueryStart    *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=query_start,json=queryStart,proto3" json:"query_start,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -650,7 +795,14 @@ func (x *TransactionEvent) GetQueryTags() map[string]string {
 	return nil
 }
 
-type QueryBlockingRequest struct {
+func (x *TransactionEvent) GetQueryStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.QueryStart
+	}
+	return nil
+}
+
+type QueryLockWaitSeriesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ServerName    string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
 	DatabaseName  string                 `protobuf:"bytes,2,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
@@ -660,20 +812,20 @@ type QueryBlockingRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *QueryBlockingRequest) Reset() {
-	*x = QueryBlockingRequest{}
+func (x *QueryLockWaitSeriesRequest) Reset() {
+	*x = QueryLockWaitSeriesRequest{}
 	mi := &file_querysheriff_v1_activity_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *QueryBlockingRequest) String() string {
+func (x *QueryLockWaitSeriesRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*QueryBlockingRequest) ProtoMessage() {}
+func (*QueryLockWaitSeriesRequest) ProtoMessage() {}
 
-func (x *QueryBlockingRequest) ProtoReflect() protoreflect.Message {
+func (x *QueryLockWaitSeriesRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_querysheriff_v1_activity_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -685,60 +837,62 @@ func (x *QueryBlockingRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryBlockingRequest.ProtoReflect.Descriptor instead.
-func (*QueryBlockingRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use QueryLockWaitSeriesRequest.ProtoReflect.Descriptor instead.
+func (*QueryLockWaitSeriesRequest) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_activity_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *QueryBlockingRequest) GetServerName() string {
+func (x *QueryLockWaitSeriesRequest) GetServerName() string {
 	if x != nil {
 		return x.ServerName
 	}
 	return ""
 }
 
-func (x *QueryBlockingRequest) GetDatabaseName() string {
+func (x *QueryLockWaitSeriesRequest) GetDatabaseName() string {
 	if x != nil {
 		return x.DatabaseName
 	}
 	return ""
 }
 
-func (x *QueryBlockingRequest) GetFrom() *timestamppb.Timestamp {
+func (x *QueryLockWaitSeriesRequest) GetFrom() *timestamppb.Timestamp {
 	if x != nil {
 		return x.From
 	}
 	return nil
 }
 
-func (x *QueryBlockingRequest) GetTo() *timestamppb.Timestamp {
+func (x *QueryLockWaitSeriesRequest) GetTo() *timestamppb.Timestamp {
 	if x != nil {
 		return x.To
 	}
 	return nil
 }
 
-type QueryBlockingResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Trees         []*BlockingTree        `protobuf:"bytes,1,rep,name=trees,proto3" json:"trees,omitempty"`
+type QueryLockWaitSeriesResponse struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Series []*LockWaitPoint       `protobuf:"bytes,1,rep,name=series,proto3" json:"series,omitempty"`
+	// Width of one bucket, so the caller can label the series.
+	BucketMs      int64 `protobuf:"varint,2,opt,name=bucket_ms,json=bucketMs,proto3" json:"bucket_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *QueryBlockingResponse) Reset() {
-	*x = QueryBlockingResponse{}
+func (x *QueryLockWaitSeriesResponse) Reset() {
+	*x = QueryLockWaitSeriesResponse{}
 	mi := &file_querysheriff_v1_activity_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *QueryBlockingResponse) String() string {
+func (x *QueryLockWaitSeriesResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*QueryBlockingResponse) ProtoMessage() {}
+func (*QueryLockWaitSeriesResponse) ProtoMessage() {}
 
-func (x *QueryBlockingResponse) ProtoReflect() protoreflect.Message {
+func (x *QueryLockWaitSeriesResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_querysheriff_v1_activity_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -750,122 +904,109 @@ func (x *QueryBlockingResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryBlockingResponse.ProtoReflect.Descriptor instead.
-func (*QueryBlockingResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use QueryLockWaitSeriesResponse.ProtoReflect.Descriptor instead.
+func (*QueryLockWaitSeriesResponse) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_activity_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *QueryBlockingResponse) GetTrees() []*BlockingTree {
+func (x *QueryLockWaitSeriesResponse) GetSeries() []*LockWaitPoint {
 	if x != nil {
-		return x.Trees
+		return x.Series
 	}
 	return nil
 }
 
-type BlockingTree struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	RootPid             int32                  `protobuf:"varint,1,opt,name=root_pid,json=rootPid,proto3" json:"root_pid,omitempty"`
-	RootApplicationName string                 `protobuf:"bytes,2,opt,name=root_application_name,json=rootApplicationName,proto3" json:"root_application_name,omitempty"`
-	RootStartedBlocking *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=root_started_blocking,json=rootStartedBlocking,proto3" json:"root_started_blocking,omitempty"`
-	Blocked             []*BlockedEvent        `protobuf:"bytes,4,rep,name=blocked,proto3" json:"blocked,omitempty"`
-	RootLastBlocking    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=root_last_blocking,json=rootLastBlocking,proto3" json:"root_last_blocking,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
-}
-
-func (x *BlockingTree) Reset() {
-	*x = BlockingTree{}
-	mi := &file_querysheriff_v1_activity_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BlockingTree) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BlockingTree) ProtoMessage() {}
-
-func (x *BlockingTree) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_activity_proto_msgTypes[9]
+func (x *QueryLockWaitSeriesResponse) GetBucketMs() int64 {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BlockingTree.ProtoReflect.Descriptor instead.
-func (*BlockingTree) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_activity_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *BlockingTree) GetRootPid() int32 {
-	if x != nil {
-		return x.RootPid
+		return x.BucketMs
 	}
 	return 0
 }
 
-func (x *BlockingTree) GetRootApplicationName() string {
-	if x != nil {
-		return x.RootApplicationName
-	}
-	return ""
-}
-
-func (x *BlockingTree) GetRootStartedBlocking() *timestamppb.Timestamp {
-	if x != nil {
-		return x.RootStartedBlocking
-	}
-	return nil
-}
-
-func (x *BlockingTree) GetBlocked() []*BlockedEvent {
-	if x != nil {
-		return x.Blocked
-	}
-	return nil
-}
-
-func (x *BlockingTree) GetRootLastBlocking() *timestamppb.Timestamp {
-	if x != nil {
-		return x.RootLastBlocking
-	}
-	return nil
-}
-
-type BlockedEvent struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Pid             int32                  `protobuf:"varint,1,opt,name=pid,proto3" json:"pid,omitempty"`
-	ApplicationName string                 `protobuf:"bytes,2,opt,name=application_name,json=applicationName,proto3" json:"application_name,omitempty"`
-	StartedWaiting  *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=started_waiting,json=startedWaiting,proto3" json:"started_waiting,omitempty"`
-	Query           string                 `protobuf:"bytes,4,opt,name=query,proto3" json:"query,omitempty"`
-	LockMode        string                 `protobuf:"bytes,5,opt,name=lock_mode,json=lockMode,proto3" json:"lock_mode,omitempty"`
-	BlockedByPid    int32                  `protobuf:"varint,6,opt,name=blocked_by_pid,json=blockedByPid,proto3" json:"blocked_by_pid,omitempty"`
-	// Last time this wait was observed (≈ when it ended).
-	LastSeen      *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"`
+// Session-time lost to lock waits in one bucket.
+type LockWaitPoint struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Bucket end.
+	At            *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=at,proto3" json:"at,omitempty"`
+	WaitSeconds   float64                `protobuf:"fixed64,2,opt,name=wait_seconds,json=waitSeconds,proto3" json:"wait_seconds,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *BlockedEvent) Reset() {
-	*x = BlockedEvent{}
+func (x *LockWaitPoint) Reset() {
+	*x = LockWaitPoint{}
+	mi := &file_querysheriff_v1_activity_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LockWaitPoint) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LockWaitPoint) ProtoMessage() {}
+
+func (x *LockWaitPoint) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_activity_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LockWaitPoint.ProtoReflect.Descriptor instead.
+func (*LockWaitPoint) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_activity_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *LockWaitPoint) GetAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.At
+	}
+	return nil
+}
+
+func (x *LockWaitPoint) GetWaitSeconds() float64 {
+	if x != nil {
+		return x.WaitSeconds
+	}
+	return 0
+}
+
+type QueryLockWaitsRequest struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	ServerName   string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
+	DatabaseName string                 `protobuf:"bytes,2,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
+	From         *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
+	To           *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
+	// Page size. Defaults to 50 when unset.
+	Limit int32 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Number of leading rows to skip, for pagination.
+	Offset        int32              `protobuf:"varint,6,opt,name=offset,proto3" json:"offset,omitempty"`
+	SortColumn    LockWaitSortColumn `protobuf:"varint,7,opt,name=sort_column,json=sortColumn,proto3,enum=querysheriff.v1.LockWaitSortColumn" json:"sort_column,omitempty"`
+	SortDesc      bool               `protobuf:"varint,8,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryLockWaitsRequest) Reset() {
+	*x = QueryLockWaitsRequest{}
 	mi := &file_querysheriff_v1_activity_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BlockedEvent) String() string {
+func (x *QueryLockWaitsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BlockedEvent) ProtoMessage() {}
+func (*QueryLockWaitsRequest) ProtoMessage() {}
 
-func (x *BlockedEvent) ProtoReflect() protoreflect.Message {
+func (x *QueryLockWaitsRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_querysheriff_v1_activity_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -877,58 +1018,441 @@ func (x *BlockedEvent) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BlockedEvent.ProtoReflect.Descriptor instead.
-func (*BlockedEvent) Descriptor() ([]byte, []int) {
+// Deprecated: Use QueryLockWaitsRequest.ProtoReflect.Descriptor instead.
+func (*QueryLockWaitsRequest) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_activity_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *BlockedEvent) GetPid() int32 {
+func (x *QueryLockWaitsRequest) GetServerName() string {
 	if x != nil {
-		return x.Pid
-	}
-	return 0
-}
-
-func (x *BlockedEvent) GetApplicationName() string {
-	if x != nil {
-		return x.ApplicationName
+		return x.ServerName
 	}
 	return ""
 }
 
-func (x *BlockedEvent) GetStartedWaiting() *timestamppb.Timestamp {
+func (x *QueryLockWaitsRequest) GetDatabaseName() string {
+	if x != nil {
+		return x.DatabaseName
+	}
+	return ""
+}
+
+func (x *QueryLockWaitsRequest) GetFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.From
+	}
+	return nil
+}
+
+func (x *QueryLockWaitsRequest) GetTo() *timestamppb.Timestamp {
+	if x != nil {
+		return x.To
+	}
+	return nil
+}
+
+func (x *QueryLockWaitsRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *QueryLockWaitsRequest) GetOffset() int32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *QueryLockWaitsRequest) GetSortColumn() LockWaitSortColumn {
+	if x != nil {
+		return x.SortColumn
+	}
+	return LockWaitSortColumn_LOCK_WAIT_SORT_COLUMN_UNSPECIFIED
+}
+
+func (x *QueryLockWaitsRequest) GetSortDesc() bool {
+	if x != nil {
+		return x.SortDesc
+	}
+	return false
+}
+
+type QueryLockWaitsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Waits []*LockWait            `protobuf:"bytes,1,rep,name=waits,proto3" json:"waits,omitempty"`
+	// Whether more rows exist beyond this page.
+	HasMore       bool `protobuf:"varint,2,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryLockWaitsResponse) Reset() {
+	*x = QueryLockWaitsResponse{}
+	mi := &file_querysheriff_v1_activity_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryLockWaitsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryLockWaitsResponse) ProtoMessage() {}
+
+func (x *QueryLockWaitsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_activity_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryLockWaitsResponse.ProtoReflect.Descriptor instead.
+func (*QueryLockWaitsResponse) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_activity_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *QueryLockWaitsResponse) GetWaits() []*LockWait {
+	if x != nil {
+		return x.Waits
+	}
+	return nil
+}
+
+func (x *QueryLockWaitsResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
+}
+
+// One session's wait for one lock, and the session that held it.
+type LockWait struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Waiting        *LockParty             `protobuf:"bytes,1,opt,name=waiting,proto3" json:"waiting,omitempty"`
+	Blocking       *LockParty             `protobuf:"bytes,2,opt,name=blocking,proto3" json:"blocking,omitempty"`
+	StartedWaiting *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=started_waiting,json=startedWaiting,proto3" json:"started_waiting,omitempty"`
+	// Last time the wait was observed (≈ when it ended).
+	LastSeen *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"`
+	// Example: "ExclusiveLock".
+	LockMode      string `protobuf:"bytes,5,opt,name=lock_mode,json=lockMode,proto3" json:"lock_mode,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LockWait) Reset() {
+	*x = LockWait{}
+	mi := &file_querysheriff_v1_activity_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LockWait) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LockWait) ProtoMessage() {}
+
+func (x *LockWait) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_activity_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LockWait.ProtoReflect.Descriptor instead.
+func (*LockWait) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_activity_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *LockWait) GetWaiting() *LockParty {
+	if x != nil {
+		return x.Waiting
+	}
+	return nil
+}
+
+func (x *LockWait) GetBlocking() *LockParty {
+	if x != nil {
+		return x.Blocking
+	}
+	return nil
+}
+
+func (x *LockWait) GetStartedWaiting() *timestamppb.Timestamp {
 	if x != nil {
 		return x.StartedWaiting
 	}
 	return nil
 }
 
-func (x *BlockedEvent) GetQuery() string {
+func (x *LockWait) GetLastSeen() *timestamppb.Timestamp {
 	if x != nil {
-		return x.Query
+		return x.LastSeen
 	}
-	return ""
+	return nil
 }
 
-func (x *BlockedEvent) GetLockMode() string {
+func (x *LockWait) GetLockMode() string {
 	if x != nil {
 		return x.LockMode
 	}
 	return ""
 }
 
-func (x *BlockedEvent) GetBlockedByPid() int32 {
+// One side of a lock wait.
+type LockParty struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Pid             int32                  `protobuf:"varint,1,opt,name=pid,proto3" json:"pid,omitempty"`
+	ApplicationName string                 `protobuf:"bytes,2,opt,name=application_name,json=applicationName,proto3" json:"application_name,omitempty"`
+	Query           string                 `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
+	QueryTags       map[string]string      `protobuf:"bytes,4,rep,name=query_tags,json=queryTags,proto3" json:"query_tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *LockParty) Reset() {
+	*x = LockParty{}
+	mi := &file_querysheriff_v1_activity_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LockParty) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LockParty) ProtoMessage() {}
+
+func (x *LockParty) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_activity_proto_msgTypes[13]
 	if x != nil {
-		return x.BlockedByPid
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LockParty.ProtoReflect.Descriptor instead.
+func (*LockParty) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_activity_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *LockParty) GetPid() int32 {
+	if x != nil {
+		return x.Pid
 	}
 	return 0
 }
 
-func (x *BlockedEvent) GetLastSeen() *timestamppb.Timestamp {
+func (x *LockParty) GetApplicationName() string {
 	if x != nil {
-		return x.LastSeen
+		return x.ApplicationName
+	}
+	return ""
+}
+
+func (x *LockParty) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+func (x *LockParty) GetQueryTags() map[string]string {
+	if x != nil {
+		return x.QueryTags
 	}
 	return nil
+}
+
+type QueryTransactionAgeSeriesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ServerName    string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
+	DatabaseName  string                 `protobuf:"bytes,2,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
+	From          *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
+	To            *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryTransactionAgeSeriesRequest) Reset() {
+	*x = QueryTransactionAgeSeriesRequest{}
+	mi := &file_querysheriff_v1_activity_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryTransactionAgeSeriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryTransactionAgeSeriesRequest) ProtoMessage() {}
+
+func (x *QueryTransactionAgeSeriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_activity_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryTransactionAgeSeriesRequest.ProtoReflect.Descriptor instead.
+func (*QueryTransactionAgeSeriesRequest) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_activity_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *QueryTransactionAgeSeriesRequest) GetServerName() string {
+	if x != nil {
+		return x.ServerName
+	}
+	return ""
+}
+
+func (x *QueryTransactionAgeSeriesRequest) GetDatabaseName() string {
+	if x != nil {
+		return x.DatabaseName
+	}
+	return ""
+}
+
+func (x *QueryTransactionAgeSeriesRequest) GetFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.From
+	}
+	return nil
+}
+
+func (x *QueryTransactionAgeSeriesRequest) GetTo() *timestamppb.Timestamp {
+	if x != nil {
+		return x.To
+	}
+	return nil
+}
+
+type QueryTransactionAgeSeriesResponse struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Series []*TransactionAgePoint `protobuf:"bytes,1,rep,name=series,proto3" json:"series,omitempty"`
+	// Width of one bucket, so the caller can label the series.
+	BucketMs      int64 `protobuf:"varint,2,opt,name=bucket_ms,json=bucketMs,proto3" json:"bucket_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryTransactionAgeSeriesResponse) Reset() {
+	*x = QueryTransactionAgeSeriesResponse{}
+	mi := &file_querysheriff_v1_activity_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryTransactionAgeSeriesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryTransactionAgeSeriesResponse) ProtoMessage() {}
+
+func (x *QueryTransactionAgeSeriesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_activity_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryTransactionAgeSeriesResponse.ProtoReflect.Descriptor instead.
+func (*QueryTransactionAgeSeriesResponse) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_activity_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *QueryTransactionAgeSeriesResponse) GetSeries() []*TransactionAgePoint {
+	if x != nil {
+		return x.Series
+	}
+	return nil
+}
+
+func (x *QueryTransactionAgeSeriesResponse) GetBucketMs() int64 {
+	if x != nil {
+		return x.BucketMs
+	}
+	return 0
+}
+
+// How old the longest-running open transaction was at the end of one bucket.
+type TransactionAgePoint struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Bucket end.
+	At            *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=at,proto3" json:"at,omitempty"`
+	AgeSeconds    float64                `protobuf:"fixed64,2,opt,name=age_seconds,json=ageSeconds,proto3" json:"age_seconds,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TransactionAgePoint) Reset() {
+	*x = TransactionAgePoint{}
+	mi := &file_querysheriff_v1_activity_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TransactionAgePoint) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TransactionAgePoint) ProtoMessage() {}
+
+func (x *TransactionAgePoint) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_activity_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TransactionAgePoint.ProtoReflect.Descriptor instead.
+func (*TransactionAgePoint) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_activity_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *TransactionAgePoint) GetAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.At
+	}
+	return nil
+}
+
+func (x *TransactionAgePoint) GetAgeSeconds() float64 {
+	if x != nil {
+		return x.AgeSeconds
+	}
+	return 0
 }
 
 var File_querysheriff_v1_activity_proto protoreflect.FileDescriptor
@@ -964,22 +1488,28 @@ const file_querysheriff_v1_activity_proto_rawDesc = "" +
 	"\tlock_mode\x18\x10 \x01(\tR\blockMode\x1a<\n" +
 	"\x0eQueryTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd2\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xf0\x02\n" +
 	"\x18QueryTransactionsRequest\x12\x1f\n" +
 	"\vserver_name\x18\x01 \x01(\tR\n" +
 	"serverName\x12#\n" +
 	"\rdatabase_name\x18\x02 \x01(\tR\fdatabaseName\x12.\n" +
 	"\x04from\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
 	"\x02to\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\x12\x14\n" +
-	"\x05limit\x18\x05 \x01(\x05R\x05limit\"]\n" +
+	"\x05limit\x18\x05 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06offset\x18\x06 \x01(\x05R\x06offset\x12G\n" +
+	"\vsort_column\x18\a \x01(\x0e2&.querysheriff.v1.TransactionSortColumnR\n" +
+	"sortColumn\x12\x1b\n" +
+	"\tsort_desc\x18\b \x01(\bR\bsortDesc\x12\x1e\n" +
+	"\vmin_open_ms\x18\t \x01(\x03R\tminOpenMs\"x\n" +
 	"\x19QueryTransactionsResponse\x12@\n" +
-	"\ftransactions\x18\x01 \x03(\v2\x1c.querysheriff.v1.TransactionR\ftransactions\"\xe5\x01\n" +
+	"\ftransactions\x18\x01 \x03(\v2\x1c.querysheriff.v1.TransactionR\ftransactions\x12\x19\n" +
+	"\bhas_more\x18\x02 \x01(\bR\ahasMore\"\xe5\x01\n" +
 	"\vTransaction\x12\x10\n" +
 	"\x03pid\x18\x01 \x01(\x05R\x03pid\x12)\n" +
 	"\x10application_name\x18\x02 \x01(\tR\x0fapplicationName\x120\n" +
 	"\x05start\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
 	"\x03end\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\x129\n" +
-	"\x06events\x18\x06 \x03(\v2!.querysheriff.v1.TransactionEventR\x06events\"\xb8\x03\n" +
+	"\x06events\x18\x06 \x03(\v2!.querysheriff.v1.TransactionEventR\x06events\"\xf5\x03\n" +
 	"\x10TransactionEvent\x12.\n" +
 	"\x04from\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
 	"\x02to\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\x12?\n" +
@@ -991,41 +1521,85 @@ const file_querysheriff_v1_activity_proto_rawDesc = "" +
 	"\tlock_mode\x18\t \x01(\tR\blockMode\x12O\n" +
 	"\n" +
 	"query_tags\x18\n" +
-	" \x03(\v20.querysheriff.v1.TransactionEvent.QueryTagsEntryR\tqueryTags\x1a<\n" +
+	" \x03(\v20.querysheriff.v1.TransactionEvent.QueryTagsEntryR\tqueryTags\x12;\n" +
+	"\vquery_start\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"queryStart\x1a<\n" +
 	"\x0eQueryTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb8\x01\n" +
-	"\x14QueryBlockingRequest\x12\x1f\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xbe\x01\n" +
+	"\x1aQueryLockWaitSeriesRequest\x12\x1f\n" +
 	"\vserver_name\x18\x01 \x01(\tR\n" +
 	"serverName\x12#\n" +
 	"\rdatabase_name\x18\x02 \x01(\tR\fdatabaseName\x12.\n" +
 	"\x04from\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
-	"\x02to\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\"L\n" +
-	"\x15QueryBlockingResponse\x123\n" +
-	"\x05trees\x18\x01 \x03(\v2\x1d.querysheriff.v1.BlockingTreeR\x05trees\"\xb0\x02\n" +
-	"\fBlockingTree\x12\x19\n" +
-	"\broot_pid\x18\x01 \x01(\x05R\arootPid\x122\n" +
-	"\x15root_application_name\x18\x02 \x01(\tR\x13rootApplicationName\x12N\n" +
-	"\x15root_started_blocking\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x13rootStartedBlocking\x127\n" +
-	"\ablocked\x18\x04 \x03(\v2\x1d.querysheriff.v1.BlockedEventR\ablocked\x12H\n" +
-	"\x12root_last_blocking\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x10rootLastBlocking\"\xa2\x02\n" +
-	"\fBlockedEvent\x12\x10\n" +
+	"\x02to\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\"r\n" +
+	"\x1bQueryLockWaitSeriesResponse\x126\n" +
+	"\x06series\x18\x01 \x03(\v2\x1e.querysheriff.v1.LockWaitPointR\x06series\x12\x1b\n" +
+	"\tbucket_ms\x18\x02 \x01(\x03R\bbucketMs\"^\n" +
+	"\rLockWaitPoint\x12*\n" +
+	"\x02at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x12!\n" +
+	"\fwait_seconds\x18\x02 \x01(\x01R\vwaitSeconds\"\xca\x02\n" +
+	"\x15QueryLockWaitsRequest\x12\x1f\n" +
+	"\vserver_name\x18\x01 \x01(\tR\n" +
+	"serverName\x12#\n" +
+	"\rdatabase_name\x18\x02 \x01(\tR\fdatabaseName\x12.\n" +
+	"\x04from\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
+	"\x02to\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\x12\x14\n" +
+	"\x05limit\x18\x05 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06offset\x18\x06 \x01(\x05R\x06offset\x12D\n" +
+	"\vsort_column\x18\a \x01(\x0e2#.querysheriff.v1.LockWaitSortColumnR\n" +
+	"sortColumn\x12\x1b\n" +
+	"\tsort_desc\x18\b \x01(\bR\bsortDesc\"d\n" +
+	"\x16QueryLockWaitsResponse\x12/\n" +
+	"\x05waits\x18\x01 \x03(\v2\x19.querysheriff.v1.LockWaitR\x05waits\x12\x19\n" +
+	"\bhas_more\x18\x02 \x01(\bR\ahasMore\"\x93\x02\n" +
+	"\bLockWait\x124\n" +
+	"\awaiting\x18\x01 \x01(\v2\x1a.querysheriff.v1.LockPartyR\awaiting\x126\n" +
+	"\bblocking\x18\x02 \x01(\v2\x1a.querysheriff.v1.LockPartyR\bblocking\x12C\n" +
+	"\x0fstarted_waiting\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x0estartedWaiting\x127\n" +
+	"\tlast_seen\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\blastSeen\x12\x1b\n" +
+	"\tlock_mode\x18\x05 \x01(\tR\blockMode\"\xe6\x01\n" +
+	"\tLockParty\x12\x10\n" +
 	"\x03pid\x18\x01 \x01(\x05R\x03pid\x12)\n" +
-	"\x10application_name\x18\x02 \x01(\tR\x0fapplicationName\x12C\n" +
-	"\x0fstarted_waiting\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x0estartedWaiting\x12\x14\n" +
-	"\x05query\x18\x04 \x01(\tR\x05query\x12\x1b\n" +
-	"\tlock_mode\x18\x05 \x01(\tR\blockMode\x12$\n" +
-	"\x0eblocked_by_pid\x18\x06 \x01(\x05R\fblockedByPid\x127\n" +
-	"\tlast_seen\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\blastSeen*\xb0\x01\n" +
+	"\x10application_name\x18\x02 \x01(\tR\x0fapplicationName\x12\x14\n" +
+	"\x05query\x18\x03 \x01(\tR\x05query\x12H\n" +
+	"\n" +
+	"query_tags\x18\x04 \x03(\v2).querysheriff.v1.LockParty.QueryTagsEntryR\tqueryTags\x1a<\n" +
+	"\x0eQueryTagsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc4\x01\n" +
+	" QueryTransactionAgeSeriesRequest\x12\x1f\n" +
+	"\vserver_name\x18\x01 \x01(\tR\n" +
+	"serverName\x12#\n" +
+	"\rdatabase_name\x18\x02 \x01(\tR\fdatabaseName\x12.\n" +
+	"\x04from\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
+	"\x02to\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\"~\n" +
+	"!QueryTransactionAgeSeriesResponse\x12<\n" +
+	"\x06series\x18\x01 \x03(\v2$.querysheriff.v1.TransactionAgePointR\x06series\x12\x1b\n" +
+	"\tbucket_ms\x18\x02 \x01(\x03R\bbucketMs\"b\n" +
+	"\x13TransactionAgePoint\x12*\n" +
+	"\x02at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x12\x1f\n" +
+	"\vage_seconds\x18\x02 \x01(\x01R\n" +
+	"ageSeconds*\xb0\x01\n" +
 	"\x16TransactionEventStatus\x12(\n" +
 	"$TRANSACTION_EVENT_STATUS_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fTRANSACTION_EVENT_STATUS_ACTIVE\x10\x01\x12!\n" +
 	"\x1dTRANSACTION_EVENT_STATUS_IDLE\x10\x02\x12$\n" +
-	" TRANSACTION_EVENT_STATUS_ABORTED\x10\x042\xc6\x02\n" +
+	" TRANSACTION_EVENT_STATUS_ABORTED\x10\x04*\x87\x01\n" +
+	"\x15TransactionSortColumn\x12'\n" +
+	"#TRANSACTION_SORT_COLUMN_UNSPECIFIED\x10\x00\x12#\n" +
+	"\x1fTRANSACTION_SORT_COLUMN_STARTED\x10\x01\x12 \n" +
+	"\x1cTRANSACTION_SORT_COLUMN_OPEN\x10\x02*\x80\x01\n" +
+	"\x12LockWaitSortColumn\x12%\n" +
+	"!LOCK_WAIT_SORT_COLUMN_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dLOCK_WAIT_SORT_COLUMN_STARTED\x10\x01\x12 \n" +
+	"\x1cLOCK_WAIT_SORT_COLUMN_WAITED\x10\x022\xc4\x04\n" +
 	"\x0fActivityService\x12c\n" +
 	"\x0eReportActivity\x12&.querysheriff.v1.ReportActivityRequest\x1a'.querysheriff.v1.ReportActivityResponse\"\x00\x12l\n" +
-	"\x11QueryTransactions\x12).querysheriff.v1.QueryTransactionsRequest\x1a*.querysheriff.v1.QueryTransactionsResponse\"\x00\x12`\n" +
-	"\rQueryBlocking\x12%.querysheriff.v1.QueryBlockingRequest\x1a&.querysheriff.v1.QueryBlockingResponse\"\x00BDZBgithub.com/querysheriff/backend/gen/querysheriff/v1;querysheriffv1b\x06proto3"
+	"\x11QueryTransactions\x12).querysheriff.v1.QueryTransactionsRequest\x1a*.querysheriff.v1.QueryTransactionsResponse\"\x00\x12c\n" +
+	"\x0eQueryLockWaits\x12&.querysheriff.v1.QueryLockWaitsRequest\x1a'.querysheriff.v1.QueryLockWaitsResponse\"\x00\x12r\n" +
+	"\x13QueryLockWaitSeries\x12+.querysheriff.v1.QueryLockWaitSeriesRequest\x1a,.querysheriff.v1.QueryLockWaitSeriesResponse\"\x00\x12\x84\x01\n" +
+	"\x19QueryTransactionAgeSeries\x121.querysheriff.v1.QueryTransactionAgeSeriesRequest\x1a2.querysheriff.v1.QueryTransactionAgeSeriesResponse\"\x00BDZBgithub.com/querysheriff/backend/gen/querysheriff/v1;querysheriffv1b\x06proto3"
 
 var (
 	file_querysheriff_v1_activity_proto_rawDescOnce sync.Once
@@ -1039,62 +1613,86 @@ func file_querysheriff_v1_activity_proto_rawDescGZIP() []byte {
 	return file_querysheriff_v1_activity_proto_rawDescData
 }
 
-var file_querysheriff_v1_activity_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_querysheriff_v1_activity_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_querysheriff_v1_activity_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_querysheriff_v1_activity_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_querysheriff_v1_activity_proto_goTypes = []any{
-	(TransactionEventStatus)(0),       // 0: querysheriff.v1.TransactionEventStatus
-	(*ReportActivityRequest)(nil),     // 1: querysheriff.v1.ReportActivityRequest
-	(*ReportActivityResponse)(nil),    // 2: querysheriff.v1.ReportActivityResponse
-	(*ActivitySnapshot)(nil),          // 3: querysheriff.v1.ActivitySnapshot
-	(*QueryTransactionsRequest)(nil),  // 4: querysheriff.v1.QueryTransactionsRequest
-	(*QueryTransactionsResponse)(nil), // 5: querysheriff.v1.QueryTransactionsResponse
-	(*Transaction)(nil),               // 6: querysheriff.v1.Transaction
-	(*TransactionEvent)(nil),          // 7: querysheriff.v1.TransactionEvent
-	(*QueryBlockingRequest)(nil),      // 8: querysheriff.v1.QueryBlockingRequest
-	(*QueryBlockingResponse)(nil),     // 9: querysheriff.v1.QueryBlockingResponse
-	(*BlockingTree)(nil),              // 10: querysheriff.v1.BlockingTree
-	(*BlockedEvent)(nil),              // 11: querysheriff.v1.BlockedEvent
-	nil,                               // 12: querysheriff.v1.ActivitySnapshot.QueryTagsEntry
-	nil,                               // 13: querysheriff.v1.TransactionEvent.QueryTagsEntry
-	(*timestamppb.Timestamp)(nil),     // 14: google.protobuf.Timestamp
+	(TransactionEventStatus)(0),               // 0: querysheriff.v1.TransactionEventStatus
+	(TransactionSortColumn)(0),                // 1: querysheriff.v1.TransactionSortColumn
+	(LockWaitSortColumn)(0),                   // 2: querysheriff.v1.LockWaitSortColumn
+	(*ReportActivityRequest)(nil),             // 3: querysheriff.v1.ReportActivityRequest
+	(*ReportActivityResponse)(nil),            // 4: querysheriff.v1.ReportActivityResponse
+	(*ActivitySnapshot)(nil),                  // 5: querysheriff.v1.ActivitySnapshot
+	(*QueryTransactionsRequest)(nil),          // 6: querysheriff.v1.QueryTransactionsRequest
+	(*QueryTransactionsResponse)(nil),         // 7: querysheriff.v1.QueryTransactionsResponse
+	(*Transaction)(nil),                       // 8: querysheriff.v1.Transaction
+	(*TransactionEvent)(nil),                  // 9: querysheriff.v1.TransactionEvent
+	(*QueryLockWaitSeriesRequest)(nil),        // 10: querysheriff.v1.QueryLockWaitSeriesRequest
+	(*QueryLockWaitSeriesResponse)(nil),       // 11: querysheriff.v1.QueryLockWaitSeriesResponse
+	(*LockWaitPoint)(nil),                     // 12: querysheriff.v1.LockWaitPoint
+	(*QueryLockWaitsRequest)(nil),             // 13: querysheriff.v1.QueryLockWaitsRequest
+	(*QueryLockWaitsResponse)(nil),            // 14: querysheriff.v1.QueryLockWaitsResponse
+	(*LockWait)(nil),                          // 15: querysheriff.v1.LockWait
+	(*LockParty)(nil),                         // 16: querysheriff.v1.LockParty
+	(*QueryTransactionAgeSeriesRequest)(nil),  // 17: querysheriff.v1.QueryTransactionAgeSeriesRequest
+	(*QueryTransactionAgeSeriesResponse)(nil), // 18: querysheriff.v1.QueryTransactionAgeSeriesResponse
+	(*TransactionAgePoint)(nil),               // 19: querysheriff.v1.TransactionAgePoint
+	nil,                                       // 20: querysheriff.v1.ActivitySnapshot.QueryTagsEntry
+	nil,                                       // 21: querysheriff.v1.TransactionEvent.QueryTagsEntry
+	nil,                                       // 22: querysheriff.v1.LockParty.QueryTagsEntry
+	(*timestamppb.Timestamp)(nil),             // 23: google.protobuf.Timestamp
 }
 var file_querysheriff_v1_activity_proto_depIdxs = []int32{
-	14, // 0: querysheriff.v1.ReportActivityRequest.collected_at:type_name -> google.protobuf.Timestamp
-	3,  // 1: querysheriff.v1.ReportActivityRequest.activity_snapshots:type_name -> querysheriff.v1.ActivitySnapshot
-	14, // 2: querysheriff.v1.ActivitySnapshot.backend_start:type_name -> google.protobuf.Timestamp
-	14, // 3: querysheriff.v1.ActivitySnapshot.xact_start:type_name -> google.protobuf.Timestamp
-	14, // 4: querysheriff.v1.ActivitySnapshot.query_start:type_name -> google.protobuf.Timestamp
-	12, // 5: querysheriff.v1.ActivitySnapshot.query_tags:type_name -> querysheriff.v1.ActivitySnapshot.QueryTagsEntry
-	14, // 6: querysheriff.v1.ActivitySnapshot.lock_wait_start:type_name -> google.protobuf.Timestamp
-	14, // 7: querysheriff.v1.QueryTransactionsRequest.from:type_name -> google.protobuf.Timestamp
-	14, // 8: querysheriff.v1.QueryTransactionsRequest.to:type_name -> google.protobuf.Timestamp
-	6,  // 9: querysheriff.v1.QueryTransactionsResponse.transactions:type_name -> querysheriff.v1.Transaction
-	14, // 10: querysheriff.v1.Transaction.start:type_name -> google.protobuf.Timestamp
-	14, // 11: querysheriff.v1.Transaction.end:type_name -> google.protobuf.Timestamp
-	7,  // 12: querysheriff.v1.Transaction.events:type_name -> querysheriff.v1.TransactionEvent
-	14, // 13: querysheriff.v1.TransactionEvent.from:type_name -> google.protobuf.Timestamp
-	14, // 14: querysheriff.v1.TransactionEvent.to:type_name -> google.protobuf.Timestamp
-	0,  // 15: querysheriff.v1.TransactionEvent.status:type_name -> querysheriff.v1.TransactionEventStatus
-	13, // 16: querysheriff.v1.TransactionEvent.query_tags:type_name -> querysheriff.v1.TransactionEvent.QueryTagsEntry
-	14, // 17: querysheriff.v1.QueryBlockingRequest.from:type_name -> google.protobuf.Timestamp
-	14, // 18: querysheriff.v1.QueryBlockingRequest.to:type_name -> google.protobuf.Timestamp
-	10, // 19: querysheriff.v1.QueryBlockingResponse.trees:type_name -> querysheriff.v1.BlockingTree
-	14, // 20: querysheriff.v1.BlockingTree.root_started_blocking:type_name -> google.protobuf.Timestamp
-	11, // 21: querysheriff.v1.BlockingTree.blocked:type_name -> querysheriff.v1.BlockedEvent
-	14, // 22: querysheriff.v1.BlockingTree.root_last_blocking:type_name -> google.protobuf.Timestamp
-	14, // 23: querysheriff.v1.BlockedEvent.started_waiting:type_name -> google.protobuf.Timestamp
-	14, // 24: querysheriff.v1.BlockedEvent.last_seen:type_name -> google.protobuf.Timestamp
-	1,  // 25: querysheriff.v1.ActivityService.ReportActivity:input_type -> querysheriff.v1.ReportActivityRequest
-	4,  // 26: querysheriff.v1.ActivityService.QueryTransactions:input_type -> querysheriff.v1.QueryTransactionsRequest
-	8,  // 27: querysheriff.v1.ActivityService.QueryBlocking:input_type -> querysheriff.v1.QueryBlockingRequest
-	2,  // 28: querysheriff.v1.ActivityService.ReportActivity:output_type -> querysheriff.v1.ReportActivityResponse
-	5,  // 29: querysheriff.v1.ActivityService.QueryTransactions:output_type -> querysheriff.v1.QueryTransactionsResponse
-	9,  // 30: querysheriff.v1.ActivityService.QueryBlocking:output_type -> querysheriff.v1.QueryBlockingResponse
-	28, // [28:31] is the sub-list for method output_type
-	25, // [25:28] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	23, // 0: querysheriff.v1.ReportActivityRequest.collected_at:type_name -> google.protobuf.Timestamp
+	5,  // 1: querysheriff.v1.ReportActivityRequest.activity_snapshots:type_name -> querysheriff.v1.ActivitySnapshot
+	23, // 2: querysheriff.v1.ActivitySnapshot.backend_start:type_name -> google.protobuf.Timestamp
+	23, // 3: querysheriff.v1.ActivitySnapshot.xact_start:type_name -> google.protobuf.Timestamp
+	23, // 4: querysheriff.v1.ActivitySnapshot.query_start:type_name -> google.protobuf.Timestamp
+	20, // 5: querysheriff.v1.ActivitySnapshot.query_tags:type_name -> querysheriff.v1.ActivitySnapshot.QueryTagsEntry
+	23, // 6: querysheriff.v1.ActivitySnapshot.lock_wait_start:type_name -> google.protobuf.Timestamp
+	23, // 7: querysheriff.v1.QueryTransactionsRequest.from:type_name -> google.protobuf.Timestamp
+	23, // 8: querysheriff.v1.QueryTransactionsRequest.to:type_name -> google.protobuf.Timestamp
+	1,  // 9: querysheriff.v1.QueryTransactionsRequest.sort_column:type_name -> querysheriff.v1.TransactionSortColumn
+	8,  // 10: querysheriff.v1.QueryTransactionsResponse.transactions:type_name -> querysheriff.v1.Transaction
+	23, // 11: querysheriff.v1.Transaction.start:type_name -> google.protobuf.Timestamp
+	23, // 12: querysheriff.v1.Transaction.end:type_name -> google.protobuf.Timestamp
+	9,  // 13: querysheriff.v1.Transaction.events:type_name -> querysheriff.v1.TransactionEvent
+	23, // 14: querysheriff.v1.TransactionEvent.from:type_name -> google.protobuf.Timestamp
+	23, // 15: querysheriff.v1.TransactionEvent.to:type_name -> google.protobuf.Timestamp
+	0,  // 16: querysheriff.v1.TransactionEvent.status:type_name -> querysheriff.v1.TransactionEventStatus
+	21, // 17: querysheriff.v1.TransactionEvent.query_tags:type_name -> querysheriff.v1.TransactionEvent.QueryTagsEntry
+	23, // 18: querysheriff.v1.TransactionEvent.query_start:type_name -> google.protobuf.Timestamp
+	23, // 19: querysheriff.v1.QueryLockWaitSeriesRequest.from:type_name -> google.protobuf.Timestamp
+	23, // 20: querysheriff.v1.QueryLockWaitSeriesRequest.to:type_name -> google.protobuf.Timestamp
+	12, // 21: querysheriff.v1.QueryLockWaitSeriesResponse.series:type_name -> querysheriff.v1.LockWaitPoint
+	23, // 22: querysheriff.v1.LockWaitPoint.at:type_name -> google.protobuf.Timestamp
+	23, // 23: querysheriff.v1.QueryLockWaitsRequest.from:type_name -> google.protobuf.Timestamp
+	23, // 24: querysheriff.v1.QueryLockWaitsRequest.to:type_name -> google.protobuf.Timestamp
+	2,  // 25: querysheriff.v1.QueryLockWaitsRequest.sort_column:type_name -> querysheriff.v1.LockWaitSortColumn
+	15, // 26: querysheriff.v1.QueryLockWaitsResponse.waits:type_name -> querysheriff.v1.LockWait
+	16, // 27: querysheriff.v1.LockWait.waiting:type_name -> querysheriff.v1.LockParty
+	16, // 28: querysheriff.v1.LockWait.blocking:type_name -> querysheriff.v1.LockParty
+	23, // 29: querysheriff.v1.LockWait.started_waiting:type_name -> google.protobuf.Timestamp
+	23, // 30: querysheriff.v1.LockWait.last_seen:type_name -> google.protobuf.Timestamp
+	22, // 31: querysheriff.v1.LockParty.query_tags:type_name -> querysheriff.v1.LockParty.QueryTagsEntry
+	23, // 32: querysheriff.v1.QueryTransactionAgeSeriesRequest.from:type_name -> google.protobuf.Timestamp
+	23, // 33: querysheriff.v1.QueryTransactionAgeSeriesRequest.to:type_name -> google.protobuf.Timestamp
+	19, // 34: querysheriff.v1.QueryTransactionAgeSeriesResponse.series:type_name -> querysheriff.v1.TransactionAgePoint
+	23, // 35: querysheriff.v1.TransactionAgePoint.at:type_name -> google.protobuf.Timestamp
+	3,  // 36: querysheriff.v1.ActivityService.ReportActivity:input_type -> querysheriff.v1.ReportActivityRequest
+	6,  // 37: querysheriff.v1.ActivityService.QueryTransactions:input_type -> querysheriff.v1.QueryTransactionsRequest
+	13, // 38: querysheriff.v1.ActivityService.QueryLockWaits:input_type -> querysheriff.v1.QueryLockWaitsRequest
+	10, // 39: querysheriff.v1.ActivityService.QueryLockWaitSeries:input_type -> querysheriff.v1.QueryLockWaitSeriesRequest
+	17, // 40: querysheriff.v1.ActivityService.QueryTransactionAgeSeries:input_type -> querysheriff.v1.QueryTransactionAgeSeriesRequest
+	4,  // 41: querysheriff.v1.ActivityService.ReportActivity:output_type -> querysheriff.v1.ReportActivityResponse
+	7,  // 42: querysheriff.v1.ActivityService.QueryTransactions:output_type -> querysheriff.v1.QueryTransactionsResponse
+	14, // 43: querysheriff.v1.ActivityService.QueryLockWaits:output_type -> querysheriff.v1.QueryLockWaitsResponse
+	11, // 44: querysheriff.v1.ActivityService.QueryLockWaitSeries:output_type -> querysheriff.v1.QueryLockWaitSeriesResponse
+	18, // 45: querysheriff.v1.ActivityService.QueryTransactionAgeSeries:output_type -> querysheriff.v1.QueryTransactionAgeSeriesResponse
+	41, // [41:46] is the sub-list for method output_type
+	36, // [36:41] is the sub-list for method input_type
+	36, // [36:36] is the sub-list for extension type_name
+	36, // [36:36] is the sub-list for extension extendee
+	0,  // [0:36] is the sub-list for field type_name
 }
 
 func init() { file_querysheriff_v1_activity_proto_init() }
@@ -1107,8 +1705,8 @@ func file_querysheriff_v1_activity_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_querysheriff_v1_activity_proto_rawDesc), len(file_querysheriff_v1_activity_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   13,
+			NumEnums:      3,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

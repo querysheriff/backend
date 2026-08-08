@@ -949,6 +949,15 @@ func newSeriesBounds(from, to, now time.Time) seriesBounds {
 	}
 }
 
+func (b seriesBounds) bucketEnds() []time.Time {
+	ends := make([]time.Time, 0, metricSeriesPoints+1)
+	for end := b.rangeStart.Add(b.bucket); !end.After(b.anchor); end = end.Add(b.bucket) {
+		ends = append(ends, end)
+	}
+
+	return ends
+}
+
 func binStart(t, anchor time.Time, bucket time.Duration) time.Time {
 	offset := t.Sub(anchor)
 

@@ -3,11 +3,13 @@ package server
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 	"github.com/querysheriff/backend/internal/alerts"
@@ -18,6 +20,8 @@ const (
 	activeState        = "active"
 	longQueryThreshold = time.Minute
 	blockingThreshold  = 30 * time.Second
+
+	microsPerMilli = 1000
 )
 
 type ActivityServer struct {
@@ -146,16 +150,28 @@ func (s *ActivityServer) QueryTransactions(
 
 	allowedServers := principal.AllowedServerFilter()
 
+	limit := resolveLimit(msg.GetLimit())
+
 	rows, err := s.queries.ListTransactions(ctx, db.ListTransactionsParams{
 		ServerName:     textFilter(msg.GetServerName()),
 		DatabaseName:   textFilter(msg.GetDatabaseName()),
 		AllowedServers: allowedServers,
 		FromTime:       timestamptzFromProto(from),
 		ToTime:         timestamptzFromProto(to),
-		RowLimit:       resolveLimit(msg.GetLimit()),
+		MinOpen:        pgtype.Interval{Microseconds: msg.GetMinOpenMs() * microsPerMilli, Valid: true},
+		SortKey:        transactionSortKey(msg.GetSortColumn()),
+		SortDesc:       msg.GetSortDesc(),
+		// One extra row answers "is there another page" without a second count query.
+		RowLimit:   limit + 1,
+		OffsetRows: resolveOffset(msg.GetOffset()),
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	hasMore := len(rows) > int(limit)
+	if hasMore {
+		rows = rows[:limit]
 	}
 
 	if len(rows) == 0 {
@@ -196,41 +212,140 @@ func (s *ActivityServer) QueryTransactions(
 		}
 	}
 
-	return connect.NewResponse(&querysheriffv1.QueryTransactionsResponse{Transactions: transactions}), nil
+	return connect.NewResponse(&querysheriffv1.QueryTransactionsResponse{
+		Transactions: transactions,
+		HasMore:      hasMore,
+	}), nil
 }
 
-func (s *ActivityServer) QueryBlocking(
+func transactionSortKey(col querysheriffv1.TransactionSortColumn) string {
+	switch col {
+	case querysheriffv1.TransactionSortColumn_TRANSACTION_SORT_COLUMN_STARTED:
+		return "started"
+	case querysheriffv1.TransactionSortColumn_TRANSACTION_SORT_COLUMN_OPEN,
+		querysheriffv1.TransactionSortColumn_TRANSACTION_SORT_COLUMN_UNSPECIFIED:
+		return "open"
+	}
+
+	return "open"
+}
+
+// activitySeriesScope is the authorized scope and bucket grid shared by the
+// bucketed activity charts, which differ only in what they sum.
+type activitySeriesScope struct {
+	bounds         seriesBounds
+	serverName     pgtype.Text
+	databaseName   pgtype.Text
+	allowedServers []string
+}
+
+func (s *ActivityServer) resolveSeriesScope(
 	ctx context.Context,
-	req *connect.Request[querysheriffv1.QueryBlockingRequest],
-) (*connect.Response[querysheriffv1.QueryBlockingResponse], error) {
+	serverName, databaseName string,
+	from, to *timestamppb.Timestamp,
+) (activitySeriesScope, error) {
+	principal, err := requirePrincipal(ctx)
+	if err != nil {
+		return activitySeriesScope{}, err
+	}
+
+	if serverName != "" && !principal.CanViewServer(serverName) {
+		return activitySeriesScope{}, connect.NewError(
+			connect.CodePermissionDenied, errors.New("access to that server is not allowed"))
+	}
+
+	if err = requireRange(from, to); err != nil {
+		return activitySeriesScope{}, err
+	}
+
+	// The same grid the query charts use, so a spike lines up across sections.
+	return activitySeriesScope{
+		bounds:         newSeriesBounds(from.AsTime(), to.AsTime(), time.Now()),
+		serverName:     textFilter(serverName),
+		databaseName:   textFilter(databaseName),
+		allowedServers: principal.AllowedServerFilter(),
+	}, nil
+}
+
+func (a activitySeriesScope) lockWaitParams() db.LockWaitSeriesParams {
+	return db.LockWaitSeriesParams{
+		RangeStart:     pgtype.Timestamptz{Time: a.bounds.rangeStart, Valid: true},
+		RangeEnd:       pgtype.Timestamptz{Time: a.bounds.anchor, Valid: true},
+		Anchor:         pgtype.Timestamptz{Time: a.bounds.anchor, Valid: true},
+		Bucket:         pgtype.Interval{Microseconds: a.bounds.bucket.Microseconds(), Valid: true},
+		ServerName:     a.serverName,
+		DatabaseName:   a.databaseName,
+		AllowedServers: a.allowedServers,
+	}
+}
+
+func (a activitySeriesScope) transactionAgeParams() db.TransactionAgeSeriesParams {
+	return db.TransactionAgeSeriesParams{
+		RangeStart:     pgtype.Timestamptz{Time: a.bounds.rangeStart, Valid: true},
+		RangeEnd:       pgtype.Timestamptz{Time: a.bounds.anchor, Valid: true},
+		Anchor:         pgtype.Timestamptz{Time: a.bounds.anchor, Valid: true},
+		Bucket:         pgtype.Interval{Microseconds: a.bounds.bucket.Microseconds(), Valid: true},
+		ServerName:     a.serverName,
+		DatabaseName:   a.databaseName,
+		AllowedServers: a.allowedServers,
+	}
+}
+
+// QueryTransactionAgeSeries returns how old the oldest open transaction was in
+// each bucket.
+func (s *ActivityServer) QueryTransactionAgeSeries(
+	ctx context.Context,
+	req *connect.Request[querysheriffv1.QueryTransactionAgeSeriesRequest],
+) (*connect.Response[querysheriffv1.QueryTransactionAgeSeriesResponse], error) {
 	msg := req.Msg
 
-	principal, err := requirePrincipal(ctx)
+	scope, err := s.resolveSeriesScope(ctx, msg.GetServerName(), msg.GetDatabaseName(), msg.GetFrom(), msg.GetTo())
 	if err != nil {
 		return nil, err
 	}
 
-	if name := msg.GetServerName(); name != "" && !principal.CanViewServer(name) {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("access to that server is not allowed"))
-	}
-
-	from, to := msg.GetFrom(), msg.GetTo()
-	if err = requireRange(from, to); err != nil {
-		return nil, err
-	}
-
-	rows, err := s.queries.ListBlockedEvents(ctx, db.ListBlockedEventsParams{
-		ServerName:     textFilter(msg.GetServerName()),
-		DatabaseName:   textFilter(msg.GetDatabaseName()),
-		AllowedServers: principal.AllowedServerFilter(),
-		FromTime:       timestamptzFromProto(from),
-		ToTime:         timestamptzFromProto(to),
-	})
+	rows, err := s.queries.TransactionAgeSeries(ctx, scope.transactionAgeParams())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	return connect.NewResponse(&querysheriffv1.QueryBlockingResponse{Trees: buildBlockingTrees(rows)}), nil
+	return connect.NewResponse(&querysheriffv1.QueryTransactionAgeSeriesResponse{
+		Series:   transactionAgePoints(scope.bounds.bucketEnds(), rows),
+		BucketMs: scope.bounds.bucket.Milliseconds(),
+	}), nil
+}
+
+// transactionAgePoints turns per-end-bucket rows into one point per bucket.
+func transactionAgePoints(ends []time.Time, rows []db.TransactionAgeSeriesRow) []*querysheriffv1.TransactionAgePoint {
+	endedAge := make(map[int64]float64, len(rows))
+	for _, r := range rows {
+		endedAge[r.BucketEnd.Time.UnixNano()] = r.EndedAge
+	}
+
+	// Rows arrive oldest bucket first; they are folded in from the newest back.
+	next := len(rows) - 1
+	var oldestOpen time.Time
+
+	points := make([]*querysheriffv1.TransactionAgePoint, len(ends))
+	for i, end := range slices.Backward(ends) {
+		for next >= 0 && rows[next].BucketEnd.Time.After(end) {
+			if start := rows[next].OldestStart.Time; oldestOpen.IsZero() || start.Before(oldestOpen) {
+				oldestOpen = start
+			}
+			next--
+		}
+
+		age := endedAge[end.UnixNano()]
+		if !oldestOpen.IsZero() {
+			if stillOpen := end.Sub(oldestOpen).Seconds(); stillOpen > age {
+				age = stillOpen
+			}
+		}
+
+		points[i] = &querysheriffv1.TransactionAgePoint{At: timestamppb.New(end), AgeSeconds: age}
+	}
+
+	return points
 }
 
 func transactionEventParams(

@@ -54,10 +54,22 @@ func TestBuildTransactionEvents(t *testing.T) {
 	start := time.Date(2026, time.June, 29, 12, 0, 0, 0, time.UTC)
 	firstSeen := start.Add(2 * time.Second)
 
+	const query = "UPDATE orders SET status = $1 WHERE id = $2"
+
+	tags := map[string]string{"service": "checkout"}
+
 	events := []reconstructedEvent{
-		{state: stateActive, firstSeen: firstSeen, lastSeen: firstSeen.Add(1 * time.Second)},
+		{
+			state:     stateActive,
+			query:     query,
+			queryTags: tags,
+			firstSeen: firstSeen,
+			lastSeen:  firstSeen.Add(1 * time.Second),
+		},
 		{
 			state:     stateIdleInTransaction,
+			query:     query,
+			queryTags: tags,
 			firstSeen: firstSeen.Add(1 * time.Second),
 			lastSeen:  firstSeen.Add(3 * time.Second),
 		},
@@ -74,5 +86,13 @@ func TestBuildTransactionEvents(t *testing.T) {
 
 	if from := got[1].GetFrom().AsTime(); !from.Equal(firstSeen.Add(1 * time.Second)) {
 		t.Errorf("event[1].From = %s, want %s", from, firstSeen.Add(1*time.Second))
+	}
+
+	if got[1].GetQuery() != query {
+		t.Errorf("idle event Query = %q, want %q", got[1].GetQuery(), query)
+	}
+
+	if got[1].GetQueryTags()["service"] != tags["service"] {
+		t.Errorf("idle event QueryTags = %v, want %v", got[1].GetQueryTags(), tags)
 	}
 }

@@ -9,7 +9,9 @@ option go_package = "github.com/querysheriff/backend/gen/querysheriff/v1;querysh
 service ActivityService {
   rpc ReportActivity(ReportActivityRequest) returns (ReportActivityResponse) {}
   rpc QueryTransactions(QueryTransactionsRequest) returns (QueryTransactionsResponse) {}
-  rpc QueryBlocking(QueryBlockingRequest) returns (QueryBlockingResponse) {}
+  rpc QueryLockWaits(QueryLockWaitsRequest) returns (QueryLockWaitsResponse) {}
+  rpc QueryLockWaitSeries(QueryLockWaitSeriesRequest) returns (QueryLockWaitSeriesResponse) {}
+  rpc QueryTransactionAgeSeries(QueryTransactionAgeSeriesRequest) returns (QueryTransactionAgeSeriesResponse) {}
 }
 
 message ReportActivityRequest {
@@ -82,18 +84,38 @@ enum TransactionEventStatus {
   TRANSACTION_EVENT_STATUS_ABORTED = 4;
 }
 
+// Which column the server orders transactions by.
+enum TransactionSortColumn {
+  TRANSACTION_SORT_COLUMN_UNSPECIFIED = 0;
+
+  TRANSACTION_SORT_COLUMN_STARTED = 1;
+  TRANSACTION_SORT_COLUMN_OPEN = 2;
+}
+
 message QueryTransactionsRequest {
   string server_name = 1;
   string database_name = 2;
   google.protobuf.Timestamp from = 3;
   google.protobuf.Timestamp to = 4;
 
-  // Defaults to 50 when unset.
+  // Page size. Defaults to 50 when unset.
   int32 limit = 5;
+
+  // Number of leading rows to skip, for pagination.
+  int32 offset = 6;
+
+  TransactionSortColumn sort_column = 7;
+  bool sort_desc = 8;
+
+  // Transactions open for less than this are omitted.
+  int64 min_open_ms = 9;
 }
 
 message QueryTransactionsResponse {
   repeated Transaction transactions = 1;
+
+  // Whether more rows exist beyond this page.
+  bool has_more = 2;
 }
 
 // A reconstructed transaction from a series of activity snapshots.
@@ -125,35 +147,103 @@ message TransactionEvent {
 
   // The running query's tags.
   map<string, string> query_tags = 10;
+
+  // When the query being run started.
+  google.protobuf.Timestamp query_start = 11;
 }
 
-message QueryBlockingRequest {
+message QueryLockWaitSeriesRequest {
   string server_name = 1;
   string database_name = 2;
   google.protobuf.Timestamp from = 3;
   google.protobuf.Timestamp to = 4;
 }
 
-message QueryBlockingResponse {
-  repeated BlockingTree trees = 1;
+message QueryLockWaitSeriesResponse {
+  repeated LockWaitPoint series = 1;
+
+  // Width of one bucket, so the caller can label the series.
+  int64 bucket_ms = 2;
 }
 
-message BlockingTree {
-  int32 root_pid = 1;
-  string root_application_name = 2;
-  google.protobuf.Timestamp root_started_blocking = 3;
-  repeated BlockedEvent blocked = 4;
-  google.protobuf.Timestamp root_last_blocking = 5;
+// Session-time lost to lock waits in one bucket.
+message LockWaitPoint {
+  // Bucket end.
+  google.protobuf.Timestamp at = 1;
+  double wait_seconds = 2;
 }
 
-message BlockedEvent {
-  int32 pid = 1;
-  string application_name = 2;
+// Which column the server orders lock waits by.
+enum LockWaitSortColumn {
+  LOCK_WAIT_SORT_COLUMN_UNSPECIFIED = 0;
+
+  LOCK_WAIT_SORT_COLUMN_STARTED = 1;
+  LOCK_WAIT_SORT_COLUMN_WAITED = 2;
+}
+
+message QueryLockWaitsRequest {
+  string server_name = 1;
+  string database_name = 2;
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp to = 4;
+
+  // Page size. Defaults to 50 when unset.
+  int32 limit = 5;
+
+  // Number of leading rows to skip, for pagination.
+  int32 offset = 6;
+
+  LockWaitSortColumn sort_column = 7;
+  bool sort_desc = 8;
+}
+
+message QueryLockWaitsResponse {
+  repeated LockWait waits = 1;
+
+  // Whether more rows exist beyond this page.
+  bool has_more = 2;
+}
+
+// One session's wait for one lock, and the session that held it.
+message LockWait {
+  LockParty waiting = 1;
+  LockParty blocking = 2;
+
   google.protobuf.Timestamp started_waiting = 3;
-  string query = 4;
-  string lock_mode = 5;
-  int32 blocked_by_pid = 6;
 
-  // Last time this wait was observed (≈ when it ended).
-  google.protobuf.Timestamp last_seen = 7;
+  // Last time the wait was observed (≈ when it ended).
+  google.protobuf.Timestamp last_seen = 4;
+
+  // Example: "ExclusiveLock".
+  string lock_mode = 5;
+}
+
+// One side of a lock wait.
+message LockParty {
+  int32 pid = 1;
+
+  string application_name = 2;
+  string query = 3;
+  map<string, string> query_tags = 4;
+}
+
+message QueryTransactionAgeSeriesRequest {
+  string server_name = 1;
+  string database_name = 2;
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp to = 4;
+}
+
+message QueryTransactionAgeSeriesResponse {
+  repeated TransactionAgePoint series = 1;
+
+  // Width of one bucket, so the caller can label the series.
+  int64 bucket_ms = 2;
+}
+
+// How old the longest-running open transaction was at the end of one bucket.
+message TransactionAgePoint {
+  // Bucket end.
+  google.protobuf.Timestamp at = 1;
+  double age_seconds = 2;
 }

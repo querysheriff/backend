@@ -39,16 +39,24 @@ const (
 	// ActivityServiceQueryTransactionsProcedure is the fully-qualified name of the ActivityService's
 	// QueryTransactions RPC.
 	ActivityServiceQueryTransactionsProcedure = "/querysheriff.v1.ActivityService/QueryTransactions"
-	// ActivityServiceQueryBlockingProcedure is the fully-qualified name of the ActivityService's
-	// QueryBlocking RPC.
-	ActivityServiceQueryBlockingProcedure = "/querysheriff.v1.ActivityService/QueryBlocking"
+	// ActivityServiceQueryLockWaitsProcedure is the fully-qualified name of the ActivityService's
+	// QueryLockWaits RPC.
+	ActivityServiceQueryLockWaitsProcedure = "/querysheriff.v1.ActivityService/QueryLockWaits"
+	// ActivityServiceQueryLockWaitSeriesProcedure is the fully-qualified name of the ActivityService's
+	// QueryLockWaitSeries RPC.
+	ActivityServiceQueryLockWaitSeriesProcedure = "/querysheriff.v1.ActivityService/QueryLockWaitSeries"
+	// ActivityServiceQueryTransactionAgeSeriesProcedure is the fully-qualified name of the
+	// ActivityService's QueryTransactionAgeSeries RPC.
+	ActivityServiceQueryTransactionAgeSeriesProcedure = "/querysheriff.v1.ActivityService/QueryTransactionAgeSeries"
 )
 
 // ActivityServiceClient is a client for the querysheriff.v1.ActivityService service.
 type ActivityServiceClient interface {
 	ReportActivity(context.Context, *connect.Request[v1.ReportActivityRequest]) (*connect.Response[v1.ReportActivityResponse], error)
 	QueryTransactions(context.Context, *connect.Request[v1.QueryTransactionsRequest]) (*connect.Response[v1.QueryTransactionsResponse], error)
-	QueryBlocking(context.Context, *connect.Request[v1.QueryBlockingRequest]) (*connect.Response[v1.QueryBlockingResponse], error)
+	QueryLockWaits(context.Context, *connect.Request[v1.QueryLockWaitsRequest]) (*connect.Response[v1.QueryLockWaitsResponse], error)
+	QueryLockWaitSeries(context.Context, *connect.Request[v1.QueryLockWaitSeriesRequest]) (*connect.Response[v1.QueryLockWaitSeriesResponse], error)
+	QueryTransactionAgeSeries(context.Context, *connect.Request[v1.QueryTransactionAgeSeriesRequest]) (*connect.Response[v1.QueryTransactionAgeSeriesResponse], error)
 }
 
 // NewActivityServiceClient constructs a client for the querysheriff.v1.ActivityService service. By
@@ -74,10 +82,22 @@ func NewActivityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(activityServiceMethods.ByName("QueryTransactions")),
 			connect.WithClientOptions(opts...),
 		),
-		queryBlocking: connect.NewClient[v1.QueryBlockingRequest, v1.QueryBlockingResponse](
+		queryLockWaits: connect.NewClient[v1.QueryLockWaitsRequest, v1.QueryLockWaitsResponse](
 			httpClient,
-			baseURL+ActivityServiceQueryBlockingProcedure,
-			connect.WithSchema(activityServiceMethods.ByName("QueryBlocking")),
+			baseURL+ActivityServiceQueryLockWaitsProcedure,
+			connect.WithSchema(activityServiceMethods.ByName("QueryLockWaits")),
+			connect.WithClientOptions(opts...),
+		),
+		queryLockWaitSeries: connect.NewClient[v1.QueryLockWaitSeriesRequest, v1.QueryLockWaitSeriesResponse](
+			httpClient,
+			baseURL+ActivityServiceQueryLockWaitSeriesProcedure,
+			connect.WithSchema(activityServiceMethods.ByName("QueryLockWaitSeries")),
+			connect.WithClientOptions(opts...),
+		),
+		queryTransactionAgeSeries: connect.NewClient[v1.QueryTransactionAgeSeriesRequest, v1.QueryTransactionAgeSeriesResponse](
+			httpClient,
+			baseURL+ActivityServiceQueryTransactionAgeSeriesProcedure,
+			connect.WithSchema(activityServiceMethods.ByName("QueryTransactionAgeSeries")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -85,9 +105,11 @@ func NewActivityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 
 // activityServiceClient implements ActivityServiceClient.
 type activityServiceClient struct {
-	reportActivity    *connect.Client[v1.ReportActivityRequest, v1.ReportActivityResponse]
-	queryTransactions *connect.Client[v1.QueryTransactionsRequest, v1.QueryTransactionsResponse]
-	queryBlocking     *connect.Client[v1.QueryBlockingRequest, v1.QueryBlockingResponse]
+	reportActivity            *connect.Client[v1.ReportActivityRequest, v1.ReportActivityResponse]
+	queryTransactions         *connect.Client[v1.QueryTransactionsRequest, v1.QueryTransactionsResponse]
+	queryLockWaits            *connect.Client[v1.QueryLockWaitsRequest, v1.QueryLockWaitsResponse]
+	queryLockWaitSeries       *connect.Client[v1.QueryLockWaitSeriesRequest, v1.QueryLockWaitSeriesResponse]
+	queryTransactionAgeSeries *connect.Client[v1.QueryTransactionAgeSeriesRequest, v1.QueryTransactionAgeSeriesResponse]
 }
 
 // ReportActivity calls querysheriff.v1.ActivityService.ReportActivity.
@@ -100,16 +122,28 @@ func (c *activityServiceClient) QueryTransactions(ctx context.Context, req *conn
 	return c.queryTransactions.CallUnary(ctx, req)
 }
 
-// QueryBlocking calls querysheriff.v1.ActivityService.QueryBlocking.
-func (c *activityServiceClient) QueryBlocking(ctx context.Context, req *connect.Request[v1.QueryBlockingRequest]) (*connect.Response[v1.QueryBlockingResponse], error) {
-	return c.queryBlocking.CallUnary(ctx, req)
+// QueryLockWaits calls querysheriff.v1.ActivityService.QueryLockWaits.
+func (c *activityServiceClient) QueryLockWaits(ctx context.Context, req *connect.Request[v1.QueryLockWaitsRequest]) (*connect.Response[v1.QueryLockWaitsResponse], error) {
+	return c.queryLockWaits.CallUnary(ctx, req)
+}
+
+// QueryLockWaitSeries calls querysheriff.v1.ActivityService.QueryLockWaitSeries.
+func (c *activityServiceClient) QueryLockWaitSeries(ctx context.Context, req *connect.Request[v1.QueryLockWaitSeriesRequest]) (*connect.Response[v1.QueryLockWaitSeriesResponse], error) {
+	return c.queryLockWaitSeries.CallUnary(ctx, req)
+}
+
+// QueryTransactionAgeSeries calls querysheriff.v1.ActivityService.QueryTransactionAgeSeries.
+func (c *activityServiceClient) QueryTransactionAgeSeries(ctx context.Context, req *connect.Request[v1.QueryTransactionAgeSeriesRequest]) (*connect.Response[v1.QueryTransactionAgeSeriesResponse], error) {
+	return c.queryTransactionAgeSeries.CallUnary(ctx, req)
 }
 
 // ActivityServiceHandler is an implementation of the querysheriff.v1.ActivityService service.
 type ActivityServiceHandler interface {
 	ReportActivity(context.Context, *connect.Request[v1.ReportActivityRequest]) (*connect.Response[v1.ReportActivityResponse], error)
 	QueryTransactions(context.Context, *connect.Request[v1.QueryTransactionsRequest]) (*connect.Response[v1.QueryTransactionsResponse], error)
-	QueryBlocking(context.Context, *connect.Request[v1.QueryBlockingRequest]) (*connect.Response[v1.QueryBlockingResponse], error)
+	QueryLockWaits(context.Context, *connect.Request[v1.QueryLockWaitsRequest]) (*connect.Response[v1.QueryLockWaitsResponse], error)
+	QueryLockWaitSeries(context.Context, *connect.Request[v1.QueryLockWaitSeriesRequest]) (*connect.Response[v1.QueryLockWaitSeriesResponse], error)
+	QueryTransactionAgeSeries(context.Context, *connect.Request[v1.QueryTransactionAgeSeriesRequest]) (*connect.Response[v1.QueryTransactionAgeSeriesResponse], error)
 }
 
 // NewActivityServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -131,10 +165,22 @@ func NewActivityServiceHandler(svc ActivityServiceHandler, opts ...connect.Handl
 		connect.WithSchema(activityServiceMethods.ByName("QueryTransactions")),
 		connect.WithHandlerOptions(opts...),
 	)
-	activityServiceQueryBlockingHandler := connect.NewUnaryHandler(
-		ActivityServiceQueryBlockingProcedure,
-		svc.QueryBlocking,
-		connect.WithSchema(activityServiceMethods.ByName("QueryBlocking")),
+	activityServiceQueryLockWaitsHandler := connect.NewUnaryHandler(
+		ActivityServiceQueryLockWaitsProcedure,
+		svc.QueryLockWaits,
+		connect.WithSchema(activityServiceMethods.ByName("QueryLockWaits")),
+		connect.WithHandlerOptions(opts...),
+	)
+	activityServiceQueryLockWaitSeriesHandler := connect.NewUnaryHandler(
+		ActivityServiceQueryLockWaitSeriesProcedure,
+		svc.QueryLockWaitSeries,
+		connect.WithSchema(activityServiceMethods.ByName("QueryLockWaitSeries")),
+		connect.WithHandlerOptions(opts...),
+	)
+	activityServiceQueryTransactionAgeSeriesHandler := connect.NewUnaryHandler(
+		ActivityServiceQueryTransactionAgeSeriesProcedure,
+		svc.QueryTransactionAgeSeries,
+		connect.WithSchema(activityServiceMethods.ByName("QueryTransactionAgeSeries")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/querysheriff.v1.ActivityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -143,8 +189,12 @@ func NewActivityServiceHandler(svc ActivityServiceHandler, opts ...connect.Handl
 			activityServiceReportActivityHandler.ServeHTTP(w, r)
 		case ActivityServiceQueryTransactionsProcedure:
 			activityServiceQueryTransactionsHandler.ServeHTTP(w, r)
-		case ActivityServiceQueryBlockingProcedure:
-			activityServiceQueryBlockingHandler.ServeHTTP(w, r)
+		case ActivityServiceQueryLockWaitsProcedure:
+			activityServiceQueryLockWaitsHandler.ServeHTTP(w, r)
+		case ActivityServiceQueryLockWaitSeriesProcedure:
+			activityServiceQueryLockWaitSeriesHandler.ServeHTTP(w, r)
+		case ActivityServiceQueryTransactionAgeSeriesProcedure:
+			activityServiceQueryTransactionAgeSeriesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -162,6 +212,14 @@ func (UnimplementedActivityServiceHandler) QueryTransactions(context.Context, *c
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.ActivityService.QueryTransactions is not implemented"))
 }
 
-func (UnimplementedActivityServiceHandler) QueryBlocking(context.Context, *connect.Request[v1.QueryBlockingRequest]) (*connect.Response[v1.QueryBlockingResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.ActivityService.QueryBlocking is not implemented"))
+func (UnimplementedActivityServiceHandler) QueryLockWaits(context.Context, *connect.Request[v1.QueryLockWaitsRequest]) (*connect.Response[v1.QueryLockWaitsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.ActivityService.QueryLockWaits is not implemented"))
+}
+
+func (UnimplementedActivityServiceHandler) QueryLockWaitSeries(context.Context, *connect.Request[v1.QueryLockWaitSeriesRequest]) (*connect.Response[v1.QueryLockWaitSeriesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.ActivityService.QueryLockWaitSeries is not implemented"))
+}
+
+func (UnimplementedActivityServiceHandler) QueryTransactionAgeSeries(context.Context, *connect.Request[v1.QueryTransactionAgeSeriesRequest]) (*connect.Response[v1.QueryTransactionAgeSeriesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.ActivityService.QueryTransactionAgeSeries is not implemented"))
 }

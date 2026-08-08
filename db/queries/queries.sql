@@ -90,46 +90,168 @@ FROM tq, norm, params
 WHERE NOT EXISTS (SELECT 1 FROM extended);
 
 -- name: ListTransactions :many
--- Transactions overlapping [from, to], longest first.
+WITH filtered AS (
+    SELECT id, pid, application_name, xact_start, last_seen_at,
+           CASE sqlc.arg('sort_key')::text
+               WHEN 'started' THEN extract(epoch FROM xact_start)
+               ELSE extract(epoch FROM (last_seen_at - xact_start))
+           END AS sort_num
+    FROM transactions
+    WHERE (sqlc.narg('server_name')::text   IS NULL OR server_name   = sqlc.narg('server_name'))
+      AND (sqlc.narg('database_name')::text IS NULL OR database_name = sqlc.narg('database_name'))
+      AND (sqlc.narg('allowed_servers')::text[] IS NULL OR server_name = ANY(sqlc.narg('allowed_servers')::text[]))
+      AND xact_start   <= sqlc.arg('to_time')
+      AND last_seen_at >= sqlc.arg('from_time')
+      AND last_seen_at - xact_start >= sqlc.arg('min_open')::interval
+)
 SELECT id, pid, application_name, xact_start, last_seen_at
-FROM transactions
-WHERE (sqlc.narg('server_name')::text   IS NULL OR server_name   = sqlc.narg('server_name'))
-  AND (sqlc.narg('database_name')::text IS NULL OR database_name = sqlc.narg('database_name'))
-  AND (sqlc.narg('allowed_servers')::text[] IS NULL OR server_name = ANY(sqlc.narg('allowed_servers')::text[]))
-  AND xact_start   <= sqlc.arg('to_time')
-  AND last_seen_at >= sqlc.arg('from_time')
-ORDER BY (last_seen_at - xact_start) DESC, id DESC
-LIMIT sqlc.arg('row_limit');
+FROM filtered
+ORDER BY
+    CASE WHEN sqlc.arg('sort_desc')::bool THEN sort_num END DESC,
+    CASE WHEN NOT sqlc.arg('sort_desc')::bool THEN sort_num END ASC,
+    id DESC
+LIMIT sqlc.arg('row_limit')
+OFFSET sqlc.arg('offset_rows');
 
 -- name: ListTransactionEvents :many
 SELECT q.transaction_id, e.state, e.wait_event_type, e.wait_event, e.lock_mode,
-       q.query, q.query_tags, e.first_seen_at, e.last_seen_at
+       q.query, q.query_tags, q.query_start, e.first_seen_at, e.last_seen_at
 FROM transaction_events e
-JOIN transaction_queries q ON q.id = e.transaction_query_id
-JOIN transactions t ON t.id = q.transaction_id
+JOIN transaction_queries q ON q.id = e.transaction_query_id AND q.xact_start = e.xact_start
+JOIN transactions t        ON t.id = q.transaction_id       AND t.xact_start = q.xact_start
 WHERE q.transaction_id = ANY(sqlc.arg('transaction_ids')::bigint[])
   AND (sqlc.narg('allowed_servers')::text[] IS NULL OR t.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
 ORDER BY q.transaction_id, e.first_seen_at, e.id;
 
--- name: ListBlockedEvents :many
-SELECT t.pid AS victim_pid, t.application_name AS victim_app,
-       e.lock_wait_start, e.first_seen_at, e.last_seen_at,
-       e.lock_mode, e.blocked_by_pid, q.query,
-       COALESCE((SELECT bt.application_name FROM transactions bt
-         WHERE bt.server_name = t.server_name AND bt.database_name = t.database_name
-           AND bt.pid = e.blocked_by_pid
-           AND bt.xact_start <= e.last_seen_at AND bt.last_seen_at >= e.first_seen_at
-         ORDER BY bt.xact_start DESC LIMIT 1), '')::text AS blocker_app
-FROM transaction_events e
-JOIN transaction_queries q ON q.id = e.transaction_query_id
-JOIN transactions t        ON t.id = q.transaction_id
-WHERE e.blocked_by_pid IS NOT NULL
-  AND (sqlc.narg('server_name')::text   IS NULL OR t.server_name   = sqlc.narg('server_name'))
+-- name: LockWaitSeries :many
+WITH waits AS (
+    SELECT t.server_name, t.database_name, t.pid AS waiting_pid,
+           e.blocked_by_pid, e.lock_mode,
+           coalesce(e.lock_wait_start, e.first_seen_at) AS wait_start,
+           e.last_seen_at
+    FROM transaction_events e
+    JOIN transaction_queries q ON q.id = e.transaction_query_id AND q.xact_start = e.xact_start
+    JOIN transactions t        ON t.id = q.transaction_id       AND t.xact_start = q.xact_start
+    WHERE e.blocked_by_pid IS NOT NULL
+      AND (sqlc.narg('server_name')::text   IS NULL OR t.server_name   = sqlc.narg('server_name'))
+      AND (sqlc.narg('database_name')::text IS NULL OR t.database_name = sqlc.narg('database_name'))
+      AND (sqlc.narg('allowed_servers')::text[] IS NULL OR t.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
+      AND e.first_seen_at <= sqlc.arg('range_end')::timestamptz
+      AND e.last_seen_at  >  sqlc.arg('range_start')::timestamptz
+),
+episodes AS (
+    SELECT wait_start, max(last_seen_at)::timestamptz AS last_seen
+    FROM waits
+    GROUP BY server_name, database_name, waiting_pid, blocked_by_pid, lock_mode, wait_start
+),
+spread AS (
+    SELECT b.bucket_end,
+           sum(extract(epoch FROM (
+               LEAST(w.last_seen, b.bucket_end)
+               - GREATEST(w.wait_start, b.bucket_end - sqlc.arg('bucket')::interval)
+           ))) AS wait_seconds
+    FROM episodes w
+    CROSS JOIN LATERAL generate_series(
+        date_bin(sqlc.arg('bucket')::interval, w.wait_start - interval '1 microsecond',
+                 sqlc.arg('anchor')::timestamptz) + sqlc.arg('bucket')::interval,
+        date_bin(sqlc.arg('bucket')::interval, w.last_seen - interval '1 microsecond',
+                 sqlc.arg('anchor')::timestamptz) + sqlc.arg('bucket')::interval,
+        sqlc.arg('bucket')::interval
+    ) AS b(bucket_end)
+    WHERE b.bucket_end >  sqlc.arg('range_start')::timestamptz
+      AND b.bucket_end <= sqlc.arg('anchor')::timestamptz
+    GROUP BY b.bucket_end
+)
+SELECT bucket_end::timestamptz        AS bucket_end,
+       wait_seconds::double precision AS wait_seconds
+FROM spread
+ORDER BY bucket_end;
+
+-- name: TransactionAgeSeries :many
+SELECT (date_bin(sqlc.arg('bucket')::interval, t.last_seen_at - interval '1 microsecond',
+                 sqlc.arg('anchor')::timestamptz) + sqlc.arg('bucket')::interval)::timestamptz AS bucket_end,
+       max(extract(epoch FROM (t.last_seen_at - t.xact_start)))::double precision AS ended_age,
+       min(t.xact_start)::timestamptz AS oldest_start
+FROM transactions t
+WHERE (sqlc.narg('server_name')::text   IS NULL OR t.server_name   = sqlc.narg('server_name'))
   AND (sqlc.narg('database_name')::text IS NULL OR t.database_name = sqlc.narg('database_name'))
   AND (sqlc.narg('allowed_servers')::text[] IS NULL OR t.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
-  AND e.first_seen_at <= sqlc.arg('to_time')
-  AND e.last_seen_at  >= sqlc.arg('from_time')
-ORDER BY e.lock_wait_start, e.id;
+  AND t.xact_start   <= sqlc.arg('range_end')::timestamptz
+  AND t.last_seen_at >  sqlc.arg('range_start')::timestamptz
+GROUP BY 1
+ORDER BY 1;
+
+-- name: ListLockWaits :many
+WITH blocked AS (
+    SELECT t.server_name, t.database_name,
+           t.pid AS waiting_pid, t.application_name AS waiting_app,
+           e.blocked_by_pid, e.lock_mode,
+           coalesce(e.lock_wait_start, e.first_seen_at) AS wait_start,
+           e.first_seen_at, e.last_seen_at,
+           e.transaction_query_id, e.xact_start
+    FROM transaction_events e
+    JOIN transaction_queries q ON q.id = e.transaction_query_id AND q.xact_start = e.xact_start
+    JOIN transactions t        ON t.id = q.transaction_id       AND t.xact_start = q.xact_start
+    WHERE e.blocked_by_pid IS NOT NULL
+      AND (sqlc.narg('server_name')::text   IS NULL OR t.server_name   = sqlc.narg('server_name'))
+      AND (sqlc.narg('database_name')::text IS NULL OR t.database_name = sqlc.narg('database_name'))
+      AND (sqlc.narg('allowed_servers')::text[] IS NULL OR t.server_name = ANY(sqlc.narg('allowed_servers')::text[]))
+      AND e.first_seen_at <= sqlc.arg('to_time')
+      AND e.last_seen_at  >= sqlc.arg('from_time')
+),
+episodes AS (
+    SELECT server_name, database_name, waiting_pid, blocked_by_pid, lock_mode, wait_start,
+           max(last_seen_at)::timestamptz                                          AS last_seen,
+           (array_agg(waiting_app ORDER BY first_seen_at))[1]::text                 AS waiting_app,
+           (array_agg(transaction_query_id ORDER BY first_seen_at))[1]::bigint      AS waiting_query_id,
+           (array_agg(xact_start ORDER BY first_seen_at))[1]::timestamptz           AS waiting_xact_start,
+           CASE sqlc.arg('sort_key')::text
+               WHEN 'started' THEN extract(epoch FROM wait_start)
+               ELSE extract(epoch FROM (max(last_seen_at) - wait_start))
+           END AS sort_num
+    FROM blocked
+    GROUP BY server_name, database_name, waiting_pid, blocked_by_pid, lock_mode, wait_start
+),
+page AS (
+    SELECT server_name, database_name, waiting_pid, waiting_app, blocked_by_pid, lock_mode,
+           wait_start, last_seen, waiting_query_id, waiting_xact_start, sort_num
+    FROM episodes
+    ORDER BY sort_num * CASE WHEN sqlc.arg('sort_desc')::bool THEN -1 ELSE 1 END,
+             wait_start DESC, server_name, database_name, waiting_pid, blocked_by_pid, lock_mode
+    LIMIT sqlc.arg('row_limit')
+    OFFSET sqlc.arg('offset_rows')
+)
+SELECT ep.waiting_pid, ep.waiting_app,
+       coalesce(wq.query, '')::text AS waiting_query,
+       wq.query_tags                AS waiting_tags,
+       ep.blocked_by_pid, ep.lock_mode, ep.wait_start, ep.last_seen,
+       coalesce(bt.application_name, '')::text AS blocking_app,
+       coalesce(bq.query, '')::text            AS blocking_query,
+       bq.query_tags                           AS blocking_tags
+FROM page ep
+LEFT JOIN transaction_queries wq
+       ON wq.id = ep.waiting_query_id AND wq.xact_start = ep.waiting_xact_start
+LEFT JOIN LATERAL (
+    SELECT b.id, b.xact_start, b.application_name
+    FROM transactions b
+    WHERE b.pid = ep.blocked_by_pid
+      AND b.server_name = ep.server_name AND b.database_name = ep.database_name
+      AND b.xact_start <= ep.wait_start AND b.last_seen_at >= ep.wait_start
+    ORDER BY b.xact_start DESC
+    LIMIT 1
+) bt ON true
+LEFT JOIN LATERAL (
+    SELECT q2.query, q2.query_tags
+    FROM transaction_queries q2
+    JOIN transaction_events e2 ON e2.transaction_query_id = q2.id AND e2.xact_start = q2.xact_start
+    WHERE q2.transaction_id = bt.id AND q2.xact_start = bt.xact_start
+    ORDER BY (e2.first_seen_at <= ep.wait_start) DESC,
+             abs(extract(epoch FROM e2.first_seen_at - ep.wait_start))
+    LIMIT 1
+) bq ON true
+ORDER BY ep.sort_num * CASE WHEN sqlc.arg('sort_desc')::bool THEN -1 ELSE 1 END,
+         ep.wait_start DESC, ep.server_name, ep.database_name,
+         ep.waiting_pid, ep.blocked_by_pid, ep.lock_mode;
 
 -- name: EnsureStatements :batchone
 WITH params AS (
