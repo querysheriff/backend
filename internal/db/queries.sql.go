@@ -870,62 +870,111 @@ func (q *Queries) ListLockWaits(ctx context.Context, arg ListLockWaitsParams) ([
 const listLogEvents = `-- name: ListLogEvents :many
 SELECT id, occurred_at, log_level, classification, message, pid, username,
        database_name, application_name, detail, hint, context, statement,
-       backend_type, state_code
+       backend_type, state_code, statement_sample_id
+FROM (
+SELECT id, occurred_at, log_level, classification, message, pid, username,
+       database_name, application_name, detail, hint, context, statement,
+       backend_type, state_code, statement_sample_id,
+       CASE $1::text
+           WHEN 'database' THEN coalesce(database_name, '')
+           WHEN 'user' THEN coalesce(username, '')
+       END AS sort_text,
+       CASE $1::text
+           WHEN 'level' THEN ($2::int[])[log_level + 1]
+           WHEN 'event' THEN classification
+           WHEN 'category' THEN ($3::int[])[classification + 1]
+       END AS sort_num,
+       CASE WHEN $1::text = 'at' THEN occurred_at END AS sort_time
 FROM log_events
-WHERE server_name = $1
-  AND ($2::text[] IS NULL OR server_name = ANY($2::text[]))
-  AND ($3::timestamptz IS NULL OR occurred_at >= $3)
-  AND ($4::timestamptz IS NULL OR occurred_at <= $4)
-  AND ($3::timestamptz IS NULL OR collected_at >= $3)
-  AND ($5::int[] IS NULL OR log_level = ANY($5::int[]))
-  AND ($6::int[] IS NULL OR classification = ANY($6::int[]))
-  AND ($7::text IS NULL
-       OR message ILIKE '%' || $7::text || '%'
-       OR detail ILIKE '%' || $7::text || '%'
-       OR statement ILIKE '%' || $7::text || '%'
-       OR pid::text = $7::text)
-ORDER BY occurred_at DESC NULLS LAST, id DESC
-LIMIT $8
+WHERE server_name = $4
+  AND ($5::text[] IS NULL OR server_name = ANY($5::text[]))
+  AND ($6::timestamptz IS NULL OR occurred_at >= $6)
+  AND ($7::timestamptz IS NULL OR occurred_at <= $7)
+  AND ($6::timestamptz IS NULL OR collected_at >= $6)
+  AND ($8::int[] IS NULL OR log_level = ANY($8::int[]))
+  AND ($9::int[] IS NULL OR classification = ANY($9::int[]))
+  AND ($10::text[] IS NULL OR coalesce(database_name, '') = ANY($10::text[]))
+  AND ($11::text[] IS NULL OR coalesce(username, '') = ANY($11::text[]))
+  AND ($12::text[] IS NULL
+       OR coalesce(application_name, '') = ANY($12::text[]))
+  AND ($13::text[] IS NULL
+       OR coalesce(backend_type, '') = ANY($13::text[]))
+  AND ($14::text IS NULL
+       OR message ILIKE '%' || $14::text || '%'
+       OR detail ILIKE '%' || $14::text || '%'
+       OR statement ILIKE '%' || $14::text || '%'
+       OR pid::text = $14::text)
+) AS sorted
+ORDER BY
+    CASE WHEN $15::bool THEN sort_text END DESC NULLS LAST,
+    CASE WHEN NOT $15::bool THEN sort_text END ASC NULLS LAST,
+    CASE WHEN $15::bool THEN sort_num END DESC NULLS LAST,
+    CASE WHEN NOT $15::bool THEN sort_num END ASC NULLS LAST,
+    CASE WHEN $15::bool THEN sort_time END DESC NULLS LAST,
+    CASE WHEN NOT $15::bool THEN sort_time END ASC NULLS LAST,
+    occurred_at DESC NULLS LAST,
+    id DESC
+LIMIT $17
+OFFSET $16
 `
 
 type ListLogEventsParams struct {
-	ServerName      string
-	AllowedServers  []string
-	Since           pgtype.Timestamptz
-	Until           pgtype.Timestamptz
-	Levels          []int32
-	Classifications []int32
-	Search          pgtype.Text
-	RowLimit        int32
+	SortKey          string
+	SeverityOf       []int32
+	CategoryOf       []int32
+	ServerName       string
+	AllowedServers   []string
+	Since            pgtype.Timestamptz
+	Until            pgtype.Timestamptz
+	Levels           []int32
+	Classifications  []int32
+	Databases        []string
+	Usernames        []string
+	ApplicationNames []string
+	BackendTypes     []string
+	Search           pgtype.Text
+	SortDesc         bool
+	RowOffset        int32
+	RowLimit         int32
 }
 
 type ListLogEventsRow struct {
-	ID              int64
-	OccurredAt      pgtype.Timestamptz
-	LogLevel        int32
-	Classification  int32
-	Message         pgtype.Text
-	Pid             pgtype.Int4
-	Username        pgtype.Text
-	DatabaseName    pgtype.Text
-	ApplicationName pgtype.Text
-	Detail          pgtype.Text
-	Hint            pgtype.Text
-	Context         pgtype.Text
-	Statement       pgtype.Text
-	BackendType     pgtype.Text
-	StateCode       pgtype.Text
+	ID                int64
+	OccurredAt        pgtype.Timestamptz
+	LogLevel          int32
+	Classification    int32
+	Message           pgtype.Text
+	Pid               pgtype.Int4
+	Username          pgtype.Text
+	DatabaseName      pgtype.Text
+	ApplicationName   pgtype.Text
+	Detail            pgtype.Text
+	Hint              pgtype.Text
+	Context           pgtype.Text
+	Statement         pgtype.Text
+	BackendType       pgtype.Text
+	StateCode         pgtype.Text
+	StatementSampleID pgtype.Int8
 }
 
 func (q *Queries) ListLogEvents(ctx context.Context, arg ListLogEventsParams) ([]ListLogEventsRow, error) {
 	rows, err := q.db.Query(ctx, listLogEvents,
+		arg.SortKey,
+		arg.SeverityOf,
+		arg.CategoryOf,
 		arg.ServerName,
 		arg.AllowedServers,
 		arg.Since,
 		arg.Until,
 		arg.Levels,
 		arg.Classifications,
+		arg.Databases,
+		arg.Usernames,
+		arg.ApplicationNames,
+		arg.BackendTypes,
 		arg.Search,
+		arg.SortDesc,
+		arg.RowOffset,
 		arg.RowLimit,
 	)
 	if err != nil {
@@ -951,6 +1000,56 @@ func (q *Queries) ListLogEvents(ctx context.Context, arg ListLogEventsParams) ([
 			&i.Statement,
 			&i.BackendType,
 			&i.StateCode,
+			&i.StatementSampleID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLogStatementSamples = `-- name: ListLogStatementSamples :many
+SELECT id, statement_id, query, duration_ms,
+       (explain_plan_json IS NOT NULL AND explain_plan_json <> '') AS has_explain_plan
+FROM statement_samples
+WHERE id = ANY($1::bigint[])
+  AND collected_at >= $2::timestamptz
+  AND ($3::text[] IS NULL OR server_name = ANY($3::text[]))
+`
+
+type ListLogStatementSamplesParams struct {
+	SampleIds      []int64
+	Since          pgtype.Timestamptz
+	AllowedServers []string
+}
+
+type ListLogStatementSamplesRow struct {
+	ID             int64
+	StatementID    pgtype.Int8
+	Query          string
+	DurationMs     float64
+	HasExplainPlan pgtype.Bool
+}
+
+func (q *Queries) ListLogStatementSamples(ctx context.Context, arg ListLogStatementSamplesParams) ([]ListLogStatementSamplesRow, error) {
+	rows, err := q.db.Query(ctx, listLogStatementSamples, arg.SampleIds, arg.Since, arg.AllowedServers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLogStatementSamplesRow
+	for rows.Next() {
+		var i ListLogStatementSamplesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.StatementID,
+			&i.Query,
+			&i.DurationMs,
+			&i.HasExplainPlan,
 		); err != nil {
 			return nil, err
 		}
@@ -1761,9 +1860,126 @@ func (q *Queries) LockWaitSeries(ctx context.Context, arg LockWaitSeriesParams) 
 	return items, nil
 }
 
+const logEventFacets = `-- name: LogEventFacets :many
+WITH matched AS (
+    SELECT classification,
+           log_level,
+           coalesce(database_name, '') AS database_name,
+           coalesce(username, '') AS username,
+           coalesce(application_name, '') AS application_name,
+           coalesce(backend_type, '') AS backend_type
+    FROM log_events
+    WHERE server_name = $1
+      AND occurred_at >= $2::timestamptz
+      AND occurred_at <= $3::timestamptz
+      AND collected_at >= $2::timestamptz
+      AND ($4::text[] IS NULL
+           OR server_name = ANY($4::text[]))
+      AND ($5::int[] IS NULL
+           OR classification = ANY($5::int[]))
+      AND ($6::text[] IS NULL
+           OR coalesce(database_name, '') = ANY($6::text[]))
+      AND ($7::text[] IS NULL
+           OR coalesce(username, '') = ANY($7::text[]))
+      AND ($8::text[] IS NULL
+           OR coalesce(application_name, '') = ANY($8::text[]))
+      AND ($9::text[] IS NULL
+           OR coalesce(backend_type, '') = ANY($9::text[]))
+      AND ($10::text IS NULL
+           OR message ILIKE '%' || $10::text || '%'
+           OR detail ILIKE '%' || $10::text || '%'
+           OR statement ILIKE '%' || $10::text || '%'
+           OR pid::text = $10::text)
+)
+SELECT grouping(classification, log_level, database_name, username,
+                application_name, backend_type)::int AS grouping_id,
+       coalesce(classification, 0)::int AS classification,
+       coalesce(log_level, 0)::int AS log_level,
+       coalesce(database_name, '')::text AS database_name,
+       coalesce(username, '')::text AS username,
+       coalesce(application_name, '')::text AS application_name,
+       coalesce(backend_type, '')::text AS backend_type,
+       count(*)::bigint AS n
+FROM matched
+GROUP BY GROUPING SETS (
+    (classification),
+    (log_level),
+    (database_name),
+    (username),
+    (application_name),
+    (backend_type)
+)
+ORDER BY 1, 8 DESC
+`
+
+type LogEventFacetsParams struct {
+	ServerName       string
+	Since            pgtype.Timestamptz
+	Until            pgtype.Timestamptz
+	AllowedServers   []string
+	Classifications  []int32
+	Databases        []string
+	Usernames        []string
+	ApplicationNames []string
+	BackendTypes     []string
+	Search           pgtype.Text
+}
+
+type LogEventFacetsRow struct {
+	GroupingID      int32
+	Classification  int32
+	LogLevel        int32
+	DatabaseName    string
+	Username        string
+	ApplicationName string
+	BackendType     string
+	N               int64
+}
+
+func (q *Queries) LogEventFacets(ctx context.Context, arg LogEventFacetsParams) ([]LogEventFacetsRow, error) {
+	rows, err := q.db.Query(ctx, logEventFacets,
+		arg.ServerName,
+		arg.Since,
+		arg.Until,
+		arg.AllowedServers,
+		arg.Classifications,
+		arg.Databases,
+		arg.Usernames,
+		arg.ApplicationNames,
+		arg.BackendTypes,
+		arg.Search,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogEventFacetsRow
+	for rows.Next() {
+		var i LogEventFacetsRow
+		if err := rows.Scan(
+			&i.GroupingID,
+			&i.Classification,
+			&i.LogLevel,
+			&i.DatabaseName,
+			&i.Username,
+			&i.ApplicationName,
+			&i.BackendType,
+			&i.N,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const logEventHistogram = `-- name: LogEventHistogram :many
 SELECT date_bin($1::interval, occurred_at, $2::timestamptz)::timestamptz AS bucket_start,
        log_level,
+       classification,
        count(*)::bigint AS n
 FROM log_events
 WHERE server_name = $3
@@ -1773,29 +1989,40 @@ WHERE server_name = $3
   AND collected_at >= $2::timestamptz
   AND ($5::text[] IS NULL OR server_name = ANY($5::text[]))
   AND ($6::int[] IS NULL OR classification = ANY($6::int[]))
-  AND ($7::text IS NULL
-       OR message ILIKE '%' || $7::text || '%'
-       OR detail ILIKE '%' || $7::text || '%'
-       OR statement ILIKE '%' || $7::text || '%'
-       OR pid::text = $7::text)
-GROUP BY 1, 2
-ORDER BY 1, 2
+  AND ($7::text[] IS NULL OR coalesce(database_name, '') = ANY($7::text[]))
+  AND ($8::text[] IS NULL OR coalesce(username, '') = ANY($8::text[]))
+  AND ($9::text[] IS NULL
+       OR coalesce(application_name, '') = ANY($9::text[]))
+  AND ($10::text[] IS NULL
+       OR coalesce(backend_type, '') = ANY($10::text[]))
+  AND ($11::text IS NULL
+       OR message ILIKE '%' || $11::text || '%'
+       OR detail ILIKE '%' || $11::text || '%'
+       OR statement ILIKE '%' || $11::text || '%'
+       OR pid::text = $11::text)
+GROUP BY 1, 2, 3
+ORDER BY 1, 2, 3
 `
 
 type LogEventHistogramParams struct {
-	Bucket          pgtype.Interval
-	Since           pgtype.Timestamptz
-	ServerName      string
-	Until           pgtype.Timestamptz
-	AllowedServers  []string
-	Classifications []int32
-	Search          pgtype.Text
+	Bucket           pgtype.Interval
+	Since            pgtype.Timestamptz
+	ServerName       string
+	Until            pgtype.Timestamptz
+	AllowedServers   []string
+	Classifications  []int32
+	Databases        []string
+	Usernames        []string
+	ApplicationNames []string
+	BackendTypes     []string
+	Search           pgtype.Text
 }
 
 type LogEventHistogramRow struct {
-	BucketStart pgtype.Timestamptz
-	LogLevel    int32
-	N           int64
+	BucketStart    pgtype.Timestamptz
+	LogLevel       int32
+	Classification int32
+	N              int64
 }
 
 func (q *Queries) LogEventHistogram(ctx context.Context, arg LogEventHistogramParams) ([]LogEventHistogramRow, error) {
@@ -1806,6 +2033,10 @@ func (q *Queries) LogEventHistogram(ctx context.Context, arg LogEventHistogramPa
 		arg.Until,
 		arg.AllowedServers,
 		arg.Classifications,
+		arg.Databases,
+		arg.Usernames,
+		arg.ApplicationNames,
+		arg.BackendTypes,
 		arg.Search,
 	)
 	if err != nil {
@@ -1815,7 +2046,12 @@ func (q *Queries) LogEventHistogram(ctx context.Context, arg LogEventHistogramPa
 	var items []LogEventHistogramRow
 	for rows.Next() {
 		var i LogEventHistogramRow
-		if err := rows.Scan(&i.BucketStart, &i.LogLevel, &i.N); err != nil {
+		if err := rows.Scan(
+			&i.BucketStart,
+			&i.LogLevel,
+			&i.Classification,
+			&i.N,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

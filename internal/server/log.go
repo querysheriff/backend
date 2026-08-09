@@ -2,9 +2,7 @@ package server
 
 import (
 	"context"
-	"errors"
 	"sort"
-
 	"time"
 
 	"connectrpc.com/connect"
@@ -17,12 +15,13 @@ import (
 )
 
 type LogServer struct {
-	queries  *db.Queries
-	notifier *alerts.Notifier
+	queries    *db.Queries
+	notifier   *alerts.Notifier
+	categories *logCategories
 }
 
 func NewLogServer(queries *db.Queries, notifier *alerts.Notifier) *LogServer {
-	return &LogServer{queries: queries, notifier: notifier}
+	return &LogServer{queries: queries, notifier: notifier, categories: newLogCategories()}
 }
 
 func (s *LogServer) ReportLogs(
@@ -87,86 +86,118 @@ func (s *LogServer) QueryLogs(
 ) (*connect.Response[querysheriffv1.QueryLogsResponse], error) {
 	msg := req.Msg
 
-	principal, err := requirePrincipal(ctx)
+	filter, err := s.resolveLogFilter(ctx, msg)
 	if err != nil {
 		return nil, err
 	}
 
-	if name := msg.GetServerName(); name != "" && !principal.CanViewServer(name) {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("access to that server is not allowed"))
+	filter.levels = enumValues(msg.GetLogLevels())
+
+	limit := resolveLimit(msg.GetLimit())
+
+	rows, err := s.queries.ListLogEvents(ctx, filter.listParams(
+		logSortKey(msg.GetSortColumn()),
+		msg.GetSortDesc(),
+		logOrdering{categoryOf: s.categories.orderingArray(), severityOf: logSeverityRanks()},
+		limit,
+		resolveOffset(msg.GetOffset()),
+	))
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	from, to := msg.GetFrom(), msg.GetTo()
-	if err = requireRange(from, to); err != nil {
-		return nil, err
+	hasMore := len(rows) > int(limit)
+	if hasMore {
+		rows = rows[:limit]
 	}
 
-	allowedServers := principal.AllowedServerFilter()
-	levels := enumValues(msg.GetLogLevels())
-	classifications := enumValues(msg.GetClassifications())
-	search := textFilter(msg.GetFilter())
-	since, until := timestamptzFromProto(from), timestamptzFromProto(to)
-
-	histogram, err := s.logHistogram(
-		ctx,
-		msg.GetServerName(),
-		from.AsTime(),
-		to.AsTime(),
-		since,
-		until,
-		classifications,
-		search,
-		allowedServers,
-	)
+	samples, err := s.logStatementSamples(ctx, rows, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := s.queries.ListLogEvents(ctx, db.ListLogEventsParams{
-		ServerName:      msg.GetServerName(),
-		AllowedServers:  allowedServers,
-		Since:           since,
-		Until:           until,
-		Levels:          levels,
-		Classifications: classifications,
-		Search:          search,
-		RowLimit:        resolveLimit(msg.GetLimit()),
+	records := make([]*querysheriffv1.LogRecord, len(rows))
+	for i, row := range rows {
+		records[i] = s.logRecordFromRow(row, samples)
+	}
+
+	return connect.NewResponse(&querysheriffv1.QueryLogsResponse{
+		Records: records,
+		HasMore: hasMore,
+	}), nil
+}
+
+// QueryLogSeries powers the two heatmaps. It takes no filters, so neither sorting, paging nor
+// filtering the table below redraws them.
+func (s *LogServer) QueryLogSeries(
+	ctx context.Context,
+	req *connect.Request[querysheriffv1.QueryLogSeriesRequest],
+) (*connect.Response[querysheriffv1.QueryLogSeriesResponse], error) {
+	msg := req.Msg
+
+	scope, err := s.resolveLogScope(ctx, msg.GetServerName(), msg.GetFrom(), msg.GetTo())
+	if err != nil {
+		return nil, err
+	}
+
+	histogram, err := s.logHistogram(ctx, scope, msg.GetFrom().AsTime(), msg.GetTo().AsTime())
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&querysheriffv1.QueryLogSeriesResponse{Histogram: histogram}), nil
+}
+
+// logStatementSamples hydrates the slow-query rows on this page. Their message, detail and
+// statement are dropped at ingest because the sample holds the same bytes, so without this
+// they would render blank.
+func (s *LogServer) logStatementSamples(
+	ctx context.Context,
+	rows []db.ListLogEventsRow,
+	filter logFilter,
+) (map[int64]db.ListLogStatementSamplesRow, error) {
+	var ids []int64
+
+	for _, row := range rows {
+		if row.StatementSampleID.Valid {
+			ids = append(ids, row.StatementSampleID.Int64)
+		}
+	}
+
+	// An ordinary page has no samples at all.
+	if len(ids) == 0 {
+		return map[int64]db.ListLogStatementSamplesRow{}, nil
+	}
+
+	samples, err := s.queries.ListLogStatementSamples(ctx, db.ListLogStatementSamplesParams{
+		SampleIds:      ids,
+		Since:          filter.since,
+		AllowedServers: filter.allowedServers,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	records := make([]*querysheriffv1.LogRecord, len(rows))
-	for i, row := range rows {
-		records[i] = logRecordFromRow(row)
+	byID := make(map[int64]db.ListLogStatementSamplesRow, len(samples))
+	for _, sample := range samples {
+		byID[sample.ID] = sample
 	}
 
-	return connect.NewResponse(&querysheriffv1.QueryLogsResponse{
-		Histogram: histogram,
-		Records:   records,
-	}), nil
+	return byID, nil
 }
 
+// logHistogram buckets the window two ways from one query: by severity, and by category with
+// the classifications behind each kept alongside it. The nested shape is what lets the
+// category heatmap's tooltip break a cell down without the client knowing the taxonomy.
 func (s *LogServer) logHistogram(
 	ctx context.Context,
-	serverName string,
+	filter logFilter,
 	from, to time.Time,
-	since, until pgtype.Timestamptz,
-	classifications []int32,
-	search pgtype.Text,
-	allowedServers []string,
 ) (*querysheriffv1.LogHistogram, error) {
 	bucketWidth := metricBucket(to.Sub(from))
+	bucket := pgtype.Interval{Microseconds: bucketWidth.Microseconds(), Valid: true}
 
-	rows, err := s.queries.LogEventHistogram(ctx, db.LogEventHistogramParams{
-		Bucket:          pgtype.Interval{Microseconds: bucketWidth.Microseconds(), Valid: true},
-		Since:           since,
-		Until:           until,
-		ServerName:      serverName,
-		AllowedServers:  allowedServers,
-		Classifications: classifications,
-		Search:          search,
-	})
+	rows, err := s.queries.LogEventHistogram(ctx, filter.histogramParams(bucket))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -174,33 +205,109 @@ func (s *LogServer) logHistogram(
 	bucketDur := time.Duration(bucketWidth.Microseconds()) * time.Microsecond
 	slots := max(int((to.Sub(from)+bucketDur-1)/bucketDur), 1)
 
-	perBucket := make([]map[int32]int64, slots)
-	totals := map[int32]int64{}
+	perBucketLevel := make([]map[int32]int64, slots)
+	perBucketClass := make([]map[int32]int64, slots)
+	levelTotals := map[int32]int64{}
+	categoryTotals := map[querysheriffv1.LogEvent_LogCategory]int64{}
+
 	for _, row := range rows {
 		idx := int(row.BucketStart.Time.Sub(from) / bucketDur)
 		if idx < 0 || idx >= slots {
 			continue
 		}
 
-		if perBucket[idx] == nil {
-			perBucket[idx] = map[int32]int64{}
+		if perBucketLevel[idx] == nil {
+			perBucketLevel[idx] = map[int32]int64{}
+			perBucketClass[idx] = map[int32]int64{}
 		}
-		perBucket[idx][row.LogLevel] += row.N
-		totals[row.LogLevel] += row.N
+
+		perBucketLevel[idx][row.LogLevel] += row.N
+		perBucketClass[idx][row.Classification] += row.N
+		levelTotals[row.LogLevel] += row.N
+		categoryTotals[s.categories.categoryOf(
+			querysheriffv1.LogEvent_LogClassification(row.Classification),
+		)] += row.N
 	}
 
 	buckets := make([]*querysheriffv1.LogHistogramBucket, slots)
 	for i := range buckets {
 		buckets[i] = &querysheriffv1.LogHistogramBucket{
 			BucketStart: timestamppb.New(from.Add(time.Duration(i) * bucketDur)),
-			Counts:      levelCounts(perBucket[i]),
+			Counts:      levelCounts(perBucketLevel[i]),
+			Categories:  s.categoryBreakdown(perBucketClass[i]),
 		}
 	}
 
 	return &querysheriffv1.LogHistogram{
-		Buckets:     buckets,
-		LevelTotals: levelCounts(totals),
+		Buckets:        buckets,
+		LevelTotals:    levelCounts(levelTotals),
+		CategoryTotals: categoryCounts(categoryTotals),
+		BucketMs:       bucketDur.Milliseconds(),
 	}, nil
+}
+
+// categoryBreakdown folds one bucket's classification counts into its categories. Only
+// categories present in the bucket are emitted; the heatmap draws a missing row as blank.
+func (s *LogServer) categoryBreakdown(classes map[int32]int64) []*querysheriffv1.LogCategoryBreakdown {
+	grouped := map[querysheriffv1.LogEvent_LogCategory]map[int32]int64{}
+
+	for classification, count := range classes {
+		category := s.categories.categoryOf(querysheriffv1.LogEvent_LogClassification(classification))
+		if grouped[category] == nil {
+			grouped[category] = map[int32]int64{}
+		}
+		grouped[category][classification] += count
+	}
+
+	out := make([]*querysheriffv1.LogCategoryBreakdown, 0, len(grouped))
+
+	for category, classifications := range grouped {
+		var total int64
+		for _, count := range classifications {
+			total += count
+		}
+
+		out = append(out, &querysheriffv1.LogCategoryBreakdown{
+			Category:        category,
+			Count:           total,
+			Classifications: classificationCounts(classifications),
+		})
+	}
+
+	sort.Slice(out, func(i, j int) bool { return out[i].GetCategory() < out[j].GetCategory() })
+
+	return out
+}
+
+// classificationCounts orders most frequent first, so a tooltip that clips keeps what matters.
+func classificationCounts(counts map[int32]int64) []*querysheriffv1.LogClassificationCount {
+	out := make([]*querysheriffv1.LogClassificationCount, 0, len(counts))
+	for classification, count := range counts {
+		out = append(out, &querysheriffv1.LogClassificationCount{
+			Classification: querysheriffv1.LogEvent_LogClassification(classification),
+			Count:          count,
+		})
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].GetCount() != out[j].GetCount() {
+			return out[i].GetCount() > out[j].GetCount()
+		}
+
+		return out[i].GetClassification() < out[j].GetClassification()
+	})
+
+	return out
+}
+
+func categoryCounts(counts map[querysheriffv1.LogEvent_LogCategory]int64) []*querysheriffv1.LogCategoryCount {
+	out := make([]*querysheriffv1.LogCategoryCount, 0, len(counts))
+	for category, count := range counts {
+		out = append(out, &querysheriffv1.LogCategoryCount{Category: category, Count: count})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].GetCategory() < out[j].GetCategory() })
+
+	return out
 }
 
 func levelCounts(counts map[int32]int64) []*querysheriffv1.LogLevelCount {
@@ -216,12 +323,18 @@ func levelCounts(counts map[int32]int64) []*querysheriffv1.LogLevelCount {
 	return out
 }
 
-func logRecordFromRow(row db.ListLogEventsRow) *querysheriffv1.LogRecord {
-	return &querysheriffv1.LogRecord{
+func (s *LogServer) logRecordFromRow(
+	row db.ListLogEventsRow,
+	samples map[int64]db.ListLogStatementSamplesRow,
+) *querysheriffv1.LogRecord {
+	classification := querysheriffv1.LogEvent_LogClassification(row.Classification)
+
+	record := &querysheriffv1.LogRecord{
 		Id:              row.ID,
 		OccurredAt:      protoFromTimestamptz(row.OccurredAt),
 		LogLevel:        querysheriffv1.LogEvent_LogLevel(row.LogLevel),
-		Classification:  querysheriffv1.LogEvent_LogClassification(row.Classification),
+		Classification:  classification,
+		Category:        s.categories.categoryOf(classification),
 		Pid:             protoFromInt4(row.Pid),
 		DatabaseName:    protoFromText(row.DatabaseName),
 		Username:        protoFromText(row.Username),
@@ -234,6 +347,25 @@ func logRecordFromRow(row db.ListLogEventsRow) *querysheriffv1.LogRecord {
 		Context:         protoFromText(row.Context),
 		Statement:       protoFromText(row.Statement),
 	}
+
+	if !row.StatementSampleID.Valid {
+		return record
+	}
+
+	sample, ok := samples[row.StatementSampleID.Int64]
+	if !ok {
+		return record
+	}
+
+	record.StatementSample = &querysheriffv1.LogRecordStatementSample{
+		Id:             sample.ID,
+		Query:          sample.Query,
+		DurationMs:     sample.DurationMs,
+		HasExplainPlan: sample.HasExplainPlan.Bool,
+		StatementId:    sample.StatementID.Int64,
+	}
+
+	return record
 }
 
 func enumValues[E ~int32](values []E) []int32 {
@@ -385,11 +517,10 @@ func logEventInsertParams(
 		StatementSampleID: sampleID,
 	}
 
+	// The sample already holds these bytes, so dont store them twice
 	if sampleID.Valid {
 		params.Message = pgtype.Text{}
 		params.Detail = pgtype.Text{}
-		params.Hint = pgtype.Text{}
-		params.Context = pgtype.Text{}
 		params.Statement = pgtype.Text{}
 	}
 

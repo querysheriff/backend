@@ -638,7 +638,21 @@ INSERT INTO log_events (
 -- name: ListLogEvents :many
 SELECT id, occurred_at, log_level, classification, message, pid, username,
        database_name, application_name, detail, hint, context, statement,
-       backend_type, state_code
+       backend_type, state_code, statement_sample_id
+FROM (
+SELECT id, occurred_at, log_level, classification, message, pid, username,
+       database_name, application_name, detail, hint, context, statement,
+       backend_type, state_code, statement_sample_id,
+       CASE sqlc.arg('sort_key')::text
+           WHEN 'database' THEN coalesce(database_name, '')
+           WHEN 'user' THEN coalesce(username, '')
+       END AS sort_text,
+       CASE sqlc.arg('sort_key')::text
+           WHEN 'level' THEN (sqlc.arg('severity_of')::int[])[log_level + 1]
+           WHEN 'event' THEN classification
+           WHEN 'category' THEN (sqlc.arg('category_of')::int[])[classification + 1]
+       END AS sort_num,
+       CASE WHEN sqlc.arg('sort_key')::text = 'at' THEN occurred_at END AS sort_time
 FROM log_events
 WHERE server_name = sqlc.arg('server_name')
   AND (sqlc.narg('allowed_servers')::text[] IS NULL OR server_name = ANY(sqlc.narg('allowed_servers')::text[]))
@@ -647,17 +661,34 @@ WHERE server_name = sqlc.arg('server_name')
   AND (sqlc.narg('since')::timestamptz IS NULL OR collected_at >= sqlc.narg('since'))
   AND (sqlc.narg('levels')::int[] IS NULL OR log_level = ANY(sqlc.narg('levels')::int[]))
   AND (sqlc.narg('classifications')::int[] IS NULL OR classification = ANY(sqlc.narg('classifications')::int[]))
+  AND (sqlc.narg('databases')::text[] IS NULL OR coalesce(database_name, '') = ANY(sqlc.narg('databases')::text[]))
+  AND (sqlc.narg('usernames')::text[] IS NULL OR coalesce(username, '') = ANY(sqlc.narg('usernames')::text[]))
+  AND (sqlc.narg('application_names')::text[] IS NULL
+       OR coalesce(application_name, '') = ANY(sqlc.narg('application_names')::text[]))
+  AND (sqlc.narg('backend_types')::text[] IS NULL
+       OR coalesce(backend_type, '') = ANY(sqlc.narg('backend_types')::text[]))
   AND (sqlc.narg('search')::text IS NULL
        OR message ILIKE '%' || sqlc.narg('search')::text || '%'
        OR detail ILIKE '%' || sqlc.narg('search')::text || '%'
        OR statement ILIKE '%' || sqlc.narg('search')::text || '%'
        OR pid::text = sqlc.narg('search')::text)
-ORDER BY occurred_at DESC NULLS LAST, id DESC
-LIMIT sqlc.arg('row_limit');
+) AS sorted
+ORDER BY
+    CASE WHEN sqlc.arg('sort_desc')::bool THEN sort_text END DESC NULLS LAST,
+    CASE WHEN NOT sqlc.arg('sort_desc')::bool THEN sort_text END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_desc')::bool THEN sort_num END DESC NULLS LAST,
+    CASE WHEN NOT sqlc.arg('sort_desc')::bool THEN sort_num END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_desc')::bool THEN sort_time END DESC NULLS LAST,
+    CASE WHEN NOT sqlc.arg('sort_desc')::bool THEN sort_time END ASC NULLS LAST,
+    occurred_at DESC NULLS LAST,
+    id DESC
+LIMIT sqlc.arg('row_limit')
+OFFSET sqlc.arg('row_offset');
 
 -- name: LogEventHistogram :many
 SELECT date_bin(sqlc.arg('bucket')::interval, occurred_at, sqlc.arg('since')::timestamptz)::timestamptz AS bucket_start,
        log_level,
+       classification,
        count(*)::bigint AS n
 FROM log_events
 WHERE server_name = sqlc.arg('server_name')
@@ -667,13 +698,78 @@ WHERE server_name = sqlc.arg('server_name')
   AND collected_at >= sqlc.arg('since')::timestamptz
   AND (sqlc.narg('allowed_servers')::text[] IS NULL OR server_name = ANY(sqlc.narg('allowed_servers')::text[]))
   AND (sqlc.narg('classifications')::int[] IS NULL OR classification = ANY(sqlc.narg('classifications')::int[]))
+  AND (sqlc.narg('databases')::text[] IS NULL OR coalesce(database_name, '') = ANY(sqlc.narg('databases')::text[]))
+  AND (sqlc.narg('usernames')::text[] IS NULL OR coalesce(username, '') = ANY(sqlc.narg('usernames')::text[]))
+  AND (sqlc.narg('application_names')::text[] IS NULL
+       OR coalesce(application_name, '') = ANY(sqlc.narg('application_names')::text[]))
+  AND (sqlc.narg('backend_types')::text[] IS NULL
+       OR coalesce(backend_type, '') = ANY(sqlc.narg('backend_types')::text[]))
   AND (sqlc.narg('search')::text IS NULL
        OR message ILIKE '%' || sqlc.narg('search')::text || '%'
        OR detail ILIKE '%' || sqlc.narg('search')::text || '%'
        OR statement ILIKE '%' || sqlc.narg('search')::text || '%'
        OR pid::text = sqlc.narg('search')::text)
-GROUP BY 1, 2
-ORDER BY 1, 2;
+GROUP BY 1, 2, 3
+ORDER BY 1, 2, 3;
+
+-- name: LogEventFacets :many
+WITH matched AS (
+    SELECT classification,
+           log_level,
+           coalesce(database_name, '') AS database_name,
+           coalesce(username, '') AS username,
+           coalesce(application_name, '') AS application_name,
+           coalesce(backend_type, '') AS backend_type
+    FROM log_events
+    WHERE server_name = sqlc.arg('server_name')
+      AND occurred_at >= sqlc.arg('since')::timestamptz
+      AND occurred_at <= sqlc.arg('until')::timestamptz
+      AND collected_at >= sqlc.arg('since')::timestamptz
+      AND (sqlc.narg('allowed_servers')::text[] IS NULL
+           OR server_name = ANY(sqlc.narg('allowed_servers')::text[]))
+      AND (sqlc.narg('classifications')::int[] IS NULL
+           OR classification = ANY(sqlc.narg('classifications')::int[]))
+      AND (sqlc.narg('databases')::text[] IS NULL
+           OR coalesce(database_name, '') = ANY(sqlc.narg('databases')::text[]))
+      AND (sqlc.narg('usernames')::text[] IS NULL
+           OR coalesce(username, '') = ANY(sqlc.narg('usernames')::text[]))
+      AND (sqlc.narg('application_names')::text[] IS NULL
+           OR coalesce(application_name, '') = ANY(sqlc.narg('application_names')::text[]))
+      AND (sqlc.narg('backend_types')::text[] IS NULL
+           OR coalesce(backend_type, '') = ANY(sqlc.narg('backend_types')::text[]))
+      AND (sqlc.narg('search')::text IS NULL
+           OR message ILIKE '%' || sqlc.narg('search')::text || '%'
+           OR detail ILIKE '%' || sqlc.narg('search')::text || '%'
+           OR statement ILIKE '%' || sqlc.narg('search')::text || '%'
+           OR pid::text = sqlc.narg('search')::text)
+)
+SELECT grouping(classification, log_level, database_name, username,
+                application_name, backend_type)::int AS grouping_id,
+       coalesce(classification, 0)::int AS classification,
+       coalesce(log_level, 0)::int AS log_level,
+       coalesce(database_name, '')::text AS database_name,
+       coalesce(username, '')::text AS username,
+       coalesce(application_name, '')::text AS application_name,
+       coalesce(backend_type, '')::text AS backend_type,
+       count(*)::bigint AS n
+FROM matched
+GROUP BY GROUPING SETS (
+    (classification),
+    (log_level),
+    (database_name),
+    (username),
+    (application_name),
+    (backend_type)
+)
+ORDER BY 1, 8 DESC;
+
+-- name: ListLogStatementSamples :many
+SELECT id, statement_id, query, duration_ms,
+       (explain_plan_json IS NOT NULL AND explain_plan_json <> '') AS has_explain_plan
+FROM statement_samples
+WHERE id = ANY(sqlc.arg('sample_ids')::bigint[])
+  AND collected_at >= sqlc.arg('since')::timestamptz
+  AND (sqlc.narg('allowed_servers')::text[] IS NULL OR server_name = ANY(sqlc.narg('allowed_servers')::text[]));
 
 -- name: InsertStatementSamples :batchone
 INSERT INTO statement_samples (

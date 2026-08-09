@@ -9,6 +9,8 @@ option go_package = "github.com/querysheriff/backend/gen/querysheriff/v1;querysh
 service LogService {
   rpc ReportLogs(ReportLogsRequest) returns (ReportLogsResponse) {}
   rpc QueryLogs(QueryLogsRequest) returns (QueryLogsResponse) {}
+  rpc QueryLogSeries(QueryLogSeriesRequest) returns (QueryLogSeriesResponse) {}
+  rpc ListLogFacets(ListLogFacetsRequest) returns (ListLogFacetsResponse) {}
 }
 
 message ReportLogsRequest {
@@ -135,6 +137,21 @@ message LogEvent {
     LOG_CLASSIFICATION_INCONSISTENT_RANGE_BOUNDS = 98;
   }
 
+  // The family a classification belongs to.
+  enum LogCategory {
+    LOG_CATEGORY_UNSPECIFIED = 0;
+
+    LOG_CATEGORY_SERVER = 1;
+    LOG_CATEGORY_CONNECTION = 2;
+    LOG_CATEGORY_WAL_CHECKPOINT = 3;
+    LOG_CATEGORY_AUTOVACUUM = 4;
+    LOG_CATEGORY_LOCK = 5;
+    LOG_CATEGORY_STATEMENT = 6;
+    LOG_CATEGORY_STANDBY = 7;
+    LOG_CATEGORY_CONSTRAINT_VIOLATION = 8;
+    LOG_CATEGORY_APPLICATION_ERROR = 9;
+  }
+
   // jsonlog 'timestamp'.
   google.protobuf.Timestamp occurred_at = 1;
 
@@ -213,26 +230,132 @@ message QueryLogsRequest {
 
   // Defaults to 50 when unset.
   int32 limit = 7;
+
+  repeated LogEvent.LogCategory categories = 8;
+  repeated string databases = 9;
+  repeated string usernames = 10;
+  repeated string application_names = 11;
+  repeated string backend_types = 12;
+
+  int32 offset = 13;
+
+  // Defaults to LOG_SORT_COLUMN_AT.
+  LogSortColumn sort_column = 14;
+
+  bool sort_desc = 15;
+}
+
+// The columns the LOGS table can be ordered by.
+enum LogSortColumn {
+  LOG_SORT_COLUMN_UNSPECIFIED = 0;
+
+  LOG_SORT_COLUMN_AT = 1;
+  LOG_SORT_COLUMN_LEVEL = 2;
+  LOG_SORT_COLUMN_EVENT = 3;
+  LOG_SORT_COLUMN_CATEGORY = 4;
+  LOG_SORT_COLUMN_DATABASE = 5;
+  LOG_SORT_COLUMN_USERNAME = 6;
 }
 
 message QueryLogsResponse {
+  repeated LogRecord records = 1;
+  bool has_more = 2;
+}
+
+// The heatmaps' own request.
+message QueryLogSeriesRequest {
+  string server_name = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+}
+
+message QueryLogSeriesResponse {
   LogHistogram histogram = 1;
-  repeated LogRecord records = 2;
 }
 
 message LogHistogram {
   repeated LogHistogramBucket buckets = 1;
   repeated LogLevelCount level_totals = 2;
+
+  // Width of each bucket.
+  int64 bucket_ms = 3;
+
+  repeated LogCategoryCount category_totals = 4;
 }
 
 message LogHistogramBucket {
   google.protobuf.Timestamp bucket_start = 1;
+
+  // Per severity
   repeated LogLevelCount counts = 2;
+
+  // Per category.
+  repeated LogCategoryBreakdown categories = 3;
+}
+
+message LogCategoryBreakdown {
+  LogEvent.LogCategory category = 1;
+  int64 count = 2;
+
+  // Only classifications with at least one event in this bucket, most frequent first.
+  repeated LogClassificationCount classifications = 3;
+}
+
+message LogClassificationCount {
+  LogEvent.LogClassification classification = 1;
+  int64 count = 2;
 }
 
 message LogLevelCount {
   LogEvent.LogLevel level = 1;
   int64 count = 2;
+}
+
+message LogCategoryCount {
+  LogEvent.LogCategory category = 1;
+  int64 count = 2;
+}
+
+// The facet fields the LOGS filter can pick from.
+enum LogFacetField {
+  LOG_FACET_FIELD_UNSPECIFIED = 0;
+
+  LOG_FACET_FIELD_CATEGORY = 1;
+  LOG_FACET_FIELD_CLASSIFICATION = 2;
+  LOG_FACET_FIELD_LEVEL = 3;
+  LOG_FACET_FIELD_DATABASE = 4;
+  LOG_FACET_FIELD_USERNAME = 5;
+  LOG_FACET_FIELD_APPLICATION_NAME = 6;
+  LOG_FACET_FIELD_BACKEND_TYPE = 7;
+}
+
+message ListLogFacetsRequest {
+  string server_name = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+  string filter = 4;
+  repeated LogEvent.LogClassification classifications = 5;
+  repeated LogEvent.LogCategory categories = 6;
+  repeated string databases = 7;
+  repeated string usernames = 8;
+  repeated string application_names = 9;
+  repeated string backend_types = 10;
+}
+
+message ListLogFacetsResponse {
+  repeated LogFacet facets = 1;
+}
+
+message LogFacet {
+  LogFacetField field = 1;
+  repeated LogFacetValue values = 2;
+  bool truncated = 3;
+}
+
+message LogFacetValue {
+  string value = 1;
+  int64 count = 2;
+  LogEvent.LogCategory category = 3;
 }
 
 message LogRecord {
@@ -251,4 +374,20 @@ message LogRecord {
   string hint = 13;
   string context = 14;
   string statement = 15;
+
+  // The family the classification belongs to.
+  LogEvent.LogCategory category = 16;
+
+  // Set only on the two classifications that carry one:
+  // LOG_CLASSIFICATION_STATEMENT_DURATION and
+  // LOG_CLASSIFICATION_STATEMENT_AUTO_EXPLAIN.
+  LogRecordStatementSample statement_sample = 17;
+}
+
+message LogRecordStatementSample {
+  int64 id = 1;
+  string query = 2;
+  double duration_ms = 3;
+  bool has_explain_plan = 4;
+  int64 statement_id = 5;
 }
