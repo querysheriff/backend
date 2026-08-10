@@ -1364,8 +1364,8 @@ func (x *LogHistogram) GetCategoryTotals() []*LogCategoryCount {
 }
 
 type LogHistogramBucket struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	BucketStart *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=bucket_start,json=bucketStart,proto3" json:"bucket_start,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	BucketEnd *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=bucket_end,json=bucketEnd,proto3" json:"bucket_end,omitempty"`
 	// Per severity
 	Counts []*LogLevelCount `protobuf:"bytes,2,rep,name=counts,proto3" json:"counts,omitempty"`
 	// Per category.
@@ -1404,9 +1404,9 @@ func (*LogHistogramBucket) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *LogHistogramBucket) GetBucketStart() *timestamppb.Timestamp {
+func (x *LogHistogramBucket) GetBucketEnd() *timestamppb.Timestamp {
 	if x != nil {
-		return x.BucketStart
+		return x.BucketEnd
 	}
 	return nil
 }
@@ -2376,9 +2376,10 @@ const file_querysheriff_v1_log_proto_rawDesc = "" +
 	"\abuckets\x18\x01 \x03(\v2#.querysheriff.v1.LogHistogramBucketR\abuckets\x12A\n" +
 	"\flevel_totals\x18\x02 \x03(\v2\x1e.querysheriff.v1.LogLevelCountR\vlevelTotals\x12\x1b\n" +
 	"\tbucket_ms\x18\x03 \x01(\x03R\bbucketMs\x12J\n" +
-	"\x0fcategory_totals\x18\x04 \x03(\v2!.querysheriff.v1.LogCategoryCountR\x0ecategoryTotals\"\xd2\x01\n" +
-	"\x12LogHistogramBucket\x12=\n" +
-	"\fbucket_start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vbucketStart\x126\n" +
+	"\x0fcategory_totals\x18\x04 \x03(\v2!.querysheriff.v1.LogCategoryCountR\x0ecategoryTotals\"\xce\x01\n" +
+	"\x12LogHistogramBucket\x129\n" +
+	"\n" +
+	"bucket_end\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\tbucketEnd\x126\n" +
 	"\x06counts\x18\x02 \x03(\v2\x1e.querysheriff.v1.LogLevelCountR\x06counts\x12E\n" +
 	"\n" +
 	"categories\x18\x03 \x03(\v2%.querysheriff.v1.LogCategoryBreakdownR\n" +
@@ -2539,7 +2540,7 @@ var file_querysheriff_v1_log_proto_depIdxs = []int32{
 	14, // 18: querysheriff.v1.LogHistogram.buckets:type_name -> querysheriff.v1.LogHistogramBucket
 	17, // 19: querysheriff.v1.LogHistogram.level_totals:type_name -> querysheriff.v1.LogLevelCount
 	18, // 20: querysheriff.v1.LogHistogram.category_totals:type_name -> querysheriff.v1.LogCategoryCount
-	26, // 21: querysheriff.v1.LogHistogramBucket.bucket_start:type_name -> google.protobuf.Timestamp
+	26, // 21: querysheriff.v1.LogHistogramBucket.bucket_end:type_name -> google.protobuf.Timestamp
 	17, // 22: querysheriff.v1.LogHistogramBucket.counts:type_name -> querysheriff.v1.LogLevelCount
 	15, // 23: querysheriff.v1.LogHistogramBucket.categories:type_name -> querysheriff.v1.LogCategoryBreakdown
 	4,  // 24: querysheriff.v1.LogCategoryBreakdown.category:type_name -> querysheriff.v1.LogEvent.LogCategory

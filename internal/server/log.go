@@ -140,7 +140,11 @@ func (s *LogServer) QueryLogSeries(
 		return nil, err
 	}
 
-	histogram, err := s.logHistogram(ctx, scope, msg.GetFrom().AsTime(), msg.GetTo().AsTime())
+	histogram, err := s.logHistogram(
+		ctx,
+		scope,
+		newSeriesBounds(msg.GetFrom().AsTime(), msg.GetTo().AsTime(), time.Now()),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -192,27 +196,27 @@ func (s *LogServer) logStatementSamples(
 func (s *LogServer) logHistogram(
 	ctx context.Context,
 	filter logFilter,
-	from, to time.Time,
+	bounds seriesBounds,
 ) (*querysheriffv1.LogHistogram, error) {
-	bucketWidth := metricBucket(to.Sub(from))
-	bucket := pgtype.Interval{Microseconds: bucketWidth.Microseconds(), Valid: true}
-
-	rows, err := s.queries.LogEventHistogram(ctx, filter.histogramParams(bucket))
+	rows, err := s.queries.LogEventHistogram(ctx, filter.histogramParams(bounds))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	bucketDur := time.Duration(bucketWidth.Microseconds()) * time.Microsecond
-	slots := max(int((to.Sub(from)+bucketDur-1)/bucketDur), 1)
+	ends := bounds.bucketEnds()
+	slotOf := make(map[time.Time]int, len(ends))
+	for i, end := range ends {
+		slotOf[end.UTC()] = i
+	}
 
-	perBucketLevel := make([]map[int32]int64, slots)
-	perBucketClass := make([]map[int32]int64, slots)
+	perBucketLevel := make([]map[int32]int64, len(ends))
+	perBucketClass := make([]map[int32]int64, len(ends))
 	levelTotals := map[int32]int64{}
 	categoryTotals := map[querysheriffv1.LogEvent_LogCategory]int64{}
 
 	for _, row := range rows {
-		idx := int(row.BucketStart.Time.Sub(from) / bucketDur)
-		if idx < 0 || idx >= slots {
+		idx, ok := slotOf[row.BucketEnd.Time.UTC()]
+		if !ok {
 			continue
 		}
 
@@ -229,12 +233,12 @@ func (s *LogServer) logHistogram(
 		)] += row.N
 	}
 
-	buckets := make([]*querysheriffv1.LogHistogramBucket, slots)
-	for i := range buckets {
+	buckets := make([]*querysheriffv1.LogHistogramBucket, len(ends))
+	for i, end := range ends {
 		buckets[i] = &querysheriffv1.LogHistogramBucket{
-			BucketStart: timestamppb.New(from.Add(time.Duration(i) * bucketDur)),
-			Counts:      levelCounts(perBucketLevel[i]),
-			Categories:  s.categoryBreakdown(perBucketClass[i]),
+			BucketEnd:  timestamppb.New(end),
+			Counts:     levelCounts(perBucketLevel[i]),
+			Categories: s.categoryBreakdown(perBucketClass[i]),
 		}
 	}
 
@@ -242,7 +246,7 @@ func (s *LogServer) logHistogram(
 		Buckets:        buckets,
 		LevelTotals:    levelCounts(levelTotals),
 		CategoryTotals: categoryCounts(categoryTotals),
-		BucketMs:       bucketDur.Milliseconds(),
+		BucketMs:       bounds.bucket.Milliseconds(),
 	}, nil
 }
 

@@ -686,15 +686,16 @@ LIMIT sqlc.arg('row_limit')
 OFFSET sqlc.arg('row_offset');
 
 -- name: LogEventHistogram :many
-SELECT date_bin(sqlc.arg('bucket')::interval, occurred_at, sqlc.arg('since')::timestamptz)::timestamptz AS bucket_start,
+SELECT (date_bin(sqlc.arg('bucket')::interval, occurred_at - interval '1 microsecond',
+                 sqlc.arg('anchor')::timestamptz) + sqlc.arg('bucket')::interval)::timestamptz AS bucket_end,
        log_level,
        classification,
        count(*)::bigint AS n
 FROM log_events
 WHERE server_name = sqlc.arg('server_name')
   AND occurred_at IS NOT NULL
-  AND occurred_at >= sqlc.arg('since')::timestamptz
-  AND occurred_at <= sqlc.arg('until')::timestamptz
+  AND occurred_at >  sqlc.arg('since')::timestamptz
+  AND occurred_at <= sqlc.arg('anchor')::timestamptz
   AND collected_at >= sqlc.arg('since')::timestamptz
   AND (sqlc.narg('allowed_servers')::text[] IS NULL OR server_name = ANY(sqlc.narg('allowed_servers')::text[]))
   AND (sqlc.narg('classifications')::int[] IS NULL OR classification = ANY(sqlc.narg('classifications')::int[]))

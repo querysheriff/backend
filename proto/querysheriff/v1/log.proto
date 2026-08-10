@@ -284,7 +284,7 @@ message LogHistogram {
 }
 
 message LogHistogramBucket {
-  google.protobuf.Timestamp bucket_start = 1;
+  google.protobuf.Timestamp bucket_end = 1;
 
   // Per severity
   repeated LogLevelCount counts = 2;

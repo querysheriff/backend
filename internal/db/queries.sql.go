@@ -1977,16 +1977,17 @@ func (q *Queries) LogEventFacets(ctx context.Context, arg LogEventFacetsParams) 
 }
 
 const logEventHistogram = `-- name: LogEventHistogram :many
-SELECT date_bin($1::interval, occurred_at, $2::timestamptz)::timestamptz AS bucket_start,
+SELECT (date_bin($1::interval, occurred_at - interval '1 microsecond',
+                 $2::timestamptz) + $1::interval)::timestamptz AS bucket_end,
        log_level,
        classification,
        count(*)::bigint AS n
 FROM log_events
 WHERE server_name = $3
   AND occurred_at IS NOT NULL
-  AND occurred_at >= $2::timestamptz
-  AND occurred_at <= $4::timestamptz
-  AND collected_at >= $2::timestamptz
+  AND occurred_at >  $4::timestamptz
+  AND occurred_at <= $2::timestamptz
+  AND collected_at >= $4::timestamptz
   AND ($5::text[] IS NULL OR server_name = ANY($5::text[]))
   AND ($6::int[] IS NULL OR classification = ANY($6::int[]))
   AND ($7::text[] IS NULL OR coalesce(database_name, '') = ANY($7::text[]))
@@ -2006,9 +2007,9 @@ ORDER BY 1, 2, 3
 
 type LogEventHistogramParams struct {
 	Bucket           pgtype.Interval
-	Since            pgtype.Timestamptz
+	Anchor           pgtype.Timestamptz
 	ServerName       string
-	Until            pgtype.Timestamptz
+	Since            pgtype.Timestamptz
 	AllowedServers   []string
 	Classifications  []int32
 	Databases        []string
@@ -2019,7 +2020,7 @@ type LogEventHistogramParams struct {
 }
 
 type LogEventHistogramRow struct {
-	BucketStart    pgtype.Timestamptz
+	BucketEnd      pgtype.Timestamptz
 	LogLevel       int32
 	Classification int32
 	N              int64
@@ -2028,9 +2029,9 @@ type LogEventHistogramRow struct {
 func (q *Queries) LogEventHistogram(ctx context.Context, arg LogEventHistogramParams) ([]LogEventHistogramRow, error) {
 	rows, err := q.db.Query(ctx, logEventHistogram,
 		arg.Bucket,
-		arg.Since,
+		arg.Anchor,
 		arg.ServerName,
-		arg.Until,
+		arg.Since,
 		arg.AllowedServers,
 		arg.Classifications,
 		arg.Databases,
@@ -2047,7 +2048,7 @@ func (q *Queries) LogEventHistogram(ctx context.Context, arg LogEventHistogramPa
 	for rows.Next() {
 		var i LogEventHistogramRow
 		if err := rows.Scan(
-			&i.BucketStart,
+			&i.BucketEnd,
 			&i.LogLevel,
 			&i.Classification,
 			&i.N,

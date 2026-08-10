@@ -176,13 +176,13 @@ func (f logFilter) listParams(
 	}
 }
 
-func (f logFilter) histogramParams(bucket pgtype.Interval) db.LogEventHistogramParams {
+func (f logFilter) histogramParams(bounds seriesBounds) db.LogEventHistogramParams {
 	return db.LogEventHistogramParams{
-		Bucket:           bucket,
+		Bucket:           pgtype.Interval{Microseconds: bounds.bucket.Microseconds(), Valid: true},
+		Anchor:           pgtype.Timestamptz{Time: bounds.anchor, Valid: true},
 		ServerName:       f.serverName,
 		AllowedServers:   f.allowedServers,
-		Since:            f.since,
-		Until:            f.until,
+		Since:            pgtype.Timestamptz{Time: bounds.rangeStart, Valid: true},
 		Classifications:  f.classifications,
 		Databases:        f.databases,
 		Usernames:        f.usernames,
