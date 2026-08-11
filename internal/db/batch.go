@@ -284,7 +284,9 @@ latest AS (
            e.blocked_by_pid, e.lock_wait_start, e.lock_mode
     FROM transaction_events e
     JOIN transaction_queries q ON q.id = e.transaction_query_id
+                              AND q.xact_start = e.xact_start
     JOIN tx ON q.transaction_id = tx.id
+    WHERE e.xact_start = $4::timestamptz
     ORDER BY e.first_seen_at DESC, e.id DESC
     LIMIT 1
 ),
