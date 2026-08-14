@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"time"
 
@@ -19,7 +20,8 @@ import (
 const (
 	activeState        = "active"
 	longQueryThreshold = time.Minute
-	blockingThreshold  = 30 * time.Second
+	blockingThreshold  = 10 * time.Second
+	openTxnThreshold   = 10 * time.Minute
 
 	microsPerMilli = 1000
 )
@@ -93,39 +95,117 @@ func (s *ActivityServer) ReportActivity(
 	return connect.NewResponse(&querysheriffv1.ReportActivityResponse{}), nil
 }
 
-// evaluateAlerts raises the blocking-transaction and long-running-query alerts.
 func (s *ActivityServer) evaluateAlerts(
 	serverName string,
 	collectedAt time.Time,
 	snapshots []*querysheriffv1.ActivitySnapshot,
 ) {
-	var blocking, longQuery bool
+	// The lock fields sit on the waiting snapshot, so this fires from the victim.
+	blocked, blockedFor := longestOver(snapshots, blockingThreshold,
+		func(snap *querysheriffv1.ActivitySnapshot) (time.Duration, bool) {
+			if snap.GetBlockedByPid() == 0 || snap.GetLockWaitStart() == nil {
+				return 0, false
+			}
+
+			return collectedAt.Sub(snap.GetLockWaitStart().AsTime()), true
+		})
+
+	running, runningFor := longestOver(snapshots, longQueryThreshold,
+		func(snap *querysheriffv1.ActivitySnapshot) (time.Duration, bool) {
+			if snap.GetState() != activeState || snap.GetQueryStart() == nil {
+				return 0, false
+			}
+
+			return collectedAt.Sub(snap.GetQueryStart().AsTime()), true
+		})
+
+	// No state filter: an idle transaction holds its snapshot and locks just as long.
+	open, openFor := longestOver(snapshots, openTxnThreshold,
+		func(snap *querysheriffv1.ActivitySnapshot) (time.Duration, bool) {
+			return collectedAt.Sub(snap.GetXactStart().AsTime()), true
+		})
+
+	if blocked != nil {
+		s.notifier.Fire(serverName, alerts.KeyBlockedQuery, blockedQueryText(blocked, blockedFor, snapshots))
+	}
+	if running != nil {
+		s.notifier.Fire(serverName, alerts.KeyLongQuery, sessionText("query", "running", running, runningFor))
+	}
+	if open != nil {
+		s.notifier.Fire(serverName, alerts.KeyLongTransaction, sessionText("transaction", "open", open, openFor))
+	}
+}
+
+// longestOver returns the worst case in the batch: the snapshot whose measured
+// duration is the largest of those at or past threshold.
+func longestOver(
+	snapshots []*querysheriffv1.ActivitySnapshot,
+	threshold time.Duration,
+	measure func(*querysheriffv1.ActivitySnapshot) (time.Duration, bool),
+) (*querysheriffv1.ActivitySnapshot, time.Duration) {
+	var worst *querysheriffv1.ActivitySnapshot
+	var longest time.Duration
+
 	for _, snap := range snapshots {
-		if snap.GetBlockedByPid() != 0 && snap.GetLockWaitStart() != nil &&
-			collectedAt.Sub(snap.GetLockWaitStart().AsTime()) >= blockingThreshold {
-			blocking = true
-		}
-
-		if snap.GetState() == activeState && snap.GetQueryStart() != nil &&
-			collectedAt.Sub(snap.GetQueryStart().AsTime()) > longQueryThreshold {
-			longQuery = true
+		measured, ok := measure(snap)
+		if ok && measured >= threshold && measured > longest {
+			worst, longest = snap, measured
 		}
 	}
 
-	if blocking {
-		s.notifier.Fire(
-			serverName,
-			alerts.KeyBlockingTxn,
-			"A transaction is holding locks and stalling other sessions.",
-		)
+	return worst, longest
+}
+
+// inDatabase is empty for the backends datname is null for.
+func inDatabase(name string) string {
+	if name == "" {
+		return ""
 	}
-	if longQuery {
-		s.notifier.Fire(
-			serverName,
-			alerts.KeyLongQuery,
-			"An active query has been running longer than "+longQueryThreshold.String()+".",
-		)
+
+	return " in " + name
+}
+
+func sessionText(
+	subject, verb string,
+	snap *querysheriffv1.ActivitySnapshot,
+	elapsed time.Duration,
+) string {
+	return fmt.Sprintf(
+		"A %s%s has been %s %s.\n\nquery: %s\npid: %d",
+		subject,
+		inDatabase(snap.GetDatabaseName()),
+		verb,
+		alerts.HumanDuration(elapsed),
+		alerts.QueryPreview(snap.GetQuery()),
+		snap.GetPid(),
+	)
+}
+
+// blockedQueryText names both sides of the wait. The blocker can be missing from
+// the batch: a session holding a lock while idle outside a transaction is never sampled.
+func blockedQueryText(
+	blocked *querysheriffv1.ActivitySnapshot,
+	waited time.Duration,
+	snapshots []*querysheriffv1.ActivitySnapshot,
+) string {
+	blockerQuery := "not captured"
+	for _, snap := range snapshots {
+		if snap.GetPid() == blocked.GetBlockedByPid() {
+			blockerQuery = alerts.QueryPreview(snap.GetQuery())
+
+			break
+		}
 	}
+
+	return fmt.Sprintf(
+		"A query%s has been waiting %s for a lock.\n\nwaiting: %s\nblocking: %s\npids: %d blocked by %d",
+		inDatabase(blocked.GetDatabaseName()),
+		alerts.HumanDuration(waited),
+		alerts.QueryPreview(blocked.GetQuery()),
+		blockerQuery,
+		blocked.GetPid(),
+		blocked.GetBlockedByPid(),
+	)
 }
 
 func (s *ActivityServer) QueryTransactions(

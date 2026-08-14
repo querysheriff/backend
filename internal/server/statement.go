@@ -14,17 +14,14 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
-	"github.com/querysheriff/backend/internal/alerts"
 	"github.com/querysheriff/backend/internal/auth"
 	"github.com/querysheriff/backend/internal/db"
 	"github.com/querysheriff/backend/internal/sqltext"
 )
 
 const (
-	metricSeriesPoints      = 60
-	minMetricBucket         = time.Minute
-	slowQueryMinCalls       = 50
-	slowQueryAvgThresholdMs = 1000.0
+	metricSeriesPoints = 60
+	minMetricBucket    = time.Minute
 
 	maxTagFilters      = 20
 	maxTagFilterValues = 50
@@ -32,12 +29,11 @@ const (
 )
 
 type StatementServer struct {
-	queries  *db.Queries
-	notifier *alerts.Notifier
+	queries *db.Queries
 }
 
-func NewStatementServer(queries *db.Queries, notifier *alerts.Notifier) *StatementServer {
-	return &StatementServer{queries: queries, notifier: notifier}
+func NewStatementServer(queries *db.Queries) *StatementServer {
+	return &StatementServer{queries: queries}
 }
 
 func (s *StatementServer) ReportStatements(
@@ -61,8 +57,6 @@ func (s *StatementServer) ReportStatements(
 	}
 
 	collectedAt := pgtype.Timestamptz{Time: msg.GetCollectedAt().AsTime(), Valid: true}
-
-	newSlowQuery := s.detectNewSlowQuery(ctx, serverName, deltas)
 
 	statementParams := make([]db.EnsureStatementsParams, len(deltas))
 	for i, delta := range deltas {
@@ -98,10 +92,6 @@ func (s *StatementServer) ReportStatements(
 	missing, err := s.queries.ListStatementsMissingText(ctx, statementIDs)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-
-	if newSlowQuery {
-		s.notifier.Fire(serverName, alerts.KeyNewSlowQuery, "A previously unseen statement entered the slow list.")
 	}
 
 	return connect.NewResponse(&querysheriffv1.ReportStatementsResponse{
@@ -172,51 +162,6 @@ func drainFillTextBatch(results *db.FillStatementTextBatchResults) error {
 	}
 
 	return nil
-}
-
-func (s *StatementServer) detectNewSlowQuery(
-	ctx context.Context,
-	serverName string,
-	deltas []*querysheriffv1.StatementDelta,
-) bool {
-	queryIDs := make([]int64, 0, len(deltas))
-	for _, delta := range deltas {
-		if id := delta.GetQueryId(); id != 0 {
-			queryIDs = append(queryIDs, id)
-		}
-	}
-	if len(queryIDs) == 0 {
-		return false
-	}
-
-	existing, err := s.queries.ListExistingStatementQueryIDs(ctx, db.ListExistingStatementQueryIDsParams{
-		ServerName: serverName,
-		QueryIds:   queryIDs,
-	})
-	if err != nil {
-		return false
-	}
-
-	seen := make(map[int64]struct{}, len(existing))
-	for _, id := range existing {
-		seen[id] = struct{}{}
-	}
-
-	for _, delta := range deltas {
-		id := delta.GetQueryId()
-		if id == 0 {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		if calls := delta.GetCalls(); calls >= slowQueryMinCalls &&
-			delta.GetTotalExecTime()/float64(calls) > slowQueryAvgThresholdMs {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (s *StatementServer) QueryStatements(

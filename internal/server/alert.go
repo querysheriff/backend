@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
@@ -52,6 +53,14 @@ func (s *AlertServer) QueryAlerts(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
+	fires, err := s.queries.CountRecentAlertFires(ctx, db.CountRecentAlertFiresParams{
+		HistoryWindow:  pgtype.Interval{Microseconds: alerts.FireHistoryWindow.Microseconds(), Valid: true},
+		AllowedServers: allowed,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
 	webhookByServer := make(map[string]string, len(webhooks))
 	for _, webhook := range webhooks {
 		webhookByServer[webhook.ServerName] = webhook.SlackWebhookUrl
@@ -65,12 +74,20 @@ func (s *AlertServer) QueryAlerts(
 		togglesByServer[toggle.ServerName][toggle.AlertKey] = toggle.Enabled
 	}
 
+	firesByServer := make(map[string]map[string]int64, len(fires))
+	for _, fire := range fires {
+		if firesByServer[fire.ServerName] == nil {
+			firesByServer[fire.ServerName] = make(map[string]int64)
+		}
+		firesByServer[fire.ServerName][fire.AlertKey] = fire.Fires
+	}
+
 	result := make([]*querysheriffv1.ServerAlertSettings, len(servers))
 	for i, server := range servers {
 		result[i] = &querysheriffv1.ServerAlertSettings{
 			ServerName:      server.ServerName,
 			SlackWebhookUrl: webhookByServer[server.ServerName],
-			Alerts:          alertSettings(togglesByServer[server.ServerName]),
+			Alerts:          alertSettings(togglesByServer[server.ServerName], firesByServer[server.ServerName]),
 		}
 	}
 
@@ -166,7 +183,7 @@ func validateWebhookURL(raw string) (string, error) {
 	return trimmed, nil
 }
 
-func alertSettings(overrides map[string]bool) []*querysheriffv1.AlertSetting {
+func alertSettings(overrides map[string]bool, fires map[string]int64) []*querysheriffv1.AlertSetting {
 	catalog := alerts.Catalog()
 	settings := make([]*querysheriffv1.AlertSetting, len(catalog))
 	for i, def := range catalog {
@@ -176,11 +193,11 @@ func alertSettings(overrides map[string]bool) []*querysheriffv1.AlertSetting {
 		}
 
 		settings[i] = &querysheriffv1.AlertSetting{
-			Key:         def.Key,
-			Title:       def.Title,
-			Description: def.Description,
-			Level:       alertLevelProto(def.Level),
-			Enabled:     enabled,
+			Key:           def.Key,
+			Title:         def.Title,
+			Level:         alertLevelProto(def.Level),
+			Enabled:       enabled,
+			FiresLastWeek: fires[def.Key],
 		}
 	}
 

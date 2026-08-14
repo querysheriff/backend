@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"log/slog"
 	"os"
 	"testing"
 	"time"
@@ -11,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
-	"github.com/querysheriff/backend/internal/alerts"
 	"github.com/querysheriff/backend/internal/db"
 )
 
@@ -173,7 +171,7 @@ func TestPercentileSeriesApproximatesExactPercentiles(t *testing.T) {
 		_, _ = pool.Exec(ctx, `DELETE FROM statement_latency_bins WHERE server_name = $1`, serverName)
 	})
 
-	server := NewStatementServer(queries, alerts.NewNotifier(queries, slog.New(slog.DiscardHandler)))
+	server := NewStatementServer(queries)
 	scoped := pgtype.Text{String: serverName, Valid: true}
 
 	for _, window := range []time.Duration{time.Hour, 3 * time.Hour, 24 * time.Hour, 70 * time.Minute} {

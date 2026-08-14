@@ -2,8 +2,11 @@ package alerts
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -11,35 +14,54 @@ import (
 )
 
 const (
-	offlineScanEvery = time.Minute
-	offlineAfter     = 10 * time.Minute
-	digestScanEvery  = time.Hour
-	maxQueryPreview  = 80
-	pctScale         = 100.0
+	monitoringScanEvery  = time.Minute
+	monitoringStaleAfter = 10 * time.Minute
+	pruneScanEvery       = 24 * time.Hour
+	pctScale             = 100.0
+	reportScanEvery      = 15 * time.Minute
+	reportHourUTC        = 8
+	slowQueryWindow      = 24 * time.Hour
+	slowQueryMinCalls    = 10
+	slowQueryMinAvgMs    = 1000.0
+	slowQueryMaxRows     = 10
+	weeklyTopRows        = 3
 )
 
 // RunScheduler drives the time-based alerts that no collector report can trigger.
-func RunScheduler(ctx context.Context, queries *db.Queries, notifier *Notifier, logger *slog.Logger) {
-	offlineTicker := time.NewTicker(offlineScanEvery)
-	defer offlineTicker.Stop()
+func RunScheduler(
+	ctx context.Context,
+	queries *db.Queries,
+	notifier *Notifier,
+	dashboardURL string,
+	logger *slog.Logger,
+) {
+	monitoringTicker := time.NewTicker(monitoringScanEvery)
+	defer monitoringTicker.Stop()
 
-	digestTicker := time.NewTicker(digestScanEvery)
-	defer digestTicker.Stop()
+	reportTicker := time.NewTicker(reportScanEvery)
+	defer reportTicker.Stop()
+
+	pruneTicker := time.NewTicker(pruneScanEvery)
+	defer pruneTicker.Stop()
+
+	pruneFireHistory(ctx, queries, logger)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-offlineTicker.C:
-			evalOfflineServers(ctx, queries, notifier, logger)
-		case <-digestTicker.C:
-			evalWeeklyDigests(ctx, queries, notifier, logger)
+		case <-monitoringTicker.C:
+			evalStaleServers(ctx, queries, notifier, logger)
+		case <-reportTicker.C:
+			evalReports(ctx, queries, notifier, dashboardURL, logger)
+		case <-pruneTicker.C:
+			pruneFireHistory(ctx, queries, logger)
 		}
 	}
 }
 
-func evalOfflineServers(ctx context.Context, queries *db.Queries, notifier *Notifier, logger *slog.Logger) {
-	servers, err := queries.ListStaleServers(ctx, intervalFromDuration(offlineAfter))
+func evalStaleServers(ctx context.Context, queries *db.Queries, notifier *Notifier, logger *slog.Logger) {
+	servers, err := queries.ListStaleServers(ctx, intervalFromDuration(monitoringStaleAfter))
 	if err != nil {
 		logger.ErrorContext(ctx, "stale-server scan failed", "error", err)
 
@@ -47,63 +69,181 @@ func evalOfflineServers(ctx context.Context, queries *db.Queries, notifier *Noti
 	}
 
 	for _, server := range servers {
-		notifier.Fire(server, KeyCollectorOffline, "The collector has not reported in over "+offlineAfter.String()+".")
+		notifier.Fire(server, KeyMonitoringStopped, "No data for over 10 minutes.")
 	}
 }
 
-func evalWeeklyDigests(ctx context.Context, queries *db.Queries, notifier *Notifier, logger *slog.Logger) {
-	servers, err := queries.ListServersWithDigestEnabled(ctx, KeyWeeklyDigest)
+func evalReports(
+	ctx context.Context,
+	queries *db.Queries,
+	notifier *Notifier,
+	dashboardURL string,
+	logger *slog.Logger,
+) {
+	now := time.Now().UTC()
+	if now.Hour() != reportHourUTC {
+		return
+	}
+
+	sendSlowQueryReports(ctx, queries, notifier, dashboardURL, logger)
+
+	if now.Weekday() == time.Monday {
+		sendWeeklyReports(ctx, queries, notifier, dashboardURL, logger)
+	}
+}
+
+// sendSlowQueryReports stays quiet for a server that had nothing slow to report.
+func sendSlowQueryReports(
+	ctx context.Context,
+	queries *db.Queries,
+	notifier *Notifier,
+	dashboardURL string,
+	logger *slog.Logger,
+) {
+	servers, err := queries.ListServersWithAlertEnabled(ctx, KeySlowQueryReport)
 	if err != nil {
-		logger.ErrorContext(ctx, "digest-server scan failed", "error", err)
+		logger.ErrorContext(ctx, "slow-query report scan failed", "error", err)
 
 		return
 	}
 
 	for _, server := range servers {
-		text, buildErr := buildDigest(ctx, queries, server)
-		if buildErr != nil {
-			logger.ErrorContext(ctx, "digest build failed", "server", server, "error", buildErr)
+		rows, listErr := queries.ListSlowStatements(ctx, db.ListSlowStatementsParams{
+			ServerName: server,
+			Window:     intervalFromDuration(slowQueryWindow),
+			MinCalls:   slowQueryMinCalls,
+			MinAvgMs:   slowQueryMinAvgMs,
+			MaxRows:    slowQueryMaxRows,
+		})
+		if listErr != nil {
+			logger.ErrorContext(ctx, "slow-query lookup failed", "server", server, "error", listErr)
 
 			continue
 		}
 
-		notifier.Fire(server, KeyWeeklyDigest, text)
+		if len(rows) == 0 {
+			continue
+		}
+
+		notifier.Fire(server, KeySlowQueryReport, slowQueryReportText(rows, dashboardURL))
 	}
 }
 
-func buildDigest(ctx context.Context, queries *db.Queries, server string) (string, error) {
-	summary, err := queries.AlertDigestSummary(ctx, server)
+func sendWeeklyReports(
+	ctx context.Context,
+	queries *db.Queries,
+	notifier *Notifier,
+	dashboardURL string,
+	logger *slog.Logger,
+) {
+	servers, err := queries.ListServersWithAlertEnabled(ctx, KeyWeeklyReport)
+	if err != nil {
+		logger.ErrorContext(ctx, "weekly report scan failed", "error", err)
+
+		return
+	}
+
+	for _, server := range servers {
+		text, buildErr := weeklyReportText(ctx, queries, server, dashboardURL)
+		if buildErr != nil {
+			logger.ErrorContext(ctx, "weekly report build failed", "server", server, "error", buildErr)
+
+			continue
+		}
+
+		notifier.Fire(server, KeyWeeklyReport, text)
+	}
+}
+
+func slowQueryReportText(rows []db.ListSlowStatementsRow, dashboardURL string) string {
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "%s in the last 24 hours.\n",
+		plural(len(rows), "slow query", "slow queries"))
+
+	for _, row := range rows {
+		headline := fmt.Sprintf("%d calls averaging %s", row.Calls, formatMillis(row.AvgMs))
+		writeStatement(&b, headline, row.Tags, row.ID, dashboardURL)
+	}
+
+	return b.String()
+}
+
+func weeklyReportText(ctx context.Context, queries *db.Queries, server, dashboardURL string) (string, error) {
+	summary, err := queries.WeeklyReportSummary(ctx, server)
 	if err != nil {
 		return "", err
 	}
 
-	top, err := queries.AlertDigestTopStatements(ctx, server)
+	top, err := queries.WeeklyReportTopStatements(ctx, db.WeeklyReportTopStatementsParams{
+		ServerName: server,
+		MaxRows:    weeklyTopRows,
+	})
 	if err != nil {
 		return "", err
 	}
 
 	var b strings.Builder
-	b.WriteString("Weekly digest — change vs the previous week:")
-	fmt.Fprintf(&b, "\n• Total query time: %.0f ms (%s)",
-		summary.ExecMsCurrent, pctTrend(summary.ExecMsCurrent, summary.ExecMsPrevious))
-	fmt.Fprintf(&b, "\n• Error/fatal log lines: %d (%s)",
+
+	b.WriteString("Last 7 days vs the week before.\n")
+	fmt.Fprintf(&b, "\n• *Query time p99:* %s (%s)",
+		formatMillis(summary.P99Current), pctTrend(summary.P99Current, summary.P99Previous))
+	fmt.Fprintf(&b, "\n• *Queries run:* %s (%s)",
+		formatCount(summary.CallsCurrent),
+		pctTrend(float64(summary.CallsCurrent), float64(summary.CallsPrevious)))
+	fmt.Fprintf(&b, "\n• *Errors logged:* %d (%s)",
 		summary.ErrorsCurrent, countTrend(summary.ErrorsCurrent, summary.ErrorsPrevious))
 
 	if len(top) > 0 {
-		b.WriteString("\nTop statements by total time (last 7 days):")
-		for i, statement := range top {
-			fmt.Fprintf(&b, "\n%d. %.0f ms — %s", i+1, statement.TotalExecTime, previewQuery(statement.Query))
+		b.WriteString("\n\nBusiest queries:")
+		for _, statement := range top {
+			headline := HumanDuration(time.Duration(statement.TotalMs) * time.Millisecond)
+			writeStatement(&b, headline, statement.Tags, statement.ID, dashboardURL)
 		}
 	}
 
 	return b.String(), nil
 }
 
-// pctTrend describes a metric's percent change versus the previous week.
+// writeStatement adds one bulleted statement, with whatever tags it carries and a
+// link to its page.
+func writeStatement(b *strings.Builder, headline string, tags []byte, statementID int64, dashboardURL string) {
+	fmt.Fprintf(b, "\n• *%s*", headline)
+
+	if list := formatTags(tags); list != "" {
+		fmt.Fprintf(b, " — %s", list)
+	}
+
+	if dashboardURL != "" {
+		fmt.Fprintf(b, "\n  <%s/queries/%d|open in querysheriff>", dashboardURL, statementID)
+	}
+}
+
+func formatTags(raw []byte) string {
+	var tags map[string]string
+	if err := json.Unmarshal(raw, &tags); err != nil || len(tags) == 0 {
+		return ""
+	}
+
+	pairs := make([]string, 0, len(tags))
+	for _, key := range slices.Sorted(maps.Keys(tags)) {
+		pairs = append(pairs, key+"="+tags[key])
+	}
+
+	return strings.Join(pairs, ", ")
+}
+
+// pruneFireHistory drops fired notifications older than the window the counts cover.
+func pruneFireHistory(ctx context.Context, queries *db.Queries, logger *slog.Logger) {
+	if err := queries.PruneAlertFires(ctx, intervalFromDuration(FireHistoryWindow)); err != nil {
+		logger.ErrorContext(ctx, "alert fire prune failed", "error", err)
+	}
+}
+
 func pctTrend(current, previous float64) string {
 	if previous == 0 {
 		if current == 0 {
-			return "no change vs last week"
+			return "▲ 0%"
 		}
 
 		return "new this week"
@@ -111,30 +251,17 @@ func pctTrend(current, previous float64) string {
 
 	pct := (current - previous) / previous * pctScale
 	if pct >= 0 {
-		return fmt.Sprintf("▲ %.0f%% vs last week", pct)
+		return fmt.Sprintf("▲ %.0f%%", pct)
 	}
 
-	return fmt.Sprintf("▼ %.0f%% vs last week", -pct)
+	return fmt.Sprintf("▼ %.0f%%", -pct)
 }
 
-// countTrend describes an integer metric's absolute change versus last week.
 func countTrend(current, previous int64) string {
-	switch delta := current - previous; {
-	case delta > 0:
-		return fmt.Sprintf("▲ +%d vs last week", delta)
-	case delta < 0:
-		return fmt.Sprintf("▼ %d vs last week", delta)
-	default:
-		return "no change vs last week"
-	}
-}
-
-// previewQuery collapses whitespace and truncates a statement so it fits in a Slack line.
-func previewQuery(query string) string {
-	query = strings.Join(strings.Fields(query), " ")
-	if len(query) > maxQueryPreview {
-		return query[:maxQueryPreview] + "..."
+	delta := current - previous
+	if delta < 0 {
+		return fmt.Sprintf("▼ %d", -delta)
 	}
 
-	return query
+	return fmt.Sprintf("▲ %d", delta)
 }

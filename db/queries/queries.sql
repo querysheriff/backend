@@ -892,6 +892,9 @@ WITH cleared_settings AS (
 ),
 cleared_toggles AS (
     DELETE FROM alert_toggles WHERE alert_toggles.server_name = sqlc.arg('server_name')
+),
+cleared_fires AS (
+    DELETE FROM alert_fires WHERE alert_fires.server_name = sqlc.arg('server_name')
 )
 DELETE FROM alert_notifications WHERE alert_notifications.server_name = sqlc.arg('server_name');
 
@@ -902,12 +905,30 @@ SELECT slack_webhook_url FROM alert_settings WHERE server_name = $1;
 SELECT enabled FROM alert_toggles WHERE server_name = $1 AND alert_key = $2;
 
 -- name: TryClaimAlertNotification :one
-INSERT INTO alert_notifications (server_name, alert_key, last_fired_at)
-VALUES (sqlc.arg('server_name'), sqlc.arg('alert_key'), now())
-ON CONFLICT (server_name, alert_key)
-DO UPDATE SET last_fired_at = now()
-WHERE alert_notifications.last_fired_at < now() - sqlc.arg('cooldown')::interval
-RETURNING last_fired_at;
+WITH claimed AS (
+    INSERT INTO alert_notifications (server_name, alert_key, last_fired_at)
+    VALUES (sqlc.arg('server_name'), sqlc.arg('alert_key'), now())
+    ON CONFLICT (server_name, alert_key)
+    DO UPDATE SET last_fired_at = now()
+    WHERE alert_notifications.last_fired_at < now() - sqlc.arg('cooldown')::interval
+    RETURNING last_fired_at
+),
+recorded AS (
+    INSERT INTO alert_fires (server_name, alert_key, fired_at)
+    SELECT sqlc.arg('server_name'), sqlc.arg('alert_key'), claimed.last_fired_at
+    FROM claimed
+)
+SELECT last_fired_at FROM claimed;
+
+-- name: CountRecentAlertFires :many
+SELECT server_name, alert_key, count(*) AS fires
+FROM alert_fires
+WHERE fired_at >= now() - sqlc.arg('history_window')::interval
+  AND (sqlc.narg('allowed_servers')::text[] IS NULL OR server_name = ANY(sqlc.narg('allowed_servers')::text[]))
+GROUP BY server_name, alert_key;
+
+-- name: PruneAlertFires :exec
+DELETE FROM alert_fires WHERE fired_at < now() - sqlc.arg('history_window')::interval;
 
 -- name: ListStaleServers :many
 SELECT server_name
@@ -916,7 +937,7 @@ WHERE collected_at < now() - sqlc.arg('stale_after')::interval
   AND collected_at >= now() - interval '24 hours'
 ORDER BY server_name;
 
--- name: ListServersWithDigestEnabled :many
+-- name: ListServersWithAlertEnabled :many
 SELECT s.server_name
 FROM alert_settings s
 LEFT JOIN alert_toggles t
@@ -925,23 +946,81 @@ WHERE s.slack_webhook_url <> ''
   AND coalesce(t.enabled, true)
 ORDER BY s.server_name;
 
--- name: ListExistingStatementQueryIDs :many
-SELECT DISTINCT query_id
-FROM statements
-WHERE server_name = sqlc.arg('server_name')
-  AND query_id = ANY(sqlc.arg('query_ids')::bigint[]);
+-- name: ListSlowStatements :many
+WITH slow AS (
+    SELECT d.statement_id,
+           sum(d.calls)::bigint AS calls,
+           (sum(d.total_exec_time) / NULLIF(sum(d.calls), 0))::double precision AS avg_ms,
+           sum(d.total_exec_time) AS total_ms
+    FROM statement_deltas d
+    JOIN statements s ON s.id = d.statement_id
+    WHERE s.server_name = sqlc.arg('server_name')
+      AND d.collected_at >= now() - sqlc.arg('window')::interval
+    GROUP BY d.statement_id
+    HAVING sum(d.calls) >= sqlc.arg('min_calls')
+       AND sum(d.total_exec_time) / NULLIF(sum(d.calls), 0) >= sqlc.arg('min_avg_ms')
+    ORDER BY sum(d.total_exec_time) DESC
+    LIMIT sqlc.arg('max_rows')
+)
+SELECT slow.statement_id AS id,
+       slow.calls,
+       slow.avg_ms,
+       coalesce(st.tags, '{}'::jsonb) AS tags
+FROM slow
+LEFT JOIN LATERAL (
+    SELECT jsonb_object_agg(per_key.key, per_key.value) AS tags
+    FROM (
+        SELECT kv.key, min(kv.value) AS value
+        FROM statement_samples qs
+        CROSS JOIN LATERAL jsonb_each_text(qs.tags) AS kv(key, value)
+        WHERE qs.statement_id = slow.statement_id
+          AND qs.tags IS NOT NULL
+          AND kv.key NOT LIKE '%\_id'
+          AND qs.collected_at >= now() - sqlc.arg('window')::interval
+        GROUP BY kv.key
+        HAVING count(DISTINCT kv.value) = 1
+    ) per_key
+) st ON true
+ORDER BY slow.total_ms DESC;
 
--- name: AlertDigestSummary :one
+-- name: WeeklyReportSummary :one
+WITH binned AS (
+    SELECT CASE WHEN minute_start >= now() - interval '7 days' THEN 'current' ELSE 'previous' END AS period,
+           unnest(bins) AS bin,
+           unnest(weights) AS weight
+    FROM statement_latency_bins
+    WHERE server_name = sqlc.arg('server_name')
+      AND minute_start >= now() - interval '14 days'
+),
+per_bin AS (
+    SELECT period, bin, sum(weight)::bigint AS weight
+    FROM binned
+    GROUP BY period, bin
+),
+running AS (
+    SELECT period, bin,
+           sum(weight) OVER (PARTITION BY period ORDER BY bin) AS below,
+           sum(weight) OVER (PARTITION BY period) AS total
+    FROM per_bin
+),
+p99 AS (
+    SELECT period, exp((min(bin) + 0.5) * ln(1.01)) AS ms
+    FROM running
+    WHERE below >= 0.99 * total
+    GROUP BY period
+)
 SELECT
-    (SELECT coalesce(sum(d.total_exec_time), 0)::double precision
+    coalesce((SELECT ms FROM p99 WHERE period = 'current'), 0)::double precision AS p99_current,
+    coalesce((SELECT ms FROM p99 WHERE period = 'previous'), 0)::double precision AS p99_previous,
+    (SELECT coalesce(sum(d.calls), 0)::bigint
        FROM statement_deltas d JOIN statements s ON s.id = d.statement_id
        WHERE s.server_name = sqlc.arg('server_name')
-         AND d.collected_at >= now() - interval '7 days') AS exec_ms_current,
-    (SELECT coalesce(sum(d.total_exec_time), 0)::double precision
+         AND d.collected_at >= now() - interval '7 days') AS calls_current,
+    (SELECT coalesce(sum(d.calls), 0)::bigint
        FROM statement_deltas d JOIN statements s ON s.id = d.statement_id
        WHERE s.server_name = sqlc.arg('server_name')
          AND d.collected_at >= now() - interval '14 days'
-         AND d.collected_at <  now() - interval '7 days') AS exec_ms_previous,
+         AND d.collected_at <  now() - interval '7 days') AS calls_previous,
     (SELECT coalesce(count(*), 0)::bigint
        FROM log_events
        WHERE server_name = sqlc.arg('server_name')
@@ -954,16 +1033,37 @@ SELECT
          AND collected_at <  now() - interval '7 days'
          AND log_level = ANY(ARRAY[5, 7, 8])) AS errors_previous;
 
--- name: AlertDigestTopStatements :many
-SELECT s.query_full AS query,
-       sum(d.total_exec_time)::double precision AS total_exec_time
-FROM statement_deltas d
-JOIN statements s ON s.id = d.statement_id
-WHERE s.server_name = sqlc.arg('server_name')
-  AND d.collected_at >= now() - interval '7 days'
-GROUP BY s.query_full
-ORDER BY total_exec_time DESC
-LIMIT 5;
+-- name: WeeklyReportTopStatements :many
+WITH busiest AS (
+    SELECT d.statement_id,
+           sum(d.total_exec_time)::double precision AS total_ms
+    FROM statement_deltas d
+    JOIN statements s ON s.id = d.statement_id
+    WHERE s.server_name = sqlc.arg('server_name')
+      AND d.collected_at >= now() - interval '7 days'
+    GROUP BY d.statement_id
+    ORDER BY total_ms DESC
+    LIMIT sqlc.arg('max_rows')
+)
+SELECT busiest.statement_id AS id,
+       busiest.total_ms,
+       coalesce(st.tags, '{}'::jsonb) AS tags
+FROM busiest
+LEFT JOIN LATERAL (
+    SELECT jsonb_object_agg(per_key.key, per_key.value) AS tags
+    FROM (
+        SELECT kv.key, min(kv.value) AS value
+        FROM statement_samples qs
+        CROSS JOIN LATERAL jsonb_each_text(qs.tags) AS kv(key, value)
+        WHERE qs.statement_id = busiest.statement_id
+          AND qs.tags IS NOT NULL
+          AND kv.key NOT LIKE '%\_id'
+          AND qs.collected_at >= now() - interval '7 days'
+        GROUP BY kv.key
+        HAVING count(DISTINCT kv.value) = 1
+    ) per_key
+) st ON true
+ORDER BY busiest.total_ms DESC;
 
 -- name: RollupStatementLatencyBins :exec
 -- Turns raw deltas from a time range into one summed latency histogram per minute.

@@ -62,22 +62,12 @@ func (s *LogServer) ReportLogs(
 
 func (s *LogServer) evaluateAlerts(serverName string, events []*querysheriffv1.LogEvent) {
 	for _, event := range events {
-		level := event.GetLogLevel()
-		if level == querysheriffv1.LogEvent_LOG_LEVEL_FATAL || level == querysheriffv1.LogEvent_LOG_LEVEL_PANIC {
-			s.notifier.Fire(serverName, alerts.KeyFatalPanic, fatalPanicMessage(event))
+		if event.GetLogLevel() == querysheriffv1.LogEvent_LOG_LEVEL_PANIC {
+			s.notifier.Fire(serverName, alerts.KeyPanic, event.GetMessage())
 
 			return
 		}
 	}
-}
-
-func fatalPanicMessage(event *querysheriffv1.LogEvent) string {
-	level := "FATAL"
-	if event.GetLogLevel() == querysheriffv1.LogEvent_LOG_LEVEL_PANIC {
-		level = "PANIC"
-	}
-
-	return level + ": " + event.GetMessage()
 }
 
 func (s *LogServer) QueryLogs(

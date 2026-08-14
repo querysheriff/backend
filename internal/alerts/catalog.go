@@ -11,66 +11,42 @@ const (
 )
 
 const (
-	KeyCollectorOffline = "collector_offline"
-	KeyFatalPanic       = "fatal_panic"
-	KeyBlockingTxn      = "blocking_txn"
-	KeyLongQuery        = "long_query"
-	KeyNewSlowQuery     = "new_slow_query"
-	KeyWeeklyDigest     = "weekly_digest"
+	KeyMonitoringStopped = "monitoring_stopped"
+	KeyPanic             = "panic"
+	KeyBlockedQuery      = "blocked_query"
+	KeyLongQuery         = "long_query"
+	KeyLongTransaction   = "long_transaction"
+	KeySlowQueryReport   = "slow_query_report"
+	KeyWeeklyReport      = "weekly_report"
 )
 
 const (
-	standardCooldown = 15 * time.Minute
-	offlineCooldown  = 30 * time.Minute
-	digestCadence    = 7 * 24 * time.Hour
+	liveProblemCooldown = time.Minute
+	openTxnCooldown     = 10 * time.Minute
+	crashCooldown       = 15 * time.Minute
+	monitoringCooldown  = 30 * time.Minute
+	dailyCadence        = 23 * time.Hour
+	weeklyCadence       = 6 * 24 * time.Hour
 )
 
+const FireHistoryWindow = 7 * 24 * time.Hour
+
 type Def struct {
-	Key         string
-	Title       string
-	Description string
-	Level       Level
-	Cooldown    time.Duration
+	Key      string
+	Title    string
+	Level    Level
+	Cooldown time.Duration
 }
 
 func defs() []Def {
 	return []Def{
-		{
-			KeyCollectorOffline,
-			"Collector offline",
-			"Collector stopped reporting — monitoring has gone blind",
-			LevelCritical,
-			offlineCooldown,
-		},
-		{
-			KeyFatalPanic,
-			"FATAL / PANIC logged",
-			"Postgres wrote a FATAL or PANIC line to its log",
-			LevelCritical,
-			standardCooldown,
-		},
-		{
-			KeyBlockingTxn,
-			"Blocking transaction",
-			"A transaction is holding locks and stalling others",
-			LevelCritical,
-			standardCooldown,
-		},
-		{
-			KeyLongQuery,
-			"Long-running query",
-			"An active query ran past the duration threshold",
-			LevelWarning,
-			standardCooldown,
-		},
-		{
-			KeyNewSlowQuery,
-			"New slow query",
-			"A previously unseen statement entered the slow list",
-			LevelInfo,
-			standardCooldown,
-		},
-		{KeyWeeklyDigest, "Weekly digest", "Weekly summary of performance and top offenders", LevelInfo, digestCadence},
+		{KeyMonitoringStopped, "Monitoring stopped", LevelCritical, monitoringCooldown},
+		{KeyPanic, "Database crashed", LevelCritical, crashCooldown},
+		{KeyBlockedQuery, "Query blocked by a lock", LevelWarning, liveProblemCooldown},
+		{KeyLongQuery, "Query running too long", LevelWarning, liveProblemCooldown},
+		{KeyLongTransaction, "Transaction open too long", LevelWarning, openTxnCooldown},
+		{KeySlowQueryReport, "Daily slow query report", LevelInfo, dailyCadence},
+		{KeyWeeklyReport, "Weekly report", LevelInfo, weeklyCadence},
 	}
 }
 

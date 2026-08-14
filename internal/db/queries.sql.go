@@ -11,86 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const alertDigestSummary = `-- name: AlertDigestSummary :one
-SELECT
-    (SELECT coalesce(sum(d.total_exec_time), 0)::double precision
-       FROM statement_deltas d JOIN statements s ON s.id = d.statement_id
-       WHERE s.server_name = $1
-         AND d.collected_at >= now() - interval '7 days') AS exec_ms_current,
-    (SELECT coalesce(sum(d.total_exec_time), 0)::double precision
-       FROM statement_deltas d JOIN statements s ON s.id = d.statement_id
-       WHERE s.server_name = $1
-         AND d.collected_at >= now() - interval '14 days'
-         AND d.collected_at <  now() - interval '7 days') AS exec_ms_previous,
-    (SELECT coalesce(count(*), 0)::bigint
-       FROM log_events
-       WHERE server_name = $1
-         AND collected_at >= now() - interval '7 days'
-         AND log_level = ANY(ARRAY[5, 7, 8])) AS errors_current,
-    (SELECT coalesce(count(*), 0)::bigint
-       FROM log_events
-       WHERE server_name = $1
-         AND collected_at >= now() - interval '14 days'
-         AND collected_at <  now() - interval '7 days'
-         AND log_level = ANY(ARRAY[5, 7, 8])) AS errors_previous
-`
-
-type AlertDigestSummaryRow struct {
-	ExecMsCurrent  float64
-	ExecMsPrevious float64
-	ErrorsCurrent  int64
-	ErrorsPrevious int64
-}
-
-func (q *Queries) AlertDigestSummary(ctx context.Context, serverName string) (AlertDigestSummaryRow, error) {
-	row := q.db.QueryRow(ctx, alertDigestSummary, serverName)
-	var i AlertDigestSummaryRow
-	err := row.Scan(
-		&i.ExecMsCurrent,
-		&i.ExecMsPrevious,
-		&i.ErrorsCurrent,
-		&i.ErrorsPrevious,
-	)
-	return i, err
-}
-
-const alertDigestTopStatements = `-- name: AlertDigestTopStatements :many
-SELECT s.query_full AS query,
-       sum(d.total_exec_time)::double precision AS total_exec_time
-FROM statement_deltas d
-JOIN statements s ON s.id = d.statement_id
-WHERE s.server_name = $1
-  AND d.collected_at >= now() - interval '7 days'
-GROUP BY s.query_full
-ORDER BY total_exec_time DESC
-LIMIT 5
-`
-
-type AlertDigestTopStatementsRow struct {
-	Query         string
-	TotalExecTime float64
-}
-
-func (q *Queries) AlertDigestTopStatements(ctx context.Context, serverName string) ([]AlertDigestTopStatementsRow, error) {
-	rows, err := q.db.Query(ctx, alertDigestTopStatements, serverName)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []AlertDigestTopStatementsRow
-	for rows.Next() {
-		var i AlertDigestTopStatementsRow
-		if err := rows.Scan(&i.Query, &i.TotalExecTime); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const countCollectorTokensForServer = `-- name: CountCollectorTokensForServer :one
 SELECT count(*) AS total FROM collector_tokens WHERE server_name = $1
 `
@@ -100,6 +20,45 @@ func (q *Queries) CountCollectorTokensForServer(ctx context.Context, serverName 
 	var total int64
 	err := row.Scan(&total)
 	return total, err
+}
+
+const countRecentAlertFires = `-- name: CountRecentAlertFires :many
+SELECT server_name, alert_key, count(*) AS fires
+FROM alert_fires
+WHERE fired_at >= now() - $1::interval
+  AND ($2::text[] IS NULL OR server_name = ANY($2::text[]))
+GROUP BY server_name, alert_key
+`
+
+type CountRecentAlertFiresParams struct {
+	HistoryWindow  pgtype.Interval
+	AllowedServers []string
+}
+
+type CountRecentAlertFiresRow struct {
+	ServerName string
+	AlertKey   string
+	Fires      int64
+}
+
+func (q *Queries) CountRecentAlertFires(ctx context.Context, arg CountRecentAlertFiresParams) ([]CountRecentAlertFiresRow, error) {
+	rows, err := q.db.Query(ctx, countRecentAlertFires, arg.HistoryWindow, arg.AllowedServers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountRecentAlertFiresRow
+	for rows.Next() {
+		var i CountRecentAlertFiresRow
+		if err := rows.Scan(&i.ServerName, &i.AlertKey, &i.Fires); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const countUsers = `-- name: CountUsers :one
@@ -202,6 +161,9 @@ WITH cleared_settings AS (
 ),
 cleared_toggles AS (
     DELETE FROM alert_toggles WHERE alert_toggles.server_name = $1
+),
+cleared_fires AS (
+    DELETE FROM alert_fires WHERE alert_fires.server_name = $1
 )
 DELETE FROM alert_notifications WHERE alert_notifications.server_name = $1
 `
@@ -694,38 +656,6 @@ func (q *Queries) ListCollectorTokens(ctx context.Context) ([]ListCollectorToken
 	return items, nil
 }
 
-const listExistingStatementQueryIDs = `-- name: ListExistingStatementQueryIDs :many
-SELECT DISTINCT query_id
-FROM statements
-WHERE server_name = $1
-  AND query_id = ANY($2::bigint[])
-`
-
-type ListExistingStatementQueryIDsParams struct {
-	ServerName string
-	QueryIds   []int64
-}
-
-func (q *Queries) ListExistingStatementQueryIDs(ctx context.Context, arg ListExistingStatementQueryIDsParams) ([]int64, error) {
-	rows, err := q.db.Query(ctx, listExistingStatementQueryIDs, arg.ServerName, arg.QueryIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []int64
-	for rows.Next() {
-		var query_id int64
-		if err := rows.Scan(&query_id); err != nil {
-			return nil, err
-		}
-		items = append(items, query_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listLockWaits = `-- name: ListLockWaits :many
 WITH blocked AS (
     SELECT t.server_name, t.database_name,
@@ -1089,7 +1019,7 @@ func (q *Queries) ListMonitoredServers(ctx context.Context, allowedServers []str
 	return items, nil
 }
 
-const listServersWithDigestEnabled = `-- name: ListServersWithDigestEnabled :many
+const listServersWithAlertEnabled = `-- name: ListServersWithAlertEnabled :many
 SELECT s.server_name
 FROM alert_settings s
 LEFT JOIN alert_toggles t
@@ -1099,8 +1029,8 @@ WHERE s.slack_webhook_url <> ''
 ORDER BY s.server_name
 `
 
-func (q *Queries) ListServersWithDigestEnabled(ctx context.Context, alertKey string) ([]string, error) {
-	rows, err := q.db.Query(ctx, listServersWithDigestEnabled, alertKey)
+func (q *Queries) ListServersWithAlertEnabled(ctx context.Context, alertKey string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listServersWithAlertEnabled, alertKey)
 	if err != nil {
 		return nil, err
 	}
@@ -1112,6 +1042,90 @@ func (q *Queries) ListServersWithDigestEnabled(ctx context.Context, alertKey str
 			return nil, err
 		}
 		items = append(items, server_name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSlowStatements = `-- name: ListSlowStatements :many
+WITH slow AS (
+    SELECT d.statement_id,
+           sum(d.calls)::bigint AS calls,
+           (sum(d.total_exec_time) / NULLIF(sum(d.calls), 0))::double precision AS avg_ms,
+           sum(d.total_exec_time) AS total_ms
+    FROM statement_deltas d
+    JOIN statements s ON s.id = d.statement_id
+    WHERE s.server_name = $2
+      AND d.collected_at >= now() - $1::interval
+    GROUP BY d.statement_id
+    HAVING sum(d.calls) >= $3
+       AND sum(d.total_exec_time) / NULLIF(sum(d.calls), 0) >= $4
+    ORDER BY sum(d.total_exec_time) DESC
+    LIMIT $5
+)
+SELECT slow.statement_id AS id,
+       slow.calls,
+       slow.avg_ms,
+       coalesce(st.tags, '{}'::jsonb) AS tags
+FROM slow
+LEFT JOIN LATERAL (
+    SELECT jsonb_object_agg(per_key.key, per_key.value) AS tags
+    FROM (
+        SELECT kv.key, min(kv.value) AS value
+        FROM statement_samples qs
+        CROSS JOIN LATERAL jsonb_each_text(qs.tags) AS kv(key, value)
+        WHERE qs.statement_id = slow.statement_id
+          AND qs.tags IS NOT NULL
+          AND kv.key NOT LIKE '%\_id'
+          AND qs.collected_at >= now() - $1::interval
+        GROUP BY kv.key
+        HAVING count(DISTINCT kv.value) = 1
+    ) per_key
+) st ON true
+ORDER BY slow.total_ms DESC
+`
+
+type ListSlowStatementsParams struct {
+	Window     pgtype.Interval
+	ServerName string
+	MinCalls   int64
+	MinAvgMs   float64
+	MaxRows    int32
+}
+
+type ListSlowStatementsRow struct {
+	ID    int64
+	Calls int64
+	AvgMs float64
+	Tags  []byte
+}
+
+func (q *Queries) ListSlowStatements(ctx context.Context, arg ListSlowStatementsParams) ([]ListSlowStatementsRow, error) {
+	rows, err := q.db.Query(ctx, listSlowStatements,
+		arg.Window,
+		arg.ServerName,
+		arg.MinCalls,
+		arg.MinAvgMs,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSlowStatementsRow
+	for rows.Next() {
+		var i ListSlowStatementsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Calls,
+			&i.AvgMs,
+			&i.Tags,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -2063,6 +2077,15 @@ func (q *Queries) LogEventHistogram(ctx context.Context, arg LogEventHistogramPa
 	return items, nil
 }
 
+const pruneAlertFires = `-- name: PruneAlertFires :exec
+DELETE FROM alert_fires WHERE fired_at < now() - $1::interval
+`
+
+func (q *Queries) PruneAlertFires(ctx context.Context, historyWindow pgtype.Interval) error {
+	_, err := q.db.Exec(ctx, pruneAlertFires, historyWindow)
+	return err
+}
+
 const removeServerFromUsers = `-- name: RemoveServerFromUsers :exec
 UPDATE users SET allowed_servers = array_remove(allowed_servers, $1::text)
 `
@@ -2397,12 +2420,20 @@ func (q *Queries) TransactionAgeSeries(ctx context.Context, arg TransactionAgeSe
 }
 
 const tryClaimAlertNotification = `-- name: TryClaimAlertNotification :one
-INSERT INTO alert_notifications (server_name, alert_key, last_fired_at)
-VALUES ($1, $2, now())
-ON CONFLICT (server_name, alert_key)
-DO UPDATE SET last_fired_at = now()
-WHERE alert_notifications.last_fired_at < now() - $3::interval
-RETURNING last_fired_at
+WITH claimed AS (
+    INSERT INTO alert_notifications (server_name, alert_key, last_fired_at)
+    VALUES ($1, $2, now())
+    ON CONFLICT (server_name, alert_key)
+    DO UPDATE SET last_fired_at = now()
+    WHERE alert_notifications.last_fired_at < now() - $3::interval
+    RETURNING last_fired_at
+),
+recorded AS (
+    INSERT INTO alert_fires (server_name, alert_key, fired_at)
+    SELECT $1, $2, claimed.last_fired_at
+    FROM claimed
+)
+SELECT last_fired_at FROM claimed
 `
 
 type TryClaimAlertNotificationParams struct {
@@ -2498,4 +2529,142 @@ type UpsertCollectorHealthParams struct {
 func (q *Queries) UpsertCollectorHealth(ctx context.Context, arg UpsertCollectorHealthParams) error {
 	_, err := q.db.Exec(ctx, upsertCollectorHealth, arg.ServerName, arg.CollectedAt, arg.Databases)
 	return err
+}
+
+const weeklyReportSummary = `-- name: WeeklyReportSummary :one
+WITH binned AS (
+    SELECT CASE WHEN minute_start >= now() - interval '7 days' THEN 'current' ELSE 'previous' END AS period,
+           unnest(bins) AS bin,
+           unnest(weights) AS weight
+    FROM statement_latency_bins
+    WHERE server_name = $1
+      AND minute_start >= now() - interval '14 days'
+),
+per_bin AS (
+    SELECT period, bin, sum(weight)::bigint AS weight
+    FROM binned
+    GROUP BY period, bin
+),
+running AS (
+    SELECT period, bin,
+           sum(weight) OVER (PARTITION BY period ORDER BY bin) AS below,
+           sum(weight) OVER (PARTITION BY period) AS total
+    FROM per_bin
+),
+p99 AS (
+    SELECT period, exp((min(bin) + 0.5) * ln(1.01)) AS ms
+    FROM running
+    WHERE below >= 0.99 * total
+    GROUP BY period
+)
+SELECT
+    coalesce((SELECT ms FROM p99 WHERE period = 'current'), 0)::double precision AS p99_current,
+    coalesce((SELECT ms FROM p99 WHERE period = 'previous'), 0)::double precision AS p99_previous,
+    (SELECT coalesce(sum(d.calls), 0)::bigint
+       FROM statement_deltas d JOIN statements s ON s.id = d.statement_id
+       WHERE s.server_name = $1
+         AND d.collected_at >= now() - interval '7 days') AS calls_current,
+    (SELECT coalesce(sum(d.calls), 0)::bigint
+       FROM statement_deltas d JOIN statements s ON s.id = d.statement_id
+       WHERE s.server_name = $1
+         AND d.collected_at >= now() - interval '14 days'
+         AND d.collected_at <  now() - interval '7 days') AS calls_previous,
+    (SELECT coalesce(count(*), 0)::bigint
+       FROM log_events
+       WHERE server_name = $1
+         AND collected_at >= now() - interval '7 days'
+         AND log_level = ANY(ARRAY[5, 7, 8])) AS errors_current,
+    (SELECT coalesce(count(*), 0)::bigint
+       FROM log_events
+       WHERE server_name = $1
+         AND collected_at >= now() - interval '14 days'
+         AND collected_at <  now() - interval '7 days'
+         AND log_level = ANY(ARRAY[5, 7, 8])) AS errors_previous
+`
+
+type WeeklyReportSummaryRow struct {
+	P99Current     float64
+	P99Previous    float64
+	CallsCurrent   int64
+	CallsPrevious  int64
+	ErrorsCurrent  int64
+	ErrorsPrevious int64
+}
+
+func (q *Queries) WeeklyReportSummary(ctx context.Context, serverName string) (WeeklyReportSummaryRow, error) {
+	row := q.db.QueryRow(ctx, weeklyReportSummary, serverName)
+	var i WeeklyReportSummaryRow
+	err := row.Scan(
+		&i.P99Current,
+		&i.P99Previous,
+		&i.CallsCurrent,
+		&i.CallsPrevious,
+		&i.ErrorsCurrent,
+		&i.ErrorsPrevious,
+	)
+	return i, err
+}
+
+const weeklyReportTopStatements = `-- name: WeeklyReportTopStatements :many
+WITH busiest AS (
+    SELECT d.statement_id,
+           sum(d.total_exec_time)::double precision AS total_ms
+    FROM statement_deltas d
+    JOIN statements s ON s.id = d.statement_id
+    WHERE s.server_name = $1
+      AND d.collected_at >= now() - interval '7 days'
+    GROUP BY d.statement_id
+    ORDER BY total_ms DESC
+    LIMIT $2
+)
+SELECT busiest.statement_id AS id,
+       busiest.total_ms,
+       coalesce(st.tags, '{}'::jsonb) AS tags
+FROM busiest
+LEFT JOIN LATERAL (
+    SELECT jsonb_object_agg(per_key.key, per_key.value) AS tags
+    FROM (
+        SELECT kv.key, min(kv.value) AS value
+        FROM statement_samples qs
+        CROSS JOIN LATERAL jsonb_each_text(qs.tags) AS kv(key, value)
+        WHERE qs.statement_id = busiest.statement_id
+          AND qs.tags IS NOT NULL
+          AND kv.key NOT LIKE '%\_id'
+          AND qs.collected_at >= now() - interval '7 days'
+        GROUP BY kv.key
+        HAVING count(DISTINCT kv.value) = 1
+    ) per_key
+) st ON true
+ORDER BY busiest.total_ms DESC
+`
+
+type WeeklyReportTopStatementsParams struct {
+	ServerName string
+	MaxRows    int32
+}
+
+type WeeklyReportTopStatementsRow struct {
+	ID      int64
+	TotalMs float64
+	Tags    []byte
+}
+
+func (q *Queries) WeeklyReportTopStatements(ctx context.Context, arg WeeklyReportTopStatementsParams) ([]WeeklyReportTopStatementsRow, error) {
+	rows, err := q.db.Query(ctx, weeklyReportTopStatements, arg.ServerName, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WeeklyReportTopStatementsRow
+	for rows.Next() {
+		var i WeeklyReportTopStatementsRow
+		if err := rows.Scan(&i.ID, &i.TotalMs, &i.Tags); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

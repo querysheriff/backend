@@ -8,6 +8,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AlertFire struct {
+	ServerName string
+	AlertKey   string
+	FiredAt    pgtype.Timestamptz
+}
+
 type AlertNotification struct {
 	ServerName  string
 	AlertKey    string

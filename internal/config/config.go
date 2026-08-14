@@ -47,6 +47,8 @@ func LoadAPI() (APIConfig, error) {
 type JobsConfig struct {
 	DatabaseURL   string
 	RetentionDays int
+	// Where the dashboard is reachable from a browser; reports link to it when set.
+	DashboardURL string
 }
 
 func LoadJobs() (JobsConfig, error) {
@@ -63,6 +65,7 @@ func LoadJobs() (JobsConfig, error) {
 	return JobsConfig{
 		DatabaseURL:   databaseURL,
 		RetentionDays: retentionDays,
+		DashboardURL:  strings.TrimSuffix(strings.TrimSpace(os.Getenv("DASHBOARD_URL")), "/"),
 	}, nil
 }
 

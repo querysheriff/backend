@@ -62,7 +62,7 @@ func (n *Notifier) deliver(def Def, serverName, text string) {
 		return // suppressed by the cooldown window
 	}
 
-	if err = postToSlack(ctx, n.client, webhookURL, def, text); err != nil {
+	if err = postToSlack(ctx, n.client, webhookURL, def, serverName, text); err != nil {
 		n.logger.ErrorContext(ctx, "alert delivery failed", "server", serverName, "alert", def.Key, "error", err)
 	}
 }

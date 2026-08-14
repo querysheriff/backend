@@ -55,7 +55,7 @@ func run(logger *slog.Logger) error {
 
 	jobs := []func(context.Context){
 		func(c context.Context) { retention.Run(c, pool, cfg.RetentionDays, logger) },
-		func(c context.Context) { alerts.RunScheduler(c, queries, notifier, logger) },
+		func(c context.Context) { alerts.RunScheduler(c, queries, notifier, cfg.DashboardURL, logger) },
 		func(c context.Context) { rollup.Run(c, pool, logger) },
 	}
 

@@ -21,10 +21,16 @@ const (
 	colorInfo     = "#6C8392"
 )
 
+const (
+	severityPrefix = "🔥 "
+	reportPrefix   = "📊 "
+)
+
 type slackAttachment struct {
-	Color string `json:"color"`
-	Title string `json:"title"`
-	Text  string `json:"text"`
+	Color  string `json:"color"`
+	Title  string `json:"title"`
+	Text   string `json:"text"`
+	Footer string `json:"footer"`
 }
 
 type slackPayload struct {
@@ -44,11 +50,21 @@ func slackColor(level Level) string {
 	}
 }
 
-func postToSlack(ctx context.Context, client *http.Client, webhookURL string, def Def, text string) error {
+func slackTitle(def Def) string {
+	if def.Level == LevelWarning || def.Level == LevelCritical {
+		return severityPrefix + def.Title
+	}
+
+	return reportPrefix + def.Title
+}
+
+// postToSlack names the server in the footer: one webhook can serve several of them.
+func postToSlack(ctx context.Context, client *http.Client, webhookURL string, def Def, serverName, text string) error {
 	body, err := json.Marshal(slackPayload{Attachments: []slackAttachment{{
-		Color: slackColor(def.Level),
-		Title: def.Title,
-		Text:  text,
+		Color:  slackColor(def.Level),
+		Title:  slackTitle(def),
+		Text:   text,
+		Footer: serverName,
 	}}})
 	if err != nil {
 		return err

@@ -217,9 +217,9 @@ type AlertSetting struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	Level         AlertLevel             `protobuf:"varint,4,opt,name=level,proto3,enum=querysheriff.v1.AlertLevel" json:"level,omitempty"`
-	Enabled       bool                   `protobuf:"varint,5,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	Level         AlertLevel             `protobuf:"varint,3,opt,name=level,proto3,enum=querysheriff.v1.AlertLevel" json:"level,omitempty"`
+	Enabled       bool                   `protobuf:"varint,4,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	FiresLastWeek int64                  `protobuf:"varint,5,opt,name=fires_last_week,json=firesLastWeek,proto3" json:"fires_last_week,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -268,13 +268,6 @@ func (x *AlertSetting) GetTitle() string {
 	return ""
 }
 
-func (x *AlertSetting) GetDescription() string {
-	if x != nil {
-		return x.Description
-	}
-	return ""
-}
-
 func (x *AlertSetting) GetLevel() AlertLevel {
 	if x != nil {
 		return x.Level
@@ -287,6 +280,13 @@ func (x *AlertSetting) GetEnabled() bool {
 		return x.Enabled
 	}
 	return false
+}
+
+func (x *AlertSetting) GetFiresLastWeek() int64 {
+	if x != nil {
+		return x.FiresLastWeek
+	}
+	return 0
 }
 
 type UpdateAlertSettingsRequest struct {
@@ -449,13 +449,13 @@ const file_querysheriff_v1_alert_proto_rawDesc = "" +
 	"\vserver_name\x18\x01 \x01(\tR\n" +
 	"serverName\x12*\n" +
 	"\x11slack_webhook_url\x18\x02 \x01(\tR\x0fslackWebhookUrl\x125\n" +
-	"\x06alerts\x18\x03 \x03(\v2\x1d.querysheriff.v1.AlertSettingR\x06alerts\"\xa5\x01\n" +
+	"\x06alerts\x18\x03 \x03(\v2\x1d.querysheriff.v1.AlertSettingR\x06alerts\"\xab\x01\n" +
 	"\fAlertSetting\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
-	"\vdescription\x18\x03 \x01(\tR\vdescription\x121\n" +
-	"\x05level\x18\x04 \x01(\x0e2\x1b.querysheriff.v1.AlertLevelR\x05level\x12\x18\n" +
-	"\aenabled\x18\x05 \x01(\bR\aenabled\"\xa1\x01\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x121\n" +
+	"\x05level\x18\x03 \x01(\x0e2\x1b.querysheriff.v1.AlertLevelR\x05level\x12\x18\n" +
+	"\aenabled\x18\x04 \x01(\bR\aenabled\x12&\n" +
+	"\x0ffires_last_week\x18\x05 \x01(\x03R\rfiresLastWeek\"\xa1\x01\n" +
 	"\x1aUpdateAlertSettingsRequest\x12\x1f\n" +
 	"\vserver_name\x18\x01 \x01(\tR\n" +
 	"serverName\x12*\n" +

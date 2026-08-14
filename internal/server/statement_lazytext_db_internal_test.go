@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"testing"
 	"time"
@@ -13,7 +12,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
-	"github.com/querysheriff/backend/internal/alerts"
 	"github.com/querysheriff/backend/internal/auth"
 	"github.com/querysheriff/backend/internal/db"
 )
@@ -34,7 +32,7 @@ func TestReportStatementsLazyText(t *testing.T) {
 	t.Cleanup(pool.Close)
 
 	queries := db.New(pool)
-	server := NewStatementServer(queries, alerts.NewNotifier(queries, slog.New(slog.DiscardHandler)))
+	server := NewStatementServer(queries)
 
 	serverName := fmt.Sprintf("lazytext-test-%d", time.Now().UnixNano())
 	t.Cleanup(func() {

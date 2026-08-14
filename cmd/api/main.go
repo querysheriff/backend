@@ -75,7 +75,7 @@ func run(logger *slog.Logger) error {
 	apiMux.Handle(activityPath, activityHandler)
 
 	statementPath, statementHandler := querysheriffv1connect.NewStatementServiceHandler(
-		server.NewStatementServer(queries, notifier),
+		server.NewStatementServer(queries),
 		interceptors,
 	)
 	apiMux.Handle(statementPath, statementHandler)
