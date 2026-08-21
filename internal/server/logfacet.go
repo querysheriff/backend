@@ -11,14 +11,12 @@ import (
 	"github.com/querysheriff/backend/internal/db"
 )
 
-// A text facet can be effectively unbounded — application_name especially, since correlation
-// ids get appended to it ("myapp tx=001IUlJTSH") — so every one is capped. Sorting by count
-// first is what makes the cap harmless: a per-request id occurs once, so it sorts last.
+// application_name can be unbounded (correlation ids get appended), so every facet is capped.
 const maxLogFacetValues = 200
 
-// The order the columns are passed to grouping() in LogEventFacets. GROUPING() returns one bit
-// per argument, set when that column is *not* in the row's grouping set, first argument most
-// significant — so a grouping set's id is the all-ones mask with that column's bit cleared.
+// LogEventFacets passes these to grouping(), which returns a number with one bit per column, set
+// when the row is *not* grouped by that column (first column = highest bit). Each row is matched
+// back to its facet by that number, so this order must not change.
 func logFacetGroupingColumns() []querysheriffv1.LogFacetField {
 	return []querysheriffv1.LogFacetField{
 		querysheriffv1.LogFacetField_LOG_FACET_FIELD_CLASSIFICATION,
@@ -36,7 +34,6 @@ func logFacetGroupingID(index, columns int) int32 {
 	return allSet & ^(int32(1) << (columns - 1 - index))
 }
 
-// The order facets are presented in: what you reach for while debugging first.
 func logFacetOrder() []querysheriffv1.LogFacetField {
 	return []querysheriffv1.LogFacetField{
 		querysheriffv1.LogFacetField_LOG_FACET_FIELD_CATEGORY,
@@ -49,9 +46,6 @@ func logFacetOrder() []querysheriffv1.LogFacetField {
 	}
 }
 
-// ListLogFacets returns, per filterable field, the values present in the window and how often
-// they occur — so the picker offers the event types a server really produced rather than all
-// ninety-eight it could.
 func (s *LogServer) ListLogFacets(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.ListLogFacetsRequest],
@@ -111,8 +105,8 @@ func (s *LogServer) buildLogFacets(rows []db.LogEventFacetsRow) []*querysheriffv
 			continue
 		}
 
-		// Only classification values carry a category. Passing the lookup for every field would
-		// let a database literally named "7" pick up classification 7's category.
+		// Only classifications have a category. Without this, a database literally named "7" would be
+		// given classification 7's category.
 		lookup := map[string]querysheriffv1.LogEvent_LogCategory(nil)
 		if field == querysheriffv1.LogFacetField_LOG_FACET_FIELD_CLASSIFICATION {
 			lookup = classificationCategory
@@ -129,8 +123,6 @@ func (s *LogServer) buildLogFacets(rows []db.LogEventFacetsRow) []*querysheriffv
 	return facets
 }
 
-// categoryFacet lists every category, zero counts included: a dimmed "Lock · 0" answers
-// "where did Lock go?" in a way an absent row cannot.
 func (s *LogServer) categoryFacet(counts map[querysheriffv1.LogEvent_LogCategory]int64) *querysheriffv1.LogFacet {
 	roster := s.categories.all()
 	values := make([]*querysheriffv1.LogFacetValue, 0, len(roster)+1)
@@ -143,8 +135,6 @@ func (s *LogServer) categoryFacet(counts map[querysheriffv1.LogEvent_LogCategory
 		})
 	}
 
-	// Events the collector could not classify have no category, and an unrecognised message can
-	// be the interesting one, so they get a bucket rather than being dropped.
 	if unspecified := counts[querysheriffv1.LogEvent_LOG_CATEGORY_UNSPECIFIED]; unspecified > 0 {
 		values = append(values, &querysheriffv1.LogFacetValue{
 			Value: strconv.Itoa(int(querysheriffv1.LogEvent_LOG_CATEGORY_UNSPECIFIED)),
@@ -182,8 +172,8 @@ func logFacetValueOf(field querysheriffv1.LogFacetField, row db.LogEventFacetsRo
 	return ""
 }
 
-// sortedFacetValues orders by count desc then value asc, so the cap keeps what matters and
-// equal counts stay stable between requests.
+// Sorted by count, then by value, so the 200-value cap keeps the most common ones and the order does
+// not change between requests.
 func sortedFacetValues(
 	counts map[string]int64,
 	classificationCategory map[string]querysheriffv1.LogEvent_LogCategory,

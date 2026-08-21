@@ -14,8 +14,7 @@ import (
 	"github.com/querysheriff/backend/internal/db"
 )
 
-// Each test owns a distinct server_name so the parallel cases cannot clobber each
-// other's fixtures, and so neither touches real collector data.
+// A distinct server_name per test, so parallel cases cannot clobber each other's fixtures.
 func logFacetTestPool(t *testing.T, serverName string) *pgxpool.Pool {
 	t.Helper()
 
@@ -42,10 +41,7 @@ func logFacetTestPool(t *testing.T, serverName string) *pgxpool.Pool {
 	return pool
 }
 
-// The GROUPING SETS query hands back one flat row set covering seven dimensions, and
-// grouping() bits are the only thing distinguishing them. This drives the real SQL and
-// the real assembly code so a drift between the two shows up as mis-filed values rather
-// than as a silent wrong count.
+// One flat row set covering seven dimensions, told apart only by grouping() bits.
 func TestLogEventFacetsRouteEveryDimension(t *testing.T) {
 	t.Parallel()
 
@@ -54,8 +50,6 @@ func TestLogEventFacetsRouteEveryDimension(t *testing.T) {
 	ctx := context.Background()
 	pool := logFacetTestPool(t, serverName)
 
-	// Two deadlocks and one syntax error from an app session, plus a checkpoint from a
-	// background worker, which has no database, user or application at all.
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO log_events (
 		    server_name, collected_at, occurred_at, log_level, classification, message,
@@ -107,22 +101,16 @@ func TestLogEventFacetsRouteEveryDimension(t *testing.T) {
 	assertFacetCount(t, facets, querysheriffv1.LogFacetField_LOG_FACET_FIELD_APPLICATION_NAME, "checkout", 3)
 	assertFacetCount(t, facets, querysheriffv1.LogFacetField_LOG_FACET_FIELD_BACKEND_TYPE, "checkpointer", 1)
 
-	// The background worker's NULL columns must collapse to one "(none)" value, not
-	// vanish — a whole family of events (checkpointer, autovacuum, walwriter) lives there.
 	assertFacetCount(t, facets, querysheriffv1.LogFacetField_LOG_FACET_FIELD_DATABASE, "", 1)
 	assertFacetCount(t, facets, querysheriffv1.LogFacetField_LOG_FACET_FIELD_USERNAME, "", 1)
 
-	// Every family is listed even at zero, so the picker can dim "Standby · 0" rather
-	// than leaving the user wondering where it went.
 	standby := strconv.Itoa(int(querysheriffv1.LogEvent_LOG_CATEGORY_STANDBY))
 	if _, ok := facets[querysheriffv1.LogFacetField_LOG_FACET_FIELD_CATEGORY][standby]; !ok {
 		t.Error("CATEGORY facet should list every family, including ones with no events")
 	}
 }
 
-// The slow-query rows are the whole point of the LOGS table, and ingest deliberately
-// blanks their message and statement because the sample holds the same bytes. If the
-// hydration query stops matching them the table silently shows empty rows again.
+// Ingest blanks a slow query's message and statement, so a stale hydration query shows empty rows.
 func TestListLogStatementSamplesHydratesSlowQueryRows(t *testing.T) {
 	t.Parallel()
 

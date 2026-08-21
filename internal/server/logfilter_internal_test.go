@@ -6,9 +6,7 @@ import (
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 )
 
-// Sorting by Severity has to surface the worst events, which the enum's own order does not:
-// it follows log_min_messages, where LOG outranks ERROR. Pin the reading order instead, and
-// keep it in step with LEVEL_ROWS in the frontend.
+// The enum's own order follows log_min_messages, where LOG outranks ERROR. Mirrors LEVEL_ROWS.
 func TestLogSeverityRanksOrderBySeriousness(t *testing.T) {
 	t.Parallel()
 
@@ -18,7 +16,6 @@ func TestLogSeverityRanksOrderBySeriousness(t *testing.T) {
 		t.Fatalf("ranked %d levels, want %d", len(ranks), len(querysheriffv1.LogEvent_LogLevel_name))
 	}
 
-	// Most serious first, so every level must rank strictly above the next.
 	worstFirst := []querysheriffv1.LogEvent_LogLevel{
 		querysheriffv1.LogEvent_LOG_LEVEL_PANIC,
 		querysheriffv1.LogEvent_LOG_LEVEL_FATAL,

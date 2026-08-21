@@ -6,8 +6,7 @@ import (
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 )
 
-// A classification with no category is invisible to the LOGS category filter, so
-// adding one to the proto without adding it here has to fail loudly.
+// A classification with no category is invisible to the LOGS filter, so this has to fail loudly.
 func TestLogCategoriesCoverEveryClassification(t *testing.T) {
 	t.Parallel()
 
@@ -31,8 +30,6 @@ func TestLogCategoriesCoverEveryClassification(t *testing.T) {
 	}
 }
 
-// Each classification belongs to exactly one category, so the category filter
-// cannot double-count an event.
 func TestLogCategoryGroupsDoNotOverlap(t *testing.T) {
 	t.Parallel()
 
@@ -51,48 +48,39 @@ func TestLogCategoryGroupsDoNotOverlap(t *testing.T) {
 	}
 }
 
-// The membership was transcribed from pganalyze's Log Insights docs, so pin the size of
-// each category against the code range it mirrors. A classification moved between
-// categories still passes the coverage tests above; this one catches it.
-func TestLogCategorySizesMatchPganalyze(t *testing.T) {
+// Pin each category's size: a classification moved between them still passes the tests above.
+func TestLogCategorySizes(t *testing.T) {
 	t.Parallel()
 
 	want := []struct {
 		category querysheriffv1.LogEvent_LogCategory
-		codes    string
 		size     int
 	}{
-		{querysheriffv1.LogEvent_LOG_CATEGORY_SERVER, "S1-S11", 11},
-		// C20-C33 is fourteen codes; ours splits Postgres 14's "connection authenticated"
-		// out of C21, so fifteen.
-		{querysheriffv1.LogEvent_LOG_CATEGORY_CONNECTION, "C20-C33", 15},
-		{querysheriffv1.LogEvent_LOG_CATEGORY_WAL_CHECKPOINT, "W40-W46, W50-W53", 11},
-		{querysheriffv1.LogEvent_LOG_CATEGORY_AUTOVACUUM, "A60-A68", 9},
-		{querysheriffv1.LogEvent_LOG_CATEGORY_LOCK, "L70-L74", 5},
-		{querysheriffv1.LogEvent_LOG_CATEGORY_STATEMENT, "T80-T84", 5},
-		{querysheriffv1.LogEvent_LOG_CATEGORY_STANDBY, "B90-B95", 6},
-		{querysheriffv1.LogEvent_LOG_CATEGORY_CONSTRAINT_VIOLATION, "V100-V104", 5},
-		{querysheriffv1.LogEvent_LOG_CATEGORY_APPLICATION_ERROR, "U110-U140", 31},
+		{querysheriffv1.LogEvent_LOG_CATEGORY_SERVER, 11},
+		{querysheriffv1.LogEvent_LOG_CATEGORY_CONNECTION, 15},
+		{querysheriffv1.LogEvent_LOG_CATEGORY_WAL_CHECKPOINT, 11},
+		{querysheriffv1.LogEvent_LOG_CATEGORY_AUTOVACUUM, 9},
+		{querysheriffv1.LogEvent_LOG_CATEGORY_LOCK, 5},
+		{querysheriffv1.LogEvent_LOG_CATEGORY_STATEMENT, 5},
+		{querysheriffv1.LogEvent_LOG_CATEGORY_STANDBY, 6},
+		{querysheriffv1.LogEvent_LOG_CATEGORY_CONSTRAINT_VIOLATION, 5},
+		{querysheriffv1.LogEvent_LOG_CATEGORY_APPLICATION_ERROR, 31},
 	}
 
 	categories := newLogCategories()
 
 	if len(categories.all()) != len(want) {
-		t.Fatalf("got %d categories, want pganalyze's %d", len(categories.all()), len(want))
+		t.Fatalf("got %d categories, want %d", len(categories.all()), len(want))
 	}
 
 	for _, expected := range want {
 		if got := len(categories.byCategory[expected.category]); got != expected.size {
-			t.Errorf("%s (%s) has %d classifications, want %d",
-				expected.category, expected.codes, got, expected.size)
+			t.Errorf("%s has %d classifications, want %d", expected.category, got, expected.size)
 		}
 	}
 }
 
-// A category that expands to nothing is the worst possible failure here: `selected` returns
-// nil, the queries read nil as "every classification", and the filter silently shows
-// everything instead of narrowing. Uncategorized did exactly that, because it is not one of
-// the declared groups. Cover every category the picker can offer, not just that one.
+// A category that expands to nothing makes `selected` return nil, which means "every classification".
 func TestEveryCategorySelectsSomething(t *testing.T) {
 	t.Parallel()
 
@@ -110,7 +98,6 @@ func TestEveryCategorySelectsSomething(t *testing.T) {
 	}
 }
 
-// Uncategorized means exactly the one classification with no category, not "anything".
 func TestUncategorizedSelectsOnlyTheUnclassified(t *testing.T) {
 	t.Parallel()
 

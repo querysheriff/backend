@@ -11,19 +11,17 @@ import (
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 )
 
-// latencyBinBase is the histogram's bin width: each bin covers 1% more latency than the one below it.
+// Each bin covers 1% more latency than the one below it.
 const latencyBinBase = 1.01
 
 const binMidpointOffset = 0.5
 
-// latencyMinutes is one minute's histogram.
 type latencyMinute struct {
 	start   time.Time
 	bins    []int16
 	weights []int32
 }
 
-// latencyPercentiles folds every minute into its display bucket.
 func latencyPercentiles(
 	bounds seriesBounds,
 	minutes []latencyMinute,

@@ -41,9 +41,8 @@ func (s *ActivityServer) QueryLockWaits(
 		ToTime:         timestamptzFromProto(to),
 		SortKey:        lockWaitSortKey(msg.GetSortColumn()),
 		SortDesc:       msg.GetSortDesc(),
-		// One extra row answers "is there another page" without a second count query.
-		RowLimit:   limit + 1,
-		OffsetRows: resolveOffset(msg.GetOffset()),
+		RowLimit:       limit + 1,
+		OffsetRows:     resolveOffset(msg.GetOffset()),
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)

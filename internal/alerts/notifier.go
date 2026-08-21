@@ -67,7 +67,6 @@ func (n *Notifier) deliver(def Def, serverName, text string) {
 	}
 }
 
-// enabled reports whether the alert is on for the server.
 func (n *Notifier) enabled(ctx context.Context, serverName, alertKey string) bool {
 	on, err := n.queries.GetAlertEnabled(ctx, db.GetAlertEnabledParams{ServerName: serverName, AlertKey: alertKey})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -82,8 +81,7 @@ func (n *Notifier) enabled(ctx context.Context, serverName, alertKey string) boo
 	return on
 }
 
-// claim atomically reserves the right to fire, returning false when the previous
-// notification is still within the cooldown window.
+// Atomically reserves the right to fire; false while the last notification is still in cooldown.
 func (n *Notifier) claim(ctx context.Context, serverName string, def Def) bool {
 	_, err := n.queries.TryClaimAlertNotification(ctx, db.TryClaimAlertNotificationParams{
 		ServerName: serverName,

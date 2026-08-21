@@ -100,7 +100,7 @@ func (s *ActivityServer) evaluateAlerts(
 	collectedAt time.Time,
 	snapshots []*querysheriffv1.ActivitySnapshot,
 ) {
-	// The lock fields sit on the waiting snapshot, so this fires from the victim.
+	// Postgres reports the wait on the blocked session's row, so that is the snapshot to measure.
 	blocked, blockedFor := longestOver(snapshots, blockingThreshold,
 		func(snap *querysheriffv1.ActivitySnapshot) (time.Duration, bool) {
 			if snap.GetBlockedByPid() == 0 || snap.GetLockWaitStart() == nil {
@@ -119,7 +119,6 @@ func (s *ActivityServer) evaluateAlerts(
 			return collectedAt.Sub(snap.GetQueryStart().AsTime()), true
 		})
 
-	// No state filter: an idle transaction holds its snapshot and locks just as long.
 	open, openFor := longestOver(snapshots, openTxnThreshold,
 		func(snap *querysheriffv1.ActivitySnapshot) (time.Duration, bool) {
 			return collectedAt.Sub(snap.GetXactStart().AsTime()), true
@@ -136,8 +135,6 @@ func (s *ActivityServer) evaluateAlerts(
 	}
 }
 
-// longestOver returns the worst case in the batch: the snapshot whose measured
-// duration is the largest of those at or past threshold.
 func longestOver(
 	snapshots []*querysheriffv1.ActivitySnapshot,
 	threshold time.Duration,
@@ -156,7 +153,6 @@ func longestOver(
 	return worst, longest
 }
 
-// inDatabase is empty for the backends datname is null for.
 func inDatabase(name string) string {
 	if name == "" {
 		return ""
@@ -181,8 +177,7 @@ func sessionText(
 	)
 }
 
-// blockedQueryText names both sides of the wait. The blocker can be missing from
-// the batch: a session holding a lock while idle outside a transaction is never sampled.
+// The blocker can be missing: a session holding a lock while idle outside a transaction is never sampled.
 func blockedQueryText(
 	blocked *querysheriffv1.ActivitySnapshot,
 	waited time.Duration,
@@ -310,8 +305,6 @@ func transactionSortKey(col querysheriffv1.TransactionSortColumn) string {
 	return "open"
 }
 
-// activitySeriesScope is the authorized scope and bucket grid shared by the
-// bucketed activity charts, which differ only in what they sum.
 type activitySeriesScope struct {
 	bounds         seriesBounds
 	serverName     pgtype.Text
@@ -338,7 +331,6 @@ func (s *ActivityServer) resolveSeriesScope(
 		return activitySeriesScope{}, err
 	}
 
-	// The same grid the query charts use, so a spike lines up across sections.
 	return activitySeriesScope{
 		bounds:         newSeriesBounds(from.AsTime(), to.AsTime(), time.Now()),
 		serverName:     textFilter(serverName),
@@ -371,8 +363,6 @@ func (a activitySeriesScope) transactionAgeParams() db.TransactionAgeSeriesParam
 	}
 }
 
-// QueryTransactionAgeSeries returns how old the oldest open transaction was in
-// each bucket.
 func (s *ActivityServer) QueryTransactionAgeSeries(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.QueryTransactionAgeSeriesRequest],
@@ -395,14 +385,13 @@ func (s *ActivityServer) QueryTransactionAgeSeries(
 	}), nil
 }
 
-// transactionAgePoints turns per-end-bucket rows into one point per bucket.
 func transactionAgePoints(ends []time.Time, rows []db.TransactionAgeSeriesRow) []*querysheriffv1.TransactionAgePoint {
 	endedAge := make(map[int64]float64, len(rows))
 	for _, r := range rows {
 		endedAge[r.BucketEnd.Time.UnixNano()] = r.EndedAge
 	}
 
-	// Rows arrive oldest bucket first; they are folded in from the newest back.
+	// The rows come back oldest bucket first, but the loop below walks them newest to oldest.
 	next := len(rows) - 1
 	var oldestOpen time.Time
 

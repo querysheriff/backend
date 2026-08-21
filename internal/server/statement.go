@@ -520,8 +520,7 @@ func (s *StatementServer) GetStatementText(
 }
 
 type statementFilter struct {
-	text pgtype.Text
-	// statementIDs value is resolved based on the supplied tag filters.
+	text         pgtype.Text
 	statementIDs []int64
 }
 
@@ -873,10 +872,9 @@ func metricBucket(d time.Duration) time.Duration {
 
 type seriesBounds struct {
 	bucket time.Duration
-	// anchor is the grid origin and the inclusive end of the scanned range.
+	// The newest instant in the range: the bucket grid is measured back from here.
 	anchor time.Time
-	// rangeStart is exclusive, and sits one bucket below the first bucket end so that
-	// leading bucket still aggregates a full window.
+	// One bucket before the first bucket ends, so that bucket still sums a full window. Exclusive.
 	rangeStart time.Time
 }
 

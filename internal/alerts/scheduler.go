@@ -27,7 +27,6 @@ const (
 	weeklyTopRows        = 3
 )
 
-// RunScheduler drives the time-based alerts that no collector report can trigger.
 func RunScheduler(
 	ctx context.Context,
 	queries *db.Queries,
@@ -92,7 +91,6 @@ func evalReports(
 	}
 }
 
-// sendSlowQueryReports stays quiet for a server that had nothing slow to report.
 func sendSlowQueryReports(
 	ctx context.Context,
 	queries *db.Queries,
@@ -205,8 +203,6 @@ func weeklyReportText(ctx context.Context, queries *db.Queries, server, dashboar
 	return b.String(), nil
 }
 
-// writeStatement adds one bulleted statement, with whatever tags it carries and a
-// link to its page.
 func writeStatement(b *strings.Builder, headline string, tags []byte, statementID int64, dashboardURL string) {
 	fmt.Fprintf(b, "\n• *%s*", headline)
 
@@ -233,7 +229,6 @@ func formatTags(raw []byte) string {
 	return strings.Join(pairs, ", ")
 }
 
-// pruneFireHistory drops fired notifications older than the window the counts cover.
 func pruneFireHistory(ctx context.Context, queries *db.Queries, logger *slog.Logger) {
 	if err := queries.PruneAlertFires(ctx, intervalFromDuration(FireHistoryWindow)); err != nil {
 		logger.ErrorContext(ctx, "alert fire prune failed", "error", err)

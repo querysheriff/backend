@@ -6,17 +6,11 @@ import (
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 )
 
-// The ids the LogEventFacets rows are routed by. Verified against Postgres by running
-// the query's GROUPING SETS and reading back the distinct grouping() values, so if the
-// derivation or the column order drifts from the SQL, this fails rather than silently
-// filing every value under the wrong facet.
+// Read back from Postgres: if the derivation or the column order drifts, values get filed wrong.
 func TestLogFacetGroupingIDsMatchPostgres(t *testing.T) {
 	t.Parallel()
 
-	// Kept positional rather than keyed by the enum: CATEGORY is synthesized from the
-	// classification counts and is not one of the query's grouping columns. The ids depend on
-	// how many columns grouping() takes, so dropping one shifts all of them — these are the
-	// six-column values, read back from Postgres.
+	// Listed in column order, not by enum: the ids change if grouping() gets more or fewer columns.
 	want := []struct {
 		field querysheriffv1.LogFacetField
 		id    int32
@@ -47,8 +41,6 @@ func TestLogFacetGroupingIDsMatchPostgres(t *testing.T) {
 	}
 }
 
-// Every field the picker offers has to be filled in, or that facet silently never
-// appears in the response.
 func TestLogFacetOrderCoversEveryField(t *testing.T) {
 	t.Parallel()
 

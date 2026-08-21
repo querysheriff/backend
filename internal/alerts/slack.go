@@ -58,7 +58,6 @@ func slackTitle(def Def) string {
 	return reportPrefix + def.Title
 }
 
-// postToSlack names the server in the footer: one webhook can serve several of them.
 func postToSlack(ctx context.Context, client *http.Client, webhookURL string, def Def, serverName, text string) error {
 	body, err := json.Marshal(slackPayload{Attachments: []slackAttachment{{
 		Color:  slackColor(def.Level),

@@ -13,8 +13,7 @@ import (
 	"github.com/querysheriff/backend/internal/db"
 )
 
-// v11PercentileSeries is the generated SQL from v0.0.11 (966f629), copied verbatim.
-// Params, in order: bucket, until, since, utility_kind, database_name, statement_id, text_filter, statement_ids, server_name, allowed_servers.
+// The generated SQL from v0.0.11 (966f629), copied verbatim.
 const v11PercentileSeries = `-- name: StatementPercentileSeries :many
 WITH bounds AS (
     SELECT
@@ -80,8 +79,7 @@ JOIN (SELECT DISTINCT bucket_end FROM scoped) live ON live.bucket_end = g.bucket
 LEFT JOIN agg a ON a.bucket_end = g.bucket_end
 ORDER BY g.bucket_end`
 
-// v11MetricSeries is the generated SQL from v0.0.11 (966f629), copied verbatim.
-// Params, in order: bucket, until, since, database_name, statement_id, text_filter, statement_ids, server_name, allowed_servers.
+// The generated SQL from v0.0.11 (966f629), copied verbatim.
 const v11MetricSeries = `-- name: StatementMetricSeries :many
 WITH bounds AS (
     SELECT
@@ -132,10 +130,8 @@ type percentilePoint struct {
 	p90, p95, p99 float64
 }
 
-// The shipping percentile path reads a pre-aggregated log histogram, so it cannot match
-// the exact per-delta computation bit for bit -- 1% bins with a midpoint estimate put it
-// within about half a percent. This asserts that bound against v0.0.11's exact query, and
-// asserts the buckets themselves line up exactly.
+// Reading pre-aggregated 1% bins cannot reproduce the exact per-delta numbers, but it lands within
+// half a percent. The bucket boundaries still have to match exactly.
 func TestPercentileSeriesApproximatesExactPercentiles(t *testing.T) {
 	t.Parallel()
 
@@ -205,8 +201,6 @@ func TestPercentileSeriesApproximatesExactPercentiles(t *testing.T) {
 	}
 }
 
-// comparePercentilesWithinBinWidth requires the buckets to match exactly and the values to
-// sit inside the histogram's own resolution.
 func comparePercentilesWithinBinWidth(t *testing.T, want, got []percentilePoint) {
 	t.Helper()
 
@@ -316,9 +310,6 @@ func runOriginalPercentiles(
 	return out
 }
 
-// seedParityData writes 24h of minute-cadence deltas across two databases, including a
-// utility statement the percentile filter must exclude and a zero-call row, so buckets
-// that are live but have nothing matching are exercised too.
 func seedParityData(
 	ctx context.Context,
 	t *testing.T,
@@ -357,9 +348,8 @@ func seedParityData(
 		CROSS JOIN generate_series($2::timestamptz - interval '24 hours',
 		                           $2::timestamptz - interval '1 minute',
 		                           interval '1 minute') AS ts
-		-- db_b reports only on even minutes, so a database filter leaves buckets that
-		-- are live but have nothing matching. A fixture where every database appears in
-		-- every bucket hides exactly that difference.
+-- db_b reports only on even minutes, so a database filter leaves buckets that are live but have
+-- nothing matching.
 		WHERE ins.database_name = 'db_a'
 		   OR extract(minute FROM ts)::int % 2 = 0`,
 		serverName, until,
@@ -373,8 +363,6 @@ type metricPoint struct {
 	totalExecTime, totalIoTime, calls float64
 }
 
-// The metric series feeds the calls and avg lines on the same graph, so it has to
-// match v0.0.11 as exactly as the percentiles do.
 func TestMetricSeriesMatchesV11Query(t *testing.T) {
 	t.Parallel()
 
@@ -523,9 +511,7 @@ func relativeDiff(a, b float64) float64 {
 	return diff / scale
 }
 
-// compareMetrics requires exact agreement on bucket boundaries and the bigint calls
-// sum. The two float sums are added in a different row order because the plans differ,
-// and float addition is not associative, so those agree only to within rounding.
+// Buckets and the calls sum must match exactly; the float sums are added in a different row order.
 func compareMetrics(t *testing.T, want, got []metricPoint) {
 	t.Helper()
 

@@ -16,7 +16,6 @@ const (
 	minRetentionDays     = 14
 )
 
-// APIConfig is the API server configuration (cmd/api).
 type APIConfig struct {
 	DatabaseURL    string
 	ListenAddr     string
@@ -43,7 +42,6 @@ func LoadAPI() (APIConfig, error) {
 	}, nil
 }
 
-// JobsConfig is the background jobs configuration (cmd/jobs).
 type JobsConfig struct {
 	DatabaseURL   string
 	RetentionDays int

@@ -13,8 +13,7 @@ import (
 	"github.com/querysheriff/backend/internal/db"
 )
 
-// Each test owns a distinct server_name so the parallel cases cannot clobber
-// each other's fixtures.
+// A distinct server_name per test, so parallel cases cannot clobber each other's fixtures.
 func tagFilterTestPool(t *testing.T, serverName string) *pgxpool.Pool {
 	t.Helper()
 
@@ -62,10 +61,7 @@ func tagFilterTestPool(t *testing.T, serverName string) *pgxpool.Pool {
 	return pool
 }
 
-// A nil id slice must mean "no tag filters, match everything" while an empty
-// non-nil slice must mean "the filters matched nothing". pgx encodes the former
-// as SQL NULL and the latter as '{}', and conflating them turns a filter that
-// matched nothing into one that matches everything.
+// nil ids means "no filters, match everything", empty means "matched nothing": NULL vs '{}' in pgx.
 func TestStatementIDsNilMatchesAllEmptyMatchesNone(t *testing.T) {
 	t.Parallel()
 
@@ -117,8 +113,8 @@ func TestFilterStatementIDsByTagsIsTimeScoped(t *testing.T) {
 	ctx := context.Background()
 	q := db.New(pool)
 
-	// The old sample carries its own key: reusing `service` would make the value
-	// disagree over a wide window, dropping the tag for a reason unrelated to time.
+	// A different key on purpose: reusing `service` would make its value disagree across the window,
+	// and the statement would then hide the tag for a reason this test is not about.
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO statement_samples (server_name, collected_at, occurred_at, statement_id, query, duration_ms, tags)
 		SELECT $1, now() - interval '30 days', now() - interval '30 days', s.id, 'SELECT 1', 1.0,
@@ -159,9 +155,6 @@ func TestFilterStatementIDsByTagsIsTimeScoped(t *testing.T) {
 	}
 }
 
-// A statement whose samples disagree on a key does not display that key, so it
-// must not match a filter on it either — otherwise the picker offers a count it
-// cannot honour, and rows appear carrying none of the tag that selected them.
 func TestFilterIgnoresTagsTheStatementDoesNotDisplay(t *testing.T) {
 	t.Parallel()
 
@@ -171,7 +164,6 @@ func TestFilterIgnoresTagsTheStatementDoesNotDisplay(t *testing.T) {
 	ctx := context.Background()
 	q := db.New(pool)
 
-	// The fixture already carries service=payments; add a second, disagreeing value.
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO statement_samples (server_name, collected_at, occurred_at, statement_id, query, duration_ms, tags)
 		SELECT $1, now() - interval '4 minutes', now() - interval '4 minutes', s.id, 'SELECT 1', 1.0,

@@ -13,7 +13,6 @@ const (
 	million         = 1_000_000.0
 )
 
-// QueryPreview collapses whitespace and truncates a statement to one Slack line.
 func QueryPreview(query string) string {
 	query = strings.Join(strings.Fields(query), " ")
 	if len(query) > maxQueryPreview {
@@ -44,7 +43,6 @@ func formatMillis(ms float64) string {
 	return fmt.Sprintf("%.1f s", ms/thousand)
 }
 
-// formatCount shortens a large count to something read at a glance.
 func formatCount(n int64) string {
 	switch {
 	case n >= million:

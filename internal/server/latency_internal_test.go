@@ -18,9 +18,7 @@ func TestLatencyPercentilesFoldsMinutesIntoBuckets(t *testing.T) {
 
 	slow, fast := binFor(100), binFor(10)
 
-	// Two minutes inside one bucket: the weights for the same bin must add. 17 fast and 3
-	// slow means the fast bin's cumulative 17 falls short of 0.90*20 = 18, so the slow bin
-	// is the one that crosses.
+	// Two minutes in one bucket: 17 fast and 3 slow, so the fast bin's 17 misses 0.90*20 = 18.
 	minutes := []latencyMinute{
 		{start: anchor.Add(-10 * time.Minute), bins: []int16{fast, slow}, weights: []int32{9, 1}},
 		{start: anchor.Add(-5 * time.Minute), bins: []int16{fast, slow}, weights: []int32{8, 2}},
@@ -56,8 +54,7 @@ func TestLatencyPercentilesFoldsMinutesIntoBuckets(t *testing.T) {
 	}
 }
 
-// withinBinWidth allows the ~0.5% the midpoint estimate can be off by, plus a margin for
-// the flooring done when the bin was chosen.
+// The midpoint estimate can be ~0.5% off, plus a little more because the bin index was rounded down.
 func withinBinWidth(got, want float64) bool {
 	return math.Abs(got-want)/want < 0.02
 }

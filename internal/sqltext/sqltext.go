@@ -31,7 +31,6 @@ func Process(sql string) Result {
 	}
 }
 
-// CleanSample removes SQL comments and collapses whitespace between tokens.
 func CleanSample(sql string) string {
 	result, err := pg.Scan(sql)
 	if err != nil {
@@ -129,7 +128,6 @@ func concretizeNaive(query string, params []string) string {
 	return b.String()
 }
 
-// SamplePreview returns the cleaned, parameter-filled sample query capped to one line.
 func SamplePreview(query string, params []string) string {
 	return capLen(Concretize(CleanSample(query), params), samplePreviewLimit)
 }

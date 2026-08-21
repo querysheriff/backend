@@ -167,9 +167,9 @@ func connectPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error)
 		return nil, err
 	}
 
-	// Unnamed statements stay custom-planned and clear of PgBouncer prepared-
-	// statement pooling. The cached describe supplies real parameter OIDs, which
-	// QueryExecModeExec lacks: it would encode a []byte jsonb parameter as bytea.
+	// This mode never creates named prepared statements, which have two problems:
+	//  1) they don't survive PgBouncer's transaction pooling
+	//  2) Postgres can plan them generically instead of for the actual arguments, which is slower
 	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeCacheDescribe
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)

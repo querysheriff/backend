@@ -20,10 +20,8 @@ const (
 	adminServicePrefix = "/querysheriff.v1.AdminService/"
 )
 
-// NewAuthInterceptor authenticates every RPC.
-//   - Collector Report* calls present a bearer token that resolves to a server name.
-//   - Every other RPC (except Login) presents a session cookie that resolves to a user.
-//   - AdminService additionally requires the super admin.
+// NewAuthInterceptor authenticates every RPC: collector Report* calls by bearer token, everything else
+// (except Login) by session cookie, and AdminService additionally requires the super admin.
 func NewAuthInterceptor(queries *db.Queries) connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
@@ -125,7 +123,6 @@ func sessionTokenFromHeader(header http.Header) string {
 	return cookie.Value
 }
 
-// requirePrincipal returns the authenticated user.
 func requirePrincipal(ctx context.Context) (*auth.Principal, error) {
 	principal, ok := auth.PrincipalFromContext(ctx)
 	if !ok || principal == nil {
@@ -135,7 +132,6 @@ func requirePrincipal(ctx context.Context) (*auth.Principal, error) {
 	return principal, nil
 }
 
-// requireCollectorServer returns the server name resolved from the collector's token.
 func requireCollectorServer(ctx context.Context) (string, error) {
 	serverName, ok := auth.ServerNameFromContext(ctx)
 	if !ok || serverName == "" {

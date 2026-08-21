@@ -17,7 +17,6 @@ const (
 	base62Alphabet       = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 )
 
-// GenerateToken returns prefix followed by base62-encoded random bytes.
 func GenerateToken(prefix string) (string, error) {
 	buf := make([]byte, tokenRandomBytes)
 	if _, err := rand.Read(buf); err != nil {
@@ -27,14 +26,12 @@ func GenerateToken(prefix string) (string, error) {
 	return prefix + base62Encode(buf), nil
 }
 
-// HashToken returns the hex-encoded SHA-256 of an opaque token, the form stored in the database.
 func HashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 
 	return hex.EncodeToString(sum[:])
 }
 
-// HashPassword bcrypt-hashes a plaintext password.
 func HashPassword(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -44,12 +41,10 @@ func HashPassword(password string) (string, error) {
 	return string(hash), nil
 }
 
-// CheckPassword reports whether password matches a bcrypt hash.
 func CheckPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
 
-// base62Encode renders bytes as a big-endian base62 number.
 func base62Encode(buf []byte) string {
 	n := new(big.Int).SetBytes(buf)
 	if n.Sign() == 0 {

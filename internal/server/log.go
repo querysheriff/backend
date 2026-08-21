@@ -117,8 +117,6 @@ func (s *LogServer) QueryLogs(
 	}), nil
 }
 
-// QueryLogSeries powers the two heatmaps. It takes no filters, so neither sorting, paging nor
-// filtering the table below redraws them.
 func (s *LogServer) QueryLogSeries(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.QueryLogSeriesRequest],
@@ -142,9 +140,6 @@ func (s *LogServer) QueryLogSeries(
 	return connect.NewResponse(&querysheriffv1.QueryLogSeriesResponse{Histogram: histogram}), nil
 }
 
-// logStatementSamples hydrates the slow-query rows on this page. Their message, detail and
-// statement are dropped at ingest because the sample holds the same bytes, so without this
-// they would render blank.
 func (s *LogServer) logStatementSamples(
 	ctx context.Context,
 	rows []db.ListLogEventsRow,
@@ -158,7 +153,6 @@ func (s *LogServer) logStatementSamples(
 		}
 	}
 
-	// An ordinary page has no samples at all.
 	if len(ids) == 0 {
 		return map[int64]db.ListLogStatementSamplesRow{}, nil
 	}
@@ -180,9 +174,6 @@ func (s *LogServer) logStatementSamples(
 	return byID, nil
 }
 
-// logHistogram buckets the window two ways from one query: by severity, and by category with
-// the classifications behind each kept alongside it. The nested shape is what lets the
-// category heatmap's tooltip break a cell down without the client knowing the taxonomy.
 func (s *LogServer) logHistogram(
 	ctx context.Context,
 	filter logFilter,
@@ -240,8 +231,6 @@ func (s *LogServer) logHistogram(
 	}, nil
 }
 
-// categoryBreakdown folds one bucket's classification counts into its categories. Only
-// categories present in the bucket are emitted; the heatmap draws a missing row as blank.
 func (s *LogServer) categoryBreakdown(classes map[int32]int64) []*querysheriffv1.LogCategoryBreakdown {
 	grouped := map[querysheriffv1.LogEvent_LogCategory]map[int32]int64{}
 
@@ -273,7 +262,6 @@ func (s *LogServer) categoryBreakdown(classes map[int32]int64) []*querysheriffv1
 	return out
 }
 
-// classificationCounts orders most frequent first, so a tooltip that clips keeps what matters.
 func classificationCounts(counts map[int32]int64) []*querysheriffv1.LogClassificationCount {
 	out := make([]*querysheriffv1.LogClassificationCount, 0, len(counts))
 	for classification, count := range counts {
@@ -511,7 +499,7 @@ func logEventInsertParams(
 		StatementSampleID: sampleID,
 	}
 
-	// The sample already holds these bytes, so dont store them twice
+	// The sample already holds these bytes.
 	if sampleID.Valid {
 		params.Message = pgtype.Text{}
 		params.Detail = pgtype.Text{}

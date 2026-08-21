@@ -4,28 +4,12 @@ import (
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 )
 
-// Ninety-eight classifications are too many to browse or to stack in a chart, so the LOGS
-// filter and both heatmaps work in categories first and drill into classifications second.
-//
-// The nine categories and their membership are pganalyze's Log Insights taxonomy rather than
-// one of our own, so their per-code documentation is the reference for what a classification
-// here means. Each group is annotated with the pganalyze code range it mirrors, in their order,
-// so a diff against https://pganalyze.com/docs/log-insights is mechanical.
-//
-// Two deliberate departures from one-to-one:
-//
-//   - C21 "Connection authorized" is one message there; Postgres 14 added a separate
-//     "connection authenticated" line, which the collector classifies on its own. Both sit
-//     under Connection.
-//   - W46 "Invalid WAL timeline" is a WAL & Checkpoint code for pganalyze even though our
-//     classification is named STANDBY_INVALID_TIMELINE. It follows the code, not the name.
+// LOGS filters by category first, then by the individual classifications inside one.
 type logCategoryGroup struct {
 	category        querysheriffv1.LogEvent_LogCategory
 	classifications []querysheriffv1.LogEvent_LogClassification
 }
 
-// logCategories is the resolved two-way mapping between a classification and its category,
-// built once per server rather than as a package variable.
 type logCategories struct {
 	byClassification map[querysheriffv1.LogEvent_LogClassification]querysheriffv1.LogEvent_LogCategory
 	byCategory       map[querysheriffv1.LogEvent_LogCategory][]querysheriffv1.LogEvent_LogClassification
@@ -52,22 +36,16 @@ func newLogCategories() *logCategories {
 	return resolved
 }
 
-// all returns every category in declaration order, so the picker and the heatmap can list one
-// that produced nothing rather than silently omitting it.
 func (c *logCategories) all() []querysheriffv1.LogEvent_LogCategory {
 	return c.order
 }
 
-// categoryOf returns UNSPECIFIED for a classification with no category, which is also how
-// an unrecognised log message arrives from the collector.
 func (c *logCategories) categoryOf(
 	classification querysheriffv1.LogEvent_LogClassification,
 ) querysheriffv1.LogEvent_LogCategory {
 	return c.byClassification[classification]
 }
 
-// expand turns a category selection into the classifications it covers, so the category filter
-// needs no column of its own.
 func (c *logCategories) expand(categories []querysheriffv1.LogEvent_LogCategory) []int32 {
 	if len(categories) == 0 {
 		return nil
@@ -76,10 +54,7 @@ func (c *logCategories) expand(categories []querysheriffv1.LogEvent_LogCategory)
 	var out []int32
 
 	for _, category := range categories {
-		// Uncategorized is real to filter on but is not one of the declared groups, so
-		// byCategory has no entry for it. Without this arm it expands to nothing, `selected`
-		// returns nil, and nil means "every classification" — so the filter would silently
-		// turn itself off.
+		// Uncategorized is not a declared group, and expanding to nothing would mean "no filter at all".
 		if category == querysheriffv1.LogEvent_LOG_CATEGORY_UNSPECIFIED {
 			out = append(out, int32(querysheriffv1.LogEvent_LOG_CLASSIFICATION_UNSPECIFIED))
 
@@ -94,9 +69,7 @@ func (c *logCategories) expand(categories []querysheriffv1.LogEvent_LogCategory)
 	return out
 }
 
-// selected unions the explicitly picked classifications with everything the picked categories
-// cover: picking Lock and "Syntax error" asks for both, not their (empty) intersection. Nil
-// means every classification.
+// Union, not intersection: picking Lock and "Syntax error" asks for both. Nil means everything.
 func (c *logCategories) selected(
 	explicit []int32,
 	categories []querysheriffv1.LogEvent_LogCategory,
@@ -121,10 +94,9 @@ func (c *logCategories) selected(
 	return out
 }
 
-// orderingArray is the mapping as an array indexed by classification, so ordering by category
-// is `category_of[classification + 1]` in SQL and the taxonomy stays in Go. The value is the
-// category's position in `order`, not its enum number, so sorting groups them as the UI lists
-// them.
+// The mapping as a Postgres array so a query can sort by it: category_of[classification + 1], the +1
+// because Postgres arrays start at 1. The values are display positions, so rows come out in the order
+// the UI lists the categories.
 func (c *logCategories) orderingArray() []int32 {
 	rank := make(map[querysheriffv1.LogEvent_LogCategory]int32, len(c.order))
 
@@ -141,7 +113,7 @@ func (c *logCategories) orderingArray() []int32 {
 		}
 	}
 
-	// Anything without a category — index 0 is the UNSPECIFIED classification — sorts last.
+	// No category sorts last.
 	out := make([]int32, highest+1)
 	for i := range out {
 		out[i] = next
@@ -154,11 +126,8 @@ func (c *logCategories) orderingArray() []int32 {
 	return out
 }
 
-// serverLogCategoryGroups covers what the server does on its own behalf: pganalyze's
-// Server, Connections, WAL & Checkpoints, Autovacuum and Standby Servers.
 func serverLogCategoryGroups() []logCategoryGroup {
 	return []logCategoryGroup{
-		// S1 to S11.
 		{querysheriffv1.LogEvent_LOG_CATEGORY_SERVER, []querysheriffv1.LogEvent_LogClassification{
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_SERVER_CRASHED,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_SERVER_START,
@@ -172,7 +141,6 @@ func serverLogCategoryGroups() []logCategoryGroup {
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_SERVER_PROCESS_EXITED,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_SERVER_STATS_COLLECTOR_TIMEOUT,
 		}},
-		// C20 to C33, plus the Postgres 14 "connection authenticated" line.
 		{querysheriffv1.LogEvent_LOG_CATEGORY_CONNECTION, []querysheriffv1.LogEvent_LogClassification{
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_CONNECTION_RECEIVED,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_CONNECTION_AUTHORIZED,
@@ -190,8 +158,7 @@ func serverLogCategoryGroups() []logCategoryGroup {
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_PROTOCOL_ERROR_INCOMPLETE_MESSAGE,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_TOO_MANY_CONNECTIONS_DATABASE,
 		}},
-		// W40 to W46 and W50 to W53. W46 is the invalid *timeline*, a WAL code for pganalyze
-		// despite our classification carrying a STANDBY_ name.
+		// STANDBY_INVALID_TIMELINE belongs here despite the name: it is a WAL problem.
 		{querysheriffv1.LogEvent_LOG_CATEGORY_WAL_CHECKPOINT, []querysheriffv1.LogEvent_LogClassification{
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_CHECKPOINT_STARTING,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_CHECKPOINT_COMPLETE,
@@ -205,7 +172,6 @@ func serverLogCategoryGroups() []logCategoryGroup {
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_WAL_ARCHIVE_COMMAND_FAILED,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_WAL_BASE_BACKUP_COMPLETE,
 		}},
-		// A60 to A68.
 		{querysheriffv1.LogEvent_LOG_CATEGORY_AUTOVACUUM, []querysheriffv1.LogEvent_LogClassification{
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_AUTOVACUUM_CANCEL,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_TXID_WRAPAROUND_WARNING,
@@ -217,7 +183,6 @@ func serverLogCategoryGroups() []logCategoryGroup {
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_SKIPPING_VACUUM_LOCK_NOT_AVAILABLE,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_SKIPPING_ANALYZE_LOCK_NOT_AVAILABLE,
 		}},
-		// B90 to B95.
 		{querysheriffv1.LogEvent_LOG_CATEGORY_STANDBY, []querysheriffv1.LogEvent_LogClassification{
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_STANDBY_RESTORED_WAL_FROM_ARCHIVE,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_STANDBY_STARTED_STREAMING,
@@ -229,11 +194,8 @@ func serverLogCategoryGroups() []logCategoryGroup {
 	}
 }
 
-// statementLogCategoryGroups covers what a client statement caused: pganalyze's Locks,
-// Statements, Constraint Violations and Application Errors.
 func statementLogCategoryGroups() []logCategoryGroup {
 	return []logCategoryGroup{
-		// L70 to L74.
 		{querysheriffv1.LogEvent_LOG_CATEGORY_LOCK, []querysheriffv1.LogEvent_LogClassification{
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_LOCK_ACQUIRED,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_LOCK_WAITING,
@@ -241,7 +203,6 @@ func statementLogCategoryGroups() []logCategoryGroup {
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_LOCK_DEADLOCK_DETECTED,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_LOCK_DEADLOCK_AVOIDED,
 		}},
-		// T80 to T84.
 		{querysheriffv1.LogEvent_LOG_CATEGORY_STATEMENT, []querysheriffv1.LogEvent_LogClassification{
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_STATEMENT_DURATION,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_STATEMENT_CANCELED_TIMEOUT,
@@ -249,7 +210,6 @@ func statementLogCategoryGroups() []logCategoryGroup {
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_STATEMENT_LOG,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_STATEMENT_AUTO_EXPLAIN,
 		}},
-		// V100 to V104.
 		{querysheriffv1.LogEvent_LOG_CATEGORY_CONSTRAINT_VIOLATION, []querysheriffv1.LogEvent_LogClassification{
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_UNIQUE_CONSTRAINT_VIOLATION,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_FOREIGN_KEY_CONSTRAINT_VIOLATION,
@@ -257,7 +217,6 @@ func statementLogCategoryGroups() []logCategoryGroup {
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_CHECK_CONSTRAINT_VIOLATION,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_EXCLUSION_CONSTRAINT_VIOLATION,
 		}},
-		// U110 to U140.
 		{querysheriffv1.LogEvent_LOG_CATEGORY_APPLICATION_ERROR, []querysheriffv1.LogEvent_LogClassification{
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_SYNTAX_ERROR,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_INVALID_INPUT_SYNTAX,

@@ -2196,7 +2196,7 @@ SELECT coalesce(
 )::timestamptz AS resume_from
 `
 
-// Where the rollup job picks up.
+// The last minute already written, so the rollup job knows where to resume.
 func (q *Queries) StatementLatencyRollupResume(ctx context.Context) (pgtype.Timestamptz, error) {
 	row := q.db.QueryRow(ctx, statementLatencyRollupResume)
 	var resume_from pgtype.Timestamptz

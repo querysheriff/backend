@@ -1095,7 +1095,7 @@ FROM binned
 GROUP BY minute_start, server_name, database_name;
 
 -- name: StatementLatencyRollupResume :one
--- Where the rollup job picks up.
+-- The last minute already written, so the rollup job knows where to resume.
 SELECT coalesce(
     (SELECT max(minute_start) FROM statement_latency_bins),
     (SELECT min(collected_at) FROM statement_deltas),

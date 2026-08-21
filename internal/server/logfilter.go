@@ -12,12 +12,8 @@ import (
 	"github.com/querysheriff/backend/internal/db"
 )
 
-// logFilterSource is what QueryLogsRequest and ListLogFacetsRequest have in common, so a chip
-// narrows the table and the facet counts the same way. Adding a filter to one request without
-// the other stops compiling here.
-//
-// GetLogLevels is absent on purpose: only the table applies the severity filter, so the facet
-// counts stay stable as you toggle it.
+// What QueryLogsRequest and ListLogFacetsRequest share, so a chip narrows the table and the counts
+// alike. GetLogLevels is left out on purpose: only the table applies severity, so counts stay stable.
 type logFilterSource interface {
 	GetServerName() string
 	GetFrom() *timestamppb.Timestamp
@@ -31,8 +27,6 @@ type logFilterSource interface {
 	GetBackendTypes() []string
 }
 
-// logFilter is a resolved, authorized log query: the window plus every filter, ready to become
-// params for any of the three log queries.
 type logFilter struct {
 	serverName       string
 	allowedServers   []string
@@ -47,8 +41,6 @@ type logFilter struct {
 	search           pgtype.Text
 }
 
-// resolveLogScope authorizes the caller and validates the window. The heatmaps need nothing
-// else; the filtered reads build on it.
 func (s *LogServer) resolveLogScope(
 	ctx context.Context,
 	serverName string,
@@ -94,8 +86,7 @@ func (s *LogServer) resolveLogFilter(ctx context.Context, req logFilterSource) (
 	return scope, nil
 }
 
-// logSortKey maps the proto column onto the `sort_key` the query switches on. A switch rather
-// than a map so `exhaustive` flags a new column that nothing orders by.
+// A switch rather than a map so `exhaustive` flags a new column that nothing orders by.
 func logSortKey(column querysheriffv1.LogSortColumn) string {
 	switch column {
 	case querysheriffv1.LogSortColumn_LOG_SORT_COLUMN_LEVEL:
@@ -116,17 +107,12 @@ func logSortKey(column querysheriffv1.LogSortColumn) string {
 	return "at"
 }
 
-// logOrdering carries the rank arrays the sort indexes into. Both live in Go so the taxonomy
-// and the severity order stay in one place rather than being duplicated in SQL.
 type logOrdering struct {
 	categoryOf []int32
 	severityOf []int32
 }
 
-// logSeverityRanks ranks the levels by how serious they are to read, least first, so ordering
-// by Severity descending surfaces the worst events. Deliberately not the enum's own order,
-// which follows `log_min_messages` and puts LOG above ERROR — that would bury a handful of
-// errors under thousands of routine LOG lines. Mirrors LEVEL_ROWS in the frontend, reversed.
+// Least serious first: the enum's own order follows log_min_messages and puts LOG above ERROR.
 func logSeverityRanks() []int32 {
 	order := []querysheriffv1.LogEvent_LogLevel{
 		querysheriffv1.LogEvent_LOG_LEVEL_UNSPECIFIED,
@@ -170,9 +156,8 @@ func (f logFilter) listParams(
 		ApplicationNames: f.applicationNames,
 		BackendTypes:     f.backendTypes,
 		Search:           f.search,
-		// One extra row answers "is there another page" without a second count query.
-		RowLimit:  limit + 1,
-		RowOffset: offset,
+		RowLimit:         limit + 1,
+		RowOffset:        offset,
 	}
 }
 
@@ -207,8 +192,8 @@ func (f logFilter) facetParams() db.LogEventFacetsParams {
 	}
 }
 
-// emptyToNil keeps proto3's "empty repeated field means every value" contract: the queries
-// test each array arg for NULL, and a zero-length slice is not NULL.
+// The queries read a NULL array as "no filter, every value". An empty slice is not NULL, so it would
+// filter on nothing and match no rows.
 func emptyToNil(values []string) []string {
 	if len(values) == 0 {
 		return nil

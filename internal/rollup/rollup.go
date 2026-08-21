@@ -41,7 +41,6 @@ func Run(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger) {
 	}
 }
 
-// catchUp rolls up everything between where the table left off and now.
 func catchUp(ctx context.Context, queries *db.Queries, logger *slog.Logger) error {
 	resume, err := queries.StatementLatencyRollupResume(ctx)
 	if err != nil {

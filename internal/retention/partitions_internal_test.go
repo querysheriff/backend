@@ -21,7 +21,6 @@ func mustTime(t *testing.T, value string) time.Time {
 func TestWeekStartAlignsToMondayUTC(t *testing.T) {
 	t.Parallel()
 
-	// Every day of the week 2026-07-06 (Mon) .. 2026-07-12 (Sun) maps to Monday.
 	monday := time.Date(2026, time.July, 6, 0, 0, 0, 0, time.UTC)
 	for day := range daysPerWeek {
 		at := mustTime(t, "2026-07-06T12:30:00Z").AddDate(0, 0, day)
@@ -34,8 +33,7 @@ func TestWeekStartAlignsToMondayUTC(t *testing.T) {
 func TestWeekStartNormalizesTimezoneToUTC(t *testing.T) {
 	t.Parallel()
 
-	// A late-Sunday timestamp in a positive-offset zone is still Monday in UTC,
-	// so partition bounds never depend on the server timezone.
+	// Late Sunday in a positive-offset zone is still Monday in UTC: bounds never follow the server tz.
 	at := mustTime(t, "2026-07-13T01:30:00+03:00") // 2026-07-12T22:30:00Z (Sun)
 	want := time.Date(2026, time.July, 6, 0, 0, 0, 0, time.UTC)
 	if got := weekStart(at); !got.Equal(want) {
@@ -86,12 +84,10 @@ func TestPartitionExpiredAtRetentionBoundary(t *testing.T) {
 		t.Error("week ending exactly at cutoff should be expired")
 	}
 
-	// Week 2026-07-20..07-27: upper bound 07-27 is after cutoff -> retained.
 	if partitionExpired(time.Date(2026, time.July, 20, 0, 0, 0, 0, time.UTC), cutoff) {
 		t.Error("week straddling the cutoff must be retained")
 	}
 
-	// A comfortably old week is expired.
 	if !partitionExpired(time.Date(2026, time.June, 1, 0, 0, 0, 0, time.UTC), cutoff) {
 		t.Error("old week should be expired")
 	}

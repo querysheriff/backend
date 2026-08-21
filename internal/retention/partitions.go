@@ -31,7 +31,6 @@ func partitionedTables() []string {
 	}
 }
 
-// weekStart returns the Monday 00:00:00 UTC that begins t's week.
 func weekStart(t time.Time) time.Time {
 	t = t.UTC()
 	daysSinceMonday := (int(t.Weekday()) + daysPerWeek - int(time.Monday)) % daysPerWeek
@@ -40,12 +39,10 @@ func weekStart(t time.Time) time.Time {
 	return time.Date(monday.Year(), monday.Month(), monday.Day(), 0, 0, 0, 0, time.UTC)
 }
 
-// partitionName is the deterministic child-table name for a week.
 func partitionName(table string, weekStart time.Time) string {
 	return table + "_" + weekStart.Format(nameDateLayout)
 }
 
-// ensurePartitions creates the current and next weeksAhead weekly partitions.
 func ensurePartitions(ctx context.Context, pool *pgxpool.Pool, now time.Time, logger *slog.Logger) error {
 	current := weekStart(now)
 
@@ -79,7 +76,6 @@ func ensurePartitions(ctx context.Context, pool *pgxpool.Pool, now time.Time, lo
 	return nil
 }
 
-// dropOldPartitions drops every dated partition whose entire range is older than (now - retention).
 func dropOldPartitions(
 	ctx context.Context,
 	pool *pgxpool.Pool,
@@ -116,7 +112,6 @@ func dropOldPartitions(
 	return nil
 }
 
-// listPartitions returns the child partition table names of a parent table.
 func listPartitions(ctx context.Context, pool *pgxpool.Pool, parent string) ([]string, error) {
 	const query = `
 SELECT child.relname
@@ -148,7 +143,6 @@ func partitionExpired(weekStart, cutoff time.Time) bool {
 	return !weekStart.AddDate(0, 0, daysPerWeek).After(cutoff)
 }
 
-// parsePartitionWeek recovers the week-start a dated partition name encodes.
 func parsePartitionWeek(table, name string) (time.Time, bool) {
 	if strings.HasSuffix(name, defaultRelSuffix) {
 		return time.Time{}, false

@@ -126,7 +126,6 @@ func (QueryKind) EnumDescriptor() ([]byte, []int) {
 	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{1}
 }
 
-// Column the statement table is ordered by.
 type StatementSortColumn int32
 
 const (
@@ -191,7 +190,6 @@ func (StatementSortColumn) EnumDescriptor() ([]byte, []int) {
 	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{2}
 }
 
-// Column the captured samples table is ordered by.
 type SampleSortColumn int32
 
 const (
@@ -604,10 +602,8 @@ type QueryStatementsRequest struct {
 	// Page size. Defaults to 50 when unset.
 	Limit int32 `protobuf:"varint,6,opt,name=limit,proto3" json:"limit,omitempty"`
 	// ANDed with query_text.
-	TagFilters []*TagFilter `protobuf:"bytes,7,rep,name=tag_filters,json=tagFilters,proto3" json:"tag_filters,omitempty"`
-	// Only statements of these kinds are returned.
-	Kinds []QueryKind `protobuf:"varint,8,rep,packed,name=kinds,proto3,enum=querysheriff.v1.QueryKind" json:"kinds,omitempty"`
-	// Number of leading rows to skip, for pagination.
+	TagFilters    []*TagFilter        `protobuf:"bytes,7,rep,name=tag_filters,json=tagFilters,proto3" json:"tag_filters,omitempty"`
+	Kinds         []QueryKind         `protobuf:"varint,8,rep,packed,name=kinds,proto3,enum=querysheriff.v1.QueryKind" json:"kinds,omitempty"`
 	Offset        int32               `protobuf:"varint,9,opt,name=offset,proto3" json:"offset,omitempty"`
 	SortColumn    StatementSortColumn `protobuf:"varint,10,opt,name=sort_column,json=sortColumn,proto3,enum=querysheriff.v1.StatementSortColumn" json:"sort_column,omitempty"`
 	SortDesc      bool                `protobuf:"varint,11,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
@@ -723,10 +719,9 @@ func (x *QueryStatementsRequest) GetSortDesc() bool {
 }
 
 type QueryStatementsResponse struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	Statements []*StatementStat       `protobuf:"bytes,1,rep,name=statements,proto3" json:"statements,omitempty"`
-	// Whether more rows exist beyond this page.
-	HasMore       bool `protobuf:"varint,2,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Statements    []*StatementStat       `protobuf:"bytes,1,rep,name=statements,proto3" json:"statements,omitempty"`
+	HasMore       bool                   `protobuf:"varint,2,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1164,8 +1159,7 @@ func (x *QueryStatementTimingSeriesResponse) GetBucketMs() int64 {
 }
 
 type QueryStatementDetailRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Internal statement id (statements.id), as returned in StatementStat.id.
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	From          *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
 	To            *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
@@ -1226,11 +1220,8 @@ func (x *QueryStatementDetailRequest) GetTo() *timestamppb.Timestamp {
 
 type QueryStatementDetailResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Full normalized query text.
-	Query string `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
-	// Tags deduped across the statement's samples in the window.
-	// A key is only present when every sample in the window agrees on its value.
-	// Keys whose values differ are omitted.
+	Query string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	// Deduped across the window's samples: a key appears only when every sample agrees on its value.
 	Tags          map[string]string `protobuf:"bytes,2,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	ServerName    string            `protobuf:"bytes,5,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
 	DatabaseName  string            `protobuf:"bytes,6,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
@@ -1298,13 +1289,11 @@ func (x *QueryStatementDetailResponse) GetDatabaseName() string {
 
 type QueryStatementSamplesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Internal statement id.
-	Id   int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	From *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
-	To   *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	Id    int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	From  *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	To    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
 	// Page size. Defaults to 50 when unset.
-	Limit int32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
-	// Number of leading rows to skip, for pagination.
+	Limit         int32            `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
 	Offset        int32            `protobuf:"varint,5,opt,name=offset,proto3" json:"offset,omitempty"`
 	SortColumn    SampleSortColumn `protobuf:"varint,6,opt,name=sort_column,json=sortColumn,proto3,enum=querysheriff.v1.SampleSortColumn" json:"sort_column,omitempty"`
 	SortDesc      bool             `protobuf:"varint,7,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
@@ -1392,10 +1381,9 @@ func (x *QueryStatementSamplesRequest) GetSortDesc() bool {
 }
 
 type QueryStatementSamplesResponse struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Samples []*StatementSample     `protobuf:"bytes,1,rep,name=samples,proto3" json:"samples,omitempty"`
-	// Whether more rows exist beyond this page.
-	HasMore       bool `protobuf:"varint,2,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Samples       []*StatementSample     `protobuf:"bytes,1,rep,name=samples,proto3" json:"samples,omitempty"`
+	HasMore       bool                   `protobuf:"varint,2,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1444,19 +1432,16 @@ func (x *QueryStatementSamplesResponse) GetHasMore() bool {
 	return false
 }
 
-// One captured execution of the statement (from statement_samples).
 type StatementSample struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// statement_samples.id, used to lazily fetch the Auto Explain plan.
+	state      protoimpl.MessageState `protogen:"open.v1"`
 	Id         int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	OccurredAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=occurred_at,json=occurredAt,proto3" json:"occurred_at,omitempty"`
 	// Short concretized query for display; full text via GetStatementSampleText.
 	Query string `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
 	// All tags as captured, including high-cardinality values.
-	Tags map[string]string `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Whether an Auto Explain plan was captured for this sample.
-	HasPlan       bool    `protobuf:"varint,5,opt,name=has_plan,json=hasPlan,proto3" json:"has_plan,omitempty"`
-	DurationMs    float64 `protobuf:"fixed64,6,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	Tags          map[string]string `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	HasPlan       bool              `protobuf:"varint,5,opt,name=has_plan,json=hasPlan,proto3" json:"has_plan,omitempty"`
+	DurationMs    float64           `protobuf:"fixed64,6,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1534,9 +1519,8 @@ func (x *StatementSample) GetDurationMs() float64 {
 }
 
 type GetStatementSamplePlanRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// statement_samples.id.
-	SampleId      int64 `protobuf:"varint,1,opt,name=sample_id,json=sampleId,proto3" json:"sample_id,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SampleId      int64                  `protobuf:"varint,1,opt,name=sample_id,json=sampleId,proto3" json:"sample_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1633,9 +1617,8 @@ func (x *GetStatementSamplePlanResponse) GetPlanJson() string {
 }
 
 type GetStatementSampleTextRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Internal statement sample id.
-	SampleId      int64 `protobuf:"varint,1,opt,name=sample_id,json=sampleId,proto3" json:"sample_id,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SampleId      int64                  `protobuf:"varint,1,opt,name=sample_id,json=sampleId,proto3" json:"sample_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1722,9 +1705,8 @@ func (x *GetStatementSampleTextResponse) GetQuery() string {
 }
 
 type GetStatementTextRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Internal statement id.
-	Id            int64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1767,9 +1749,8 @@ func (x *GetStatementTextRequest) GetId() int64 {
 }
 
 type GetStatementTextResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Full normalized query text.
-	Query         string `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1908,13 +1889,11 @@ func (x *MetricPoint) GetValue() float64 {
 }
 
 type StatementStat struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Internal statement id, for building Query Detail URLs.
-	Id int64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	// Structural preview of the normalized query.
-	Preview       string  `protobuf:"bytes,2,opt,name=preview,proto3" json:"preview,omitempty"`
-	UserName      string  `protobuf:"bytes,3,opt,name=user_name,json=userName,proto3" json:"user_name,omitempty"`
-	TotalExecTime float64 `protobuf:"fixed64,4,opt,name=total_exec_time,json=totalExecTime,proto3" json:"total_exec_time,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Preview       string                 `protobuf:"bytes,2,opt,name=preview,proto3" json:"preview,omitempty"`
+	UserName      string                 `protobuf:"bytes,3,opt,name=user_name,json=userName,proto3" json:"user_name,omitempty"`
+	TotalExecTime float64                `protobuf:"fixed64,4,opt,name=total_exec_time,json=totalExecTime,proto3" json:"total_exec_time,omitempty"`
 	// Share of total execution time across all matching statements.
 	PctOfTotal  float64 `protobuf:"fixed64,5,opt,name=pct_of_total,json=pctOfTotal,proto3" json:"pct_of_total,omitempty"`
 	Calls       int64   `protobuf:"varint,6,opt,name=calls,proto3" json:"calls,omitempty"`
@@ -2030,20 +2009,14 @@ func (x *StatementStat) GetPctIo() float64 {
 
 // Delta of one pg_stat_statements row since the previous collection.
 type StatementDelta struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Example: "app_user"
-	UserName string `protobuf:"bytes,1,opt,name=user_name,json=userName,proto3" json:"user_name,omitempty"`
-	// Example: "app_prod"
-	DatabaseName string `protobuf:"bytes,2,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
-	// Example: 74381239123499122
-	QueryId int64 `protobuf:"varint,3,opt,name=query_id,json=queryId,proto3" json:"query_id,omitempty"`
-	// Example: 12
-	Calls int64 `protobuf:"varint,4,opt,name=calls,proto3" json:"calls,omitempty"`
-	// Example: 480
-	Rows int64 `protobuf:"varint,5,opt,name=rows,proto3" json:"rows,omitempty"`
-	// Example: 35.7
-	TotalExecTime float64 `protobuf:"fixed64,6,opt,name=total_exec_time,json=totalExecTime,proto3" json:"total_exec_time,omitempty"`
-	// Total block-IO time (ms) summed across all IO-timing columns. Example: 4.2
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserName      string                 `protobuf:"bytes,1,opt,name=user_name,json=userName,proto3" json:"user_name,omitempty"`
+	DatabaseName  string                 `protobuf:"bytes,2,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
+	QueryId       int64                  `protobuf:"varint,3,opt,name=query_id,json=queryId,proto3" json:"query_id,omitempty"`
+	Calls         int64                  `protobuf:"varint,4,opt,name=calls,proto3" json:"calls,omitempty"`
+	Rows          int64                  `protobuf:"varint,5,opt,name=rows,proto3" json:"rows,omitempty"`
+	TotalExecTime float64                `protobuf:"fixed64,6,opt,name=total_exec_time,json=totalExecTime,proto3" json:"total_exec_time,omitempty"`
+	// Total block-IO time (ms) summed across all IO-timing columns.
 	TotalIoTime   float64 `protobuf:"fixed64,7,opt,name=total_io_time,json=totalIoTime,proto3" json:"total_io_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2241,10 +2214,9 @@ func (x *ListTagKeysResponse) GetKeys() []*TagKey {
 }
 
 type TagKey struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// Distinct values seen for this key in the window.
-	ValueCount    int64 `protobuf:"varint,2,opt,name=value_count,json=valueCount,proto3" json:"value_count,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	ValueCount    int64                  `protobuf:"varint,2,opt,name=value_count,json=valueCount,proto3" json:"value_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2414,10 +2386,9 @@ func (x *ListTagValuesResponse) GetValues() []*TagValue {
 }
 
 type TagValue struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Value string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
-	// Statements carrying this key=value in the window.
-	StatementCount int64 `protobuf:"varint,2,opt,name=statement_count,json=statementCount,proto3" json:"statement_count,omitempty"`
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Value          string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
+	StatementCount int64                  `protobuf:"varint,2,opt,name=statement_count,json=statementCount,proto3" json:"statement_count,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }

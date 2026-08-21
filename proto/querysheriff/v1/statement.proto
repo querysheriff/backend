@@ -36,7 +36,6 @@ enum QueryKind {
   QUERY_KIND_OTHERS = 3;
 }
 
-// Column the statement table is ordered by.
 enum StatementSortColumn {
   STATEMENT_SORT_COLUMN_UNSPECIFIED = 0;
   STATEMENT_SORT_COLUMN_QUERY = 1;
@@ -48,7 +47,6 @@ enum StatementSortColumn {
   STATEMENT_SORT_COLUMN_PCT_TIME = 7;
 }
 
-// Column the captured samples table is ordered by.
 enum SampleSortColumn {
   SAMPLE_SORT_COLUMN_UNSPECIFIED = 0;
   SAMPLE_SORT_COLUMN_AT = 1;
@@ -103,21 +101,14 @@ message QueryStatementsRequest {
 
   // ANDed with query_text.
   repeated TagFilter tag_filters = 7;
-
-  // Only statements of these kinds are returned.
   repeated QueryKind kinds = 8;
-
-  // Number of leading rows to skip, for pagination.
   int32 offset = 9;
-
   StatementSortColumn sort_column = 10;
   bool sort_desc = 11;
 }
 
 message QueryStatementsResponse {
   repeated StatementStat statements = 1;
-
-  // Whether more rows exist beyond this page.
   bool has_more = 2;
 }
 
@@ -160,53 +151,39 @@ message QueryStatementTimingSeriesResponse {
 }
 
 message QueryStatementDetailRequest {
-  // Internal statement id (statements.id), as returned in StatementStat.id.
   int64 id = 1;
   google.protobuf.Timestamp from = 2;
   google.protobuf.Timestamp to = 3;
 }
 
 message QueryStatementDetailResponse {
-  // Full normalized query text.
   string query = 1;
 
-  // Tags deduped across the statement's samples in the window.
-  // A key is only present when every sample in the window agrees on its value.
-  // Keys whose values differ are omitted.
+  // Deduped across the window's samples: a key appears only when every sample agrees on its value.
   map<string, string> tags = 2;
-
   string server_name = 5;
   string database_name = 6;
 }
 
 message QueryStatementSamplesRequest {
-  // Internal statement id.
   int64 id = 1;
   google.protobuf.Timestamp from = 2;
   google.protobuf.Timestamp to = 3;
 
   // Page size. Defaults to 50 when unset.
   int32 limit = 4;
-
-  // Number of leading rows to skip, for pagination.
   int32 offset = 5;
-
   SampleSortColumn sort_column = 6;
   bool sort_desc = 7;
 }
 
 message QueryStatementSamplesResponse {
   repeated StatementSample samples = 1;
-
-  // Whether more rows exist beyond this page.
   bool has_more = 2;
 }
 
-// One captured execution of the statement (from statement_samples).
 message StatementSample {
-  // statement_samples.id, used to lazily fetch the Auto Explain plan.
   int64 id = 1;
-
   google.protobuf.Timestamp occurred_at = 2;
 
   // Short concretized query for display; full text via GetStatementSampleText.
@@ -214,15 +191,11 @@ message StatementSample {
 
   // All tags as captured, including high-cardinality values.
   map<string, string> tags = 4;
-
-  // Whether an Auto Explain plan was captured for this sample.
   bool has_plan = 5;
-
   double duration_ms = 6;
 }
 
 message GetStatementSamplePlanRequest {
-  // statement_samples.id.
   int64 sample_id = 1;
 }
 
@@ -235,7 +208,6 @@ message GetStatementSamplePlanResponse {
 }
 
 message GetStatementSampleTextRequest {
-  // Internal statement sample id.
   int64 sample_id = 1;
 }
 
@@ -244,12 +216,10 @@ message GetStatementSampleTextResponse {
 }
 
 message GetStatementTextRequest {
-  // Internal statement id.
   int64 id = 1;
 }
 
 message GetStatementTextResponse {
-  // Full normalized query text.
   string query = 1;
 }
 
@@ -263,17 +233,13 @@ message MetricPoint {
 }
 
 message StatementStat {
-  // Internal statement id, for building Query Detail URLs.
   int64 id = 1;
-
-  // Structural preview of the normalized query.
   string preview = 2;
   string user_name = 3;
   double total_exec_time = 4;
 
   // Share of total execution time across all matching statements.
   double pct_of_total = 5;
-
   int64 calls = 6;
   double avg_exec_time = 7;
   int64 rows = 8;
@@ -287,25 +253,14 @@ message StatementStat {
 
 // Delta of one pg_stat_statements row since the previous collection.
 message StatementDelta {
-  // Example: "app_user"
   string user_name = 1;
-
-  // Example: "app_prod"
   string database_name = 2;
-
-  // Example: 74381239123499122
   int64 query_id = 3;
-
-  // Example: 12
   int64 calls = 4;
-
-  // Example: 480
   int64 rows = 5;
-
-  // Example: 35.7
   double total_exec_time = 6;
 
-  // Total block-IO time (ms) summed across all IO-timing columns. Example: 4.2
+  // Total block-IO time (ms) summed across all IO-timing columns.
   double total_io_time = 7;
 }
 
@@ -323,7 +278,6 @@ message ListTagKeysResponse {
 message TagKey {
   string key = 1;
 
-  // Distinct values seen for this key in the window.
   int64 value_count = 2;
 }
 
@@ -332,7 +286,6 @@ message ListTagValuesRequest {
   string database_name = 2;
   google.protobuf.Timestamp from = 3;
   google.protobuf.Timestamp to = 4;
-
   string key = 5;
 }
 
@@ -343,6 +296,5 @@ message ListTagValuesResponse {
 message TagValue {
   string value = 1;
 
-  // Statements carrying this key=value in the window.
   int64 statement_count = 2;
 }
