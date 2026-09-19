@@ -29,9 +29,9 @@ func main() {
 }
 
 func run(ctx context.Context, logger *slog.Logger) error {
-	databaseURL := os.Getenv("DATABASE_URL")
+	databaseURL := os.Getenv("POSTGRES_URL")
 	if databaseURL == "" {
-		return errors.New("DATABASE_URL is not set")
+		return errors.New("POSTGRES_URL is not set")
 	}
 
 	config, err := pgxpool.ParseConfig(databaseURL)

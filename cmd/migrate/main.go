@@ -2,14 +2,17 @@ package main
 
 import (
 	"database/sql"
+	"embed"
 	"errors"
 	"log/slog"
 	"os"
 
+	_ "github.com/ClickHouse/clickhouse-go/v2"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
-	"github.com/querysheriff/backend/db/migrations"
+	chmigrations "github.com/querysheriff/backend/db/ch-migrations"
+	pgmigrations "github.com/querysheriff/backend/db/pg-migrations"
 )
 
 func main() {
@@ -24,28 +27,41 @@ func main() {
 }
 
 func run(logger *slog.Logger) error {
-	databaseURL := os.Getenv("DATABASE_URL")
+	databaseURL := os.Getenv("POSTGRES_URL")
 	if databaseURL == "" {
-		return errors.New("DATABASE_URL is not set")
+		return errors.New("POSTGRES_URL is not set")
 	}
 
-	sqlDB, err := sql.Open("pgx", databaseURL)
+	clickhouseURL := os.Getenv("CLICKHOUSE_URL")
+	if clickhouseURL == "" {
+		return errors.New("CLICKHOUSE_URL is not set")
+	}
+
+	if err := migrate(logger, "pgx", databaseURL, "postgres", pgmigrations.FS); err != nil {
+		return err
+	}
+
+	return migrate(logger, "clickhouse", clickhouseURL, "clickhouse", chmigrations.FS)
+}
+
+func migrate(logger *slog.Logger, driver, url, dialect string, files embed.FS) error {
+	sqlDB, err := sql.Open(driver, url)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = sqlDB.Close() }()
 
-	goose.SetBaseFS(migrations.FS)
+	goose.SetBaseFS(files)
 
-	if dialectErr := goose.SetDialect("postgres"); dialectErr != nil {
-		return dialectErr
+	if err = goose.SetDialect(dialect); err != nil {
+		return err
 	}
 
-	if upErr := goose.Up(sqlDB, "."); upErr != nil {
-		return upErr
+	if err = goose.Up(sqlDB, "."); err != nil {
+		return err
 	}
 
-	logger.Info("migrations applied")
+	logger.Info("migrations applied", "dialect", dialect)
 
 	return nil
 }

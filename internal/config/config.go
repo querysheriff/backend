@@ -5,65 +5,84 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 )
 
 const (
 	defaultListenAddr    = "localhost:3000"
 	defaultAllowedOrigin = "http://localhost:3001"
-	defaultRetentionDays = 30
-	minRetentionDays     = 14
 )
 
 type APIConfig struct {
 	DatabaseURL    string
+	ClickHouseURL  string
 	ListenAddr     string
 	AllowedOrigins []string
 	CookieSecure   bool
 }
 
+// LoadAPI loads API config from environment variables.
+// Example: POSTGRES_URL=... CLICKHOUSE_URL=... -> APIConfig{...}.
 func LoadAPI() (APIConfig, error) {
-	databaseURL := os.Getenv("DATABASE_URL")
+	return ParseAPI(os.Getenv)
+}
+
+// ParseAPI builds API config using getenv and validates required values.
+// Example: LISTEN_ADDR="" -> ListenAddr="localhost:3000".
+func ParseAPI(getenv func(string) string) (APIConfig, error) {
+	databaseURL := getenv("POSTGRES_URL")
 	if databaseURL == "" {
-		return APIConfig{}, errors.New("DATABASE_URL is not set")
+		return APIConfig{}, errors.New("POSTGRES_URL is not set")
 	}
 
-	listenAddr, err := parseListenAddr(os.Getenv("LISTEN_ADDR"))
+	clickhouseURL := strings.TrimSpace(getenv("CLICKHOUSE_URL"))
+	if clickhouseURL == "" {
+		return APIConfig{}, errors.New("CLICKHOUSE_URL is not set")
+	}
+
+	listenAddr, err := parseListenAddr(getenv("LISTEN_ADDR"))
 	if err != nil {
 		return APIConfig{}, err
 	}
 
 	return APIConfig{
 		DatabaseURL:    databaseURL,
+		ClickHouseURL:  clickhouseURL,
 		ListenAddr:     listenAddr,
-		AllowedOrigins: parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")),
-		CookieSecure:   os.Getenv("COOKIE_SECURE") == "true",
+		AllowedOrigins: parseAllowedOrigins(getenv("CORS_ALLOWED_ORIGINS")),
+		CookieSecure:   getenv("COOKIE_SECURE") == "true",
 	}, nil
 }
 
 type JobsConfig struct {
 	DatabaseURL   string
-	RetentionDays int
-	// Where the dashboard is reachable from a browser; reports link to it when set.
-	DashboardURL string
+	ClickHouseURL string
+	DashboardURL  string
 }
 
+// LoadJobs loads jobs config from environment variables.
+// Example: POSTGRES_URL=... CLICKHOUSE_URL=... DASHBOARD_URL=http://localhost:3001 -> JobsConfig{...}.
 func LoadJobs() (JobsConfig, error) {
-	databaseURL := os.Getenv("DATABASE_URL")
+	return ParseJobs(os.Getenv)
+}
+
+// ParseJobs builds jobs config using getenv and validates required values.
+// Example: DASHBOARD_URL="http://localhost:3001/" -> DashboardURL="http://localhost:3001".
+func ParseJobs(getenv func(string) string) (JobsConfig, error) {
+	databaseURL := getenv("POSTGRES_URL")
 	if databaseURL == "" {
-		return JobsConfig{}, errors.New("DATABASE_URL is not set")
+		return JobsConfig{}, errors.New("POSTGRES_URL is not set")
 	}
 
-	retentionDays, err := parseRetentionDays(os.Getenv("RETENTION_DAYS"))
-	if err != nil {
-		return JobsConfig{}, err
+	clickhouseURL := strings.TrimSpace(getenv("CLICKHOUSE_URL"))
+	if clickhouseURL == "" {
+		return JobsConfig{}, errors.New("CLICKHOUSE_URL is not set")
 	}
 
 	return JobsConfig{
 		DatabaseURL:   databaseURL,
-		RetentionDays: retentionDays,
-		DashboardURL:  strings.TrimSuffix(strings.TrimSpace(os.Getenv("DASHBOARD_URL")), "/"),
+		ClickHouseURL: clickhouseURL,
+		DashboardURL:  strings.TrimSuffix(strings.TrimSpace(getenv("DASHBOARD_URL")), "/"),
 	}, nil
 }
 
@@ -77,28 +96,6 @@ func parseListenAddr(raw string) (string, error) {
 	}
 
 	return raw, nil
-}
-
-func parseRetentionDays(raw string) (int, error) {
-	if raw == "" {
-		return defaultRetentionDays, nil
-	}
-
-	days, err := strconv.Atoi(raw)
-	if err != nil {
-		return 0, fmt.Errorf("RETENTION_DAYS must be an integer number of days: %w", err)
-	}
-
-	if days < 0 {
-		return 0, fmt.Errorf("RETENTION_DAYS must not be negative, got %d", days)
-	}
-
-	// 0 disables partition dropping; a positive value below the floor clamps up to it.
-	if days > 0 && days < minRetentionDays {
-		return minRetentionDays, nil
-	}
-
-	return days, nil
 }
 
 func parseAllowedOrigins(raw string) []string {

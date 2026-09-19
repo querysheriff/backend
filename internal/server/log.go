@@ -2,28 +2,40 @@ package server
 
 import (
 	"context"
+	"errors"
 	"sort"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 	"github.com/querysheriff/backend/internal/alerts"
-	"github.com/querysheriff/backend/internal/db"
+	"github.com/querysheriff/backend/internal/clickhouse"
+	"github.com/querysheriff/backend/internal/gen/db"
+	"github.com/querysheriff/backend/internal/logtaxonomy"
+	"github.com/querysheriff/backend/internal/timeseries"
 )
 
 type LogServer struct {
 	queries    *db.Queries
+	stats      *clickhouse.Client
 	notifier   *alerts.Notifier
-	categories *logCategories
+	categories *logtaxonomy.Categories
 }
 
-func NewLogServer(queries *db.Queries, notifier *alerts.Notifier) *LogServer {
-	return &LogServer{queries: queries, notifier: notifier, categories: newLogCategories()}
+func NewLogServer(queries *db.Queries, stats *clickhouse.Client, notifier *alerts.Notifier) *LogServer {
+	return &LogServer{
+		queries:    queries,
+		stats:      stats,
+		notifier:   notifier,
+		categories: logtaxonomy.New(),
+	}
 }
 
+// ReportLogs stores reported PostgreSQL log events and their statement samples.
+// Example: 3 log events -> events/samples stored and PANIC alert evaluated.
 func (s *LogServer) ReportLogs(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.ReportLogsRequest],
@@ -44,7 +56,7 @@ func (s *LogServer) ReportLogs(
 		return nil, err
 	}
 
-	collectedAt := pgtype.Timestamptz{Time: msg.GetCollectedAt().AsTime(), Valid: true}
+	collectedAt := msg.GetCollectedAt().AsTime()
 
 	sampleIDs, err := s.insertStatementSamples(ctx, serverName, collectedAt, events)
 	if err != nil {
@@ -70,6 +82,8 @@ func (s *LogServer) evaluateAlerts(serverName string, events []*querysheriffv1.L
 	}
 }
 
+// QueryLogs returns filtered, sorted, paginated log records.
+// Example: levels=[ERROR], limit=50 -> up to 50 matching log records.
 func (s *LogServer) QueryLogs(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.QueryLogsRequest],
@@ -81,17 +95,16 @@ func (s *LogServer) QueryLogs(
 		return nil, err
 	}
 
-	filter.levels = enumValues(msg.GetLogLevels())
+	filter.Levels = enumValues(msg.GetLogLevels())
 
 	limit := resolveLimit(msg.GetLimit())
 
-	rows, err := s.queries.ListLogEvents(ctx, filter.listParams(
-		logSortKey(msg.GetSortColumn()),
-		msg.GetSortDesc(),
-		logOrdering{categoryOf: s.categories.orderingArray(), severityOf: logSeverityRanks()},
-		limit,
-		resolveOffset(msg.GetOffset()),
-	))
+	rows, err := s.stats.ListLogEvents(ctx, filter, clickhouse.LogSortOrder{
+		Key:        logSortKey(msg.GetSortColumn()),
+		Desc:       msg.GetSortDesc(),
+		SeverityOf: logtaxonomy.SeverityRanks(),
+		CategoryOf: s.categories.Ranks(),
+	}, limit+1, resolveOffset(msg.GetOffset()))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -117,6 +130,8 @@ func (s *LogServer) QueryLogs(
 	}), nil
 }
 
+// QueryLogSeries returns log counts grouped into time buckets, levels, and categories.
+// Example: 1m buckets -> 12:01: ERROR=5, WARNING=3.
 func (s *LogServer) QueryLogSeries(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.QueryLogSeriesRequest],
@@ -131,7 +146,7 @@ func (s *LogServer) QueryLogSeries(
 	histogram, err := s.logHistogram(
 		ctx,
 		scope,
-		newSeriesBounds(msg.GetFrom().AsTime(), msg.GetTo().AsTime(), time.Now()),
+		timeseries.NewBounds(msg.GetFrom().AsTime(), msg.GetTo().AsTime(), time.Now()),
 	)
 	if err != nil {
 		return nil, err
@@ -142,31 +157,27 @@ func (s *LogServer) QueryLogSeries(
 
 func (s *LogServer) logStatementSamples(
 	ctx context.Context,
-	rows []db.ListLogEventsRow,
-	filter logFilter,
-) (map[int64]db.ListLogStatementSamplesRow, error) {
-	var ids []int64
+	rows []clickhouse.LogEvent,
+	filter clickhouse.LogFilter,
+) (map[uint64]clickhouse.LogSample, error) {
+	var ids []uint64
 
 	for _, row := range rows {
-		if row.StatementSampleID.Valid {
-			ids = append(ids, row.StatementSampleID.Int64)
+		if row.StatementSampleID != 0 {
+			ids = append(ids, row.StatementSampleID)
 		}
 	}
 
 	if len(ids) == 0 {
-		return map[int64]db.ListLogStatementSamplesRow{}, nil
+		return map[uint64]clickhouse.LogSample{}, nil
 	}
 
-	samples, err := s.queries.ListLogStatementSamples(ctx, db.ListLogStatementSamplesParams{
-		SampleIds:      ids,
-		Since:          filter.since,
-		AllowedServers: filter.allowedServers,
-	})
+	samples, err := s.stats.ListLogStatementSamples(ctx, ids, filter.From)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	byID := make(map[int64]db.ListLogStatementSamplesRow, len(samples))
+	byID := make(map[uint64]clickhouse.LogSample, len(samples))
 	for _, sample := range samples {
 		byID[sample.ID] = sample
 	}
@@ -176,15 +187,20 @@ func (s *LogServer) logStatementSamples(
 
 func (s *LogServer) logHistogram(
 	ctx context.Context,
-	filter logFilter,
-	bounds seriesBounds,
+	filter clickhouse.LogFilter,
+	bounds timeseries.Bounds,
 ) (*querysheriffv1.LogHistogram, error) {
-	rows, err := s.queries.LogEventHistogram(ctx, filter.histogramParams(bounds))
+	scoped := filter
+	scoped.From = bounds.RangeStart
+	scoped.To = bounds.Anchor
+	scoped.Levels = nil
+
+	rows, err := s.stats.LogEventHistogram(ctx, scoped, bounds.Bucket)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	ends := bounds.bucketEnds()
+	ends := bounds.Ends()
 	slotOf := make(map[time.Time]int, len(ends))
 	for i, end := range ends {
 		slotOf[end.UTC()] = i
@@ -196,7 +212,7 @@ func (s *LogServer) logHistogram(
 	categoryTotals := map[querysheriffv1.LogEvent_LogCategory]int64{}
 
 	for _, row := range rows {
-		idx, ok := slotOf[row.BucketEnd.Time.UTC()]
+		idx, ok := slotOf[row.BucketEnd.UTC()]
 		if !ok {
 			continue
 		}
@@ -206,12 +222,12 @@ func (s *LogServer) logHistogram(
 			perBucketClass[idx] = map[int32]int64{}
 		}
 
-		perBucketLevel[idx][row.LogLevel] += row.N
-		perBucketClass[idx][row.Classification] += row.N
-		levelTotals[row.LogLevel] += row.N
-		categoryTotals[s.categories.categoryOf(
+		perBucketLevel[idx][row.LogLevel] += row.Count
+		perBucketClass[idx][row.Classification] += row.Count
+		levelTotals[row.LogLevel] += row.Count
+		categoryTotals[s.categories.Of(
 			querysheriffv1.LogEvent_LogClassification(row.Classification),
-		)] += row.N
+		)] += row.Count
 	}
 
 	buckets := make([]*querysheriffv1.LogHistogramBucket, len(ends))
@@ -227,7 +243,7 @@ func (s *LogServer) logHistogram(
 		Buckets:        buckets,
 		LevelTotals:    levelCounts(levelTotals),
 		CategoryTotals: categoryCounts(categoryTotals),
-		BucketMs:       bounds.bucket.Milliseconds(),
+		BucketMs:       bounds.Bucket.Milliseconds(),
 	}, nil
 }
 
@@ -235,7 +251,7 @@ func (s *LogServer) categoryBreakdown(classes map[int32]int64) []*querysheriffv1
 	grouped := map[querysheriffv1.LogEvent_LogCategory]map[int32]int64{}
 
 	for classification, count := range classes {
-		category := s.categories.categoryOf(querysheriffv1.LogEvent_LogClassification(classification))
+		category := s.categories.Of(querysheriffv1.LogEvent_LogClassification(classification))
 		if grouped[category] == nil {
 			grouped[category] = map[int32]int64{}
 		}
@@ -306,35 +322,35 @@ func levelCounts(counts map[int32]int64) []*querysheriffv1.LogLevelCount {
 }
 
 func (s *LogServer) logRecordFromRow(
-	row db.ListLogEventsRow,
-	samples map[int64]db.ListLogStatementSamplesRow,
+	row clickhouse.LogEvent,
+	samples map[uint64]clickhouse.LogSample,
 ) *querysheriffv1.LogRecord {
 	classification := querysheriffv1.LogEvent_LogClassification(row.Classification)
 
 	record := &querysheriffv1.LogRecord{
 		Id:              row.ID,
-		OccurredAt:      protoFromTimestamptz(row.OccurredAt),
+		OccurredAt:      timestamppb.New(row.OccurredAt),
 		LogLevel:        querysheriffv1.LogEvent_LogLevel(row.LogLevel),
 		Classification:  classification,
-		Category:        s.categories.categoryOf(classification),
-		Pid:             protoFromInt4(row.Pid),
-		DatabaseName:    protoFromText(row.DatabaseName),
-		Username:        protoFromText(row.Username),
-		ApplicationName: protoFromText(row.ApplicationName),
-		BackendType:     protoFromText(row.BackendType),
-		Message:         protoFromText(row.Message),
-		StateCode:       protoFromText(row.StateCode),
-		Detail:          protoFromText(row.Detail),
-		Hint:            protoFromText(row.Hint),
-		Context:         protoFromText(row.Context),
-		Statement:       protoFromText(row.Statement),
+		Category:        s.categories.Of(classification),
+		Pid:             signedPid(row.Pid),
+		DatabaseName:    row.DatabaseName,
+		Username:        row.UserName,
+		ApplicationName: row.ApplicationName,
+		BackendType:     row.BackendType,
+		Message:         row.Message,
+		StateCode:       row.StateCode,
+		Detail:          row.Detail,
+		Hint:            row.Hint,
+		Context:         row.Context,
+		Statement:       row.Statement,
 	}
 
-	if !row.StatementSampleID.Valid {
+	if row.StatementSampleID == 0 {
 		return record
 	}
 
-	sample, ok := samples[row.StatementSampleID.Int64]
+	sample, ok := samples[row.StatementSampleID]
 	if !ok {
 		return record
 	}
@@ -343,8 +359,8 @@ func (s *LogServer) logRecordFromRow(
 		Id:             sample.ID,
 		Query:          sample.Query,
 		DurationMs:     sample.DurationMs,
-		HasExplainPlan: sample.HasExplainPlan.Bool,
-		StatementId:    sample.StatementID.Int64,
+		HasExplainPlan: sample.HasExplainPlan,
+		StatementId:    sample.StatementID,
 	}
 
 	return record
@@ -366,16 +382,16 @@ func enumValues[E ~int32](values []E) []int32 {
 func (s *LogServer) insertLogEvents(
 	ctx context.Context,
 	serverName string,
-	collectedAt pgtype.Timestamptz,
+	collectedAt time.Time,
 	events []*querysheriffv1.LogEvent,
-	sampleIDs []pgtype.Int8,
+	sampleIDs []uint64,
 ) error {
-	params := make([]db.InsertLogEventsParams, len(events))
+	rows := make([]clickhouse.LogEvent, len(events))
 	for i, event := range events {
-		params[i] = logEventInsertParams(serverName, collectedAt, event, sampleIDs[i])
+		rows[i] = logEventRow(serverName, collectedAt, event, sampleIDs[i], int64(i))
 	}
 
-	if _, err := s.queries.InsertLogEvents(ctx, params); err != nil {
+	if err := s.stats.InsertLogEvents(ctx, rows); err != nil {
 		return connect.NewError(connect.CodeInternal, err)
 	}
 
@@ -383,6 +399,8 @@ func (s *LogServer) insertLogEvents(
 }
 
 type sampleEntry struct {
+	statementID    uint64
+	databaseName   string
 	sample         *querysheriffv1.LogStatementSample
 	eventIndex     int
 	statementIndex int
@@ -391,15 +409,12 @@ type sampleEntry struct {
 func (s *LogServer) insertStatementSamples(
 	ctx context.Context,
 	serverName string,
-	collectedAt pgtype.Timestamptz,
+	collectedAt time.Time,
 	events []*querysheriffv1.LogEvent,
-) ([]pgtype.Int8, error) {
-	sampleIDs := make([]pgtype.Int8, len(events))
+) ([]uint64, error) {
+	sampleIDs := make([]uint64, len(events))
 
-	var (
-		entries         []sampleEntry
-		statementParams []db.EnsureStatementsParams
-	)
+	var entries []sampleEntry
 
 	for i, event := range events {
 		sample := event.GetStatementSample()
@@ -407,16 +422,15 @@ func (s *LogServer) insertStatementSamples(
 			continue
 		}
 
-		entry := sampleEntry{sample: sample, eventIndex: i, statementIndex: -1}
+		entry := sampleEntry{
+			sample: sample, eventIndex: i, statementIndex: -1,
+			databaseName: event.GetDatabaseName(),
+		}
 
 		if queryID := event.GetQueryId(); queryID != 0 {
-			entry.statementIndex = len(statementParams)
-			statementParams = append(statementParams, db.EnsureStatementsParams{
-				ServerName:   serverName,
-				DatabaseName: event.GetDatabaseName(),
-				UserName:     event.GetUsername(),
-				QueryID:      queryID,
-			})
+			entry.statementID = clickhouse.StatementID(
+				serverName, event.GetDatabaseName(), event.GetUsername(), queryID)
+			entry.statementIndex = 0
 		}
 
 		entries = append(entries, entry)
@@ -426,109 +440,188 @@ func (s *LogServer) insertStatementSamples(
 		return sampleIDs, nil
 	}
 
-	var statementIDs []int64
+	samples := make([]clickhouse.Sample, len(entries))
 
-	if len(statementParams) > 0 {
-		ids, err := ensureStatements(ctx, s.queries, statementParams)
-		if err != nil {
-			return nil, err
-		}
-
-		statementIDs = ids
-	}
-
-	params := make([]db.InsertStatementSamplesParams, len(entries))
 	for i, entry := range entries {
-		statementID := pgtype.Int8{}
-		if entry.statementIndex >= 0 {
-			statementID = pgtype.Int8{Int64: statementIDs[entry.statementIndex], Valid: true}
+		id := clickhouse.SampleID(serverName, collectedAt, entry.sample.GetQuery(),
+			entry.sample.GetDurationMs(), int64(entry.eventIndex))
+
+		samples[i] = clickhouse.Sample{
+			ID:              id,
+			CollectedAt:     collectedAt,
+			ServerName:      serverName,
+			DatabaseName:    entry.databaseName,
+			StatementID:     entry.statementID,
+			Query:           entry.sample.GetQuery(),
+			DurationMs:      entry.sample.GetDurationMs(),
+			Parameters:      entry.sample.GetParameters(),
+			ExplainPlanJSON: entry.sample.GetExplainPlanJson(),
+			Tags:            entry.sample.GetTags(),
 		}
 
-		param, err := statementSampleInsertParams(serverName, collectedAt, statementID, entry.sample)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+		if occurred := entry.sample.GetOccurredAt(); occurred != nil {
+			samples[i].OccurredAt = occurred.AsTime()
 		}
 
-		params[i] = param
+		sampleIDs[entry.eventIndex] = id
 	}
 
-	var scanErr error
+	if err := s.stats.InsertSamples(ctx, samples); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
 
-	s.queries.InsertStatementSamples(ctx, params).QueryRow(func(i int, id int64, err error) {
-		if err != nil {
-			if scanErr == nil {
-				scanErr = err
-			}
-
-			return
-		}
-
-		sampleIDs[entries[i].eventIndex] = pgtype.Int8{Int64: id, Valid: true}
-	})
-
-	if scanErr != nil {
-		return nil, connect.NewError(connect.CodeInternal, scanErr)
+	if err := s.stats.ReplaceStatementTags(ctx, shapeTagsByStatement(samples)); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
 	return sampleIDs, nil
 }
 
-func logEventInsertParams(
+func shapeTagsByStatement(samples []clickhouse.Sample) map[uint64]map[string]string {
+	byStatement := map[uint64]map[string]string{}
+
+	for _, sample := range samples {
+		if sample.StatementID == 0 || len(sample.Tags) == 0 {
+			continue
+		}
+
+		shape := map[string]string{}
+
+		for key, value := range sample.Tags {
+			if !strings.HasSuffix(key, "_id") {
+				shape[key] = value
+			}
+		}
+
+		byStatement[sample.StatementID] = shape
+	}
+
+	return byStatement
+}
+
+func logEventRow(
 	serverName string,
-	collectedAt pgtype.Timestamptz,
+	collectedAt time.Time,
 	event *querysheriffv1.LogEvent,
-	sampleID pgtype.Int8,
-) db.InsertLogEventsParams {
-	params := db.InsertLogEventsParams{
+	sampleID uint64,
+	index int64,
+) clickhouse.LogEvent {
+	row := clickhouse.LogEvent{
 		ServerName:        serverName,
 		CollectedAt:       collectedAt,
-		OccurredAt:        timestamptzFromProto(event.GetOccurredAt()),
+		OccurredAt:        collectedAt,
 		LogLevel:          int32(event.GetLogLevel()),
 		Classification:    int32(event.GetClassification()),
-		Message:           textFromProto(event.GetMessage()),
-		Pid:               int4FromProto(event.GetPid()),
-		Username:          textFromProto(event.GetUsername()),
-		DatabaseName:      textFromProto(event.GetDatabaseName()),
-		ApplicationName:   textFromProto(event.GetApplicationName()),
-		Detail:            textFromProto(event.GetDetail()),
-		Hint:              textFromProto(event.GetHint()),
-		Context:           textFromProto(event.GetContext()),
-		Statement:         textFromProto(event.GetStatement()),
-		BackendType:       textFromProto(event.GetBackendType()),
-		StateCode:         textFromProto(event.GetStateCode()),
+		Message:           event.GetMessage(),
+		Pid:               uint32(max(event.GetPid(), 0)),
+		UserName:          event.GetUsername(),
+		DatabaseName:      event.GetDatabaseName(),
+		ApplicationName:   event.GetApplicationName(),
+		Detail:            event.GetDetail(),
+		Hint:              event.GetHint(),
+		Context:           event.GetContext(),
+		Statement:         event.GetStatement(),
+		BackendType:       event.GetBackendType(),
+		StateCode:         event.GetStateCode(),
 		StatementSampleID: sampleID,
 	}
 
-	// The sample already holds these bytes.
-	if sampleID.Valid {
-		params.Message = pgtype.Text{}
-		params.Detail = pgtype.Text{}
-		params.Statement = pgtype.Text{}
+	if occurred := event.GetOccurredAt(); occurred != nil {
+		row.OccurredAt = occurred.AsTime()
 	}
 
-	return params
+	if sampleID != 0 {
+		row.Message = ""
+		row.Detail = ""
+		row.Statement = ""
+	}
+
+	row.ID = clickhouse.LogEventID(serverName, collectedAt, row.Pid, event.GetMessage(), index)
+
+	return row
 }
 
-func statementSampleInsertParams(
+type logFilterSource interface {
+	GetServerName() string
+	GetFrom() *timestamppb.Timestamp
+	GetTo() *timestamppb.Timestamp
+	GetFilter() string
+	GetClassifications() []querysheriffv1.LogEvent_LogClassification
+	GetCategories() []querysheriffv1.LogEvent_LogCategory
+	GetDatabases() []string
+	GetUsernames() []string
+	GetApplicationNames() []string
+	GetBackendTypes() []string
+}
+
+func (s *LogServer) resolveLogScope(
+	ctx context.Context,
 	serverName string,
-	collectedAt pgtype.Timestamptz,
-	statementID pgtype.Int8,
-	sample *querysheriffv1.LogStatementSample,
-) (db.InsertStatementSamplesParams, error) {
-	tags, err := jsonbFromStringMap(sample.GetTags())
+	from, to *timestamppb.Timestamp,
+) (clickhouse.LogFilter, error) {
+	principal, err := requirePrincipal(ctx)
 	if err != nil {
-		return db.InsertStatementSamplesParams{}, err
+		return clickhouse.LogFilter{}, err
 	}
 
-	return db.InsertStatementSamplesParams{
-		ServerName:      serverName,
-		CollectedAt:     collectedAt,
-		OccurredAt:      timestamptzFromProto(sample.GetOccurredAt()),
-		StatementID:     statementID,
-		Query:           sample.GetQuery(),
-		DurationMs:      sample.GetDurationMs(),
-		Parameters:      sample.GetParameters(),
-		ExplainPlanJson: textFromProto(sample.GetExplainPlanJson()),
-		Tags:            tags,
+	if serverName != "" && !principal.CanViewServer(serverName) {
+		return clickhouse.LogFilter{}, connect.NewError(
+			connect.CodePermissionDenied,
+			errors.New("access to that server is not allowed"),
+		)
+	}
+
+	if err = requireRange(from, to); err != nil {
+		return clickhouse.LogFilter{}, err
+	}
+
+	return clickhouse.LogFilter{
+		ServerName: serverName,
+		From:       from.AsTime(),
+		To:         to.AsTime(),
 	}, nil
+}
+
+func (s *LogServer) resolveLogFilter(ctx context.Context, req logFilterSource) (clickhouse.LogFilter, error) {
+	scope, err := s.resolveLogScope(ctx, req.GetServerName(), req.GetFrom(), req.GetTo())
+	if err != nil {
+		return clickhouse.LogFilter{}, err
+	}
+
+	scope.Classifications = s.categories.Selected(enumValues(req.GetClassifications()), req.GetCategories())
+	scope.Databases = emptyToNil(req.GetDatabases())
+	scope.Usernames = emptyToNil(req.GetUsernames())
+	scope.ApplicationNames = emptyToNil(req.GetApplicationNames())
+	scope.BackendTypes = emptyToNil(req.GetBackendTypes())
+	scope.Search = strings.TrimSpace(req.GetFilter())
+
+	return scope, nil
+}
+
+func logSortKey(column querysheriffv1.LogSortColumn) string {
+	switch column {
+	case querysheriffv1.LogSortColumn_LOG_SORT_COLUMN_LEVEL:
+		return "level"
+	case querysheriffv1.LogSortColumn_LOG_SORT_COLUMN_EVENT:
+		return "event"
+	case querysheriffv1.LogSortColumn_LOG_SORT_COLUMN_CATEGORY:
+		return "category"
+	case querysheriffv1.LogSortColumn_LOG_SORT_COLUMN_DATABASE:
+		return "database"
+	case querysheriffv1.LogSortColumn_LOG_SORT_COLUMN_USERNAME:
+		return "user"
+	case querysheriffv1.LogSortColumn_LOG_SORT_COLUMN_AT,
+		querysheriffv1.LogSortColumn_LOG_SORT_COLUMN_UNSPECIFIED:
+		return "at"
+	}
+
+	return "at"
+}
+
+func emptyToNil(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	return values
 }

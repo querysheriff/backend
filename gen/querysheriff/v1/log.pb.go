@@ -710,8 +710,7 @@ func (*ReportLogsResponse) Descriptor() ([]byte, []int) {
 }
 
 type LogEvent struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Straight from the jsonlog record, which calls these 'timestamp', 'error_severity', 'user' and 'dbname'.
+	state           protoimpl.MessageState     `protogen:"open.v1"`
 	OccurredAt      *timestamppb.Timestamp     `protobuf:"bytes,1,opt,name=occurred_at,json=occurredAt,proto3" json:"occurred_at,omitempty"`
 	LogLevel        LogEvent_LogLevel          `protobuf:"varint,2,opt,name=log_level,json=logLevel,proto3,enum=querysheriff.v1.LogEvent_LogLevel" json:"log_level,omitempty"`
 	Message         string                     `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
@@ -959,28 +958,24 @@ func (x *LogStatementSample) GetTags() map[string]string {
 }
 
 type QueryLogsRequest struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	ServerName string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
-	From       *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
-	To         *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
-	Filter     string                 `protobuf:"bytes,4,opt,name=filter,proto3" json:"filter,omitempty"`
-	// Empty means every level.
-	LogLevels []LogEvent_LogLevel `protobuf:"varint,5,rep,packed,name=log_levels,json=logLevels,proto3,enum=querysheriff.v1.LogEvent_LogLevel" json:"log_levels,omitempty"`
-	// Empty means every classification.
-	Classifications []LogEvent_LogClassification `protobuf:"varint,6,rep,packed,name=classifications,proto3,enum=querysheriff.v1.LogEvent_LogClassification" json:"classifications,omitempty"`
-	// Defaults to 50 when unset.
-	Limit            int32                  `protobuf:"varint,7,opt,name=limit,proto3" json:"limit,omitempty"`
-	Categories       []LogEvent_LogCategory `protobuf:"varint,8,rep,packed,name=categories,proto3,enum=querysheriff.v1.LogEvent_LogCategory" json:"categories,omitempty"`
-	Databases        []string               `protobuf:"bytes,9,rep,name=databases,proto3" json:"databases,omitempty"`
-	Usernames        []string               `protobuf:"bytes,10,rep,name=usernames,proto3" json:"usernames,omitempty"`
-	ApplicationNames []string               `protobuf:"bytes,11,rep,name=application_names,json=applicationNames,proto3" json:"application_names,omitempty"`
-	BackendTypes     []string               `protobuf:"bytes,12,rep,name=backend_types,json=backendTypes,proto3" json:"backend_types,omitempty"`
-	Offset           int32                  `protobuf:"varint,13,opt,name=offset,proto3" json:"offset,omitempty"`
-	// Defaults to LOG_SORT_COLUMN_AT.
-	SortColumn    LogSortColumn `protobuf:"varint,14,opt,name=sort_column,json=sortColumn,proto3,enum=querysheriff.v1.LogSortColumn" json:"sort_column,omitempty"`
-	SortDesc      bool          `protobuf:"varint,15,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState       `protogen:"open.v1"`
+	ServerName       string                       `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
+	From             *timestamppb.Timestamp       `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	To               *timestamppb.Timestamp       `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	Filter           string                       `protobuf:"bytes,4,opt,name=filter,proto3" json:"filter,omitempty"`
+	LogLevels        []LogEvent_LogLevel          `protobuf:"varint,5,rep,packed,name=log_levels,json=logLevels,proto3,enum=querysheriff.v1.LogEvent_LogLevel" json:"log_levels,omitempty"`
+	Classifications  []LogEvent_LogClassification `protobuf:"varint,6,rep,packed,name=classifications,proto3,enum=querysheriff.v1.LogEvent_LogClassification" json:"classifications,omitempty"`
+	Limit            int32                        `protobuf:"varint,7,opt,name=limit,proto3" json:"limit,omitempty"`
+	Categories       []LogEvent_LogCategory       `protobuf:"varint,8,rep,packed,name=categories,proto3,enum=querysheriff.v1.LogEvent_LogCategory" json:"categories,omitempty"`
+	Databases        []string                     `protobuf:"bytes,9,rep,name=databases,proto3" json:"databases,omitempty"`
+	Usernames        []string                     `protobuf:"bytes,10,rep,name=usernames,proto3" json:"usernames,omitempty"`
+	ApplicationNames []string                     `protobuf:"bytes,11,rep,name=application_names,json=applicationNames,proto3" json:"application_names,omitempty"`
+	BackendTypes     []string                     `protobuf:"bytes,12,rep,name=backend_types,json=backendTypes,proto3" json:"backend_types,omitempty"`
+	Offset           int32                        `protobuf:"varint,13,opt,name=offset,proto3" json:"offset,omitempty"`
+	SortColumn       LogSortColumn                `protobuf:"varint,14,opt,name=sort_column,json=sortColumn,proto3,enum=querysheriff.v1.LogSortColumn" json:"sort_column,omitempty"`
+	SortDesc         bool                         `protobuf:"varint,15,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *QueryLogsRequest) Reset() {
@@ -1403,10 +1398,9 @@ func (x *LogHistogramBucket) GetCategories() []*LogCategoryBreakdown {
 }
 
 type LogCategoryBreakdown struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	Category LogEvent_LogCategory   `protobuf:"varint,1,opt,name=category,proto3,enum=querysheriff.v1.LogEvent_LogCategory" json:"category,omitempty"`
-	Count    int64                  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
-	// Only classifications with at least one event in this bucket, most frequent first.
+	state           protoimpl.MessageState    `protogen:"open.v1"`
+	Category        LogEvent_LogCategory      `protobuf:"varint,1,opt,name=category,proto3,enum=querysheriff.v1.LogEvent_LogCategory" json:"category,omitempty"`
+	Count           int64                     `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
 	Classifications []*LogClassificationCount `protobuf:"bytes,3,rep,name=classifications,proto3" json:"classifications,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
@@ -1901,7 +1895,7 @@ func (x *LogFacetValue) GetCategory() LogEvent_LogCategory {
 
 type LogRecord struct {
 	state           protoimpl.MessageState     `protogen:"open.v1"`
-	Id              int64                      `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Id              uint64                     `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	OccurredAt      *timestamppb.Timestamp     `protobuf:"bytes,2,opt,name=occurred_at,json=occurredAt,proto3" json:"occurred_at,omitempty"`
 	LogLevel        LogEvent_LogLevel          `protobuf:"varint,3,opt,name=log_level,json=logLevel,proto3,enum=querysheriff.v1.LogEvent_LogLevel" json:"log_level,omitempty"`
 	Classification  LogEvent_LogClassification `protobuf:"varint,4,opt,name=classification,proto3,enum=querysheriff.v1.LogEvent_LogClassification" json:"classification,omitempty"`
@@ -1917,8 +1911,7 @@ type LogRecord struct {
 	Context         string                     `protobuf:"bytes,14,opt,name=context,proto3" json:"context,omitempty"`
 	Statement       string                     `protobuf:"bytes,15,opt,name=statement,proto3" json:"statement,omitempty"`
 	Category        LogEvent_LogCategory       `protobuf:"varint,16,opt,name=category,proto3,enum=querysheriff.v1.LogEvent_LogCategory" json:"category,omitempty"`
-	// Set only on STATEMENT_DURATION and STATEMENT_AUTO_EXPLAIN classifications.
-	StatementSample *LogRecordStatementSample `protobuf:"bytes,17,opt,name=statement_sample,json=statementSample,proto3" json:"statement_sample,omitempty"`
+	StatementSample *LogRecordStatementSample  `protobuf:"bytes,17,opt,name=statement_sample,json=statementSample,proto3" json:"statement_sample,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1953,7 +1946,7 @@ func (*LogRecord) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{18}
 }
 
-func (x *LogRecord) GetId() int64 {
+func (x *LogRecord) GetId() uint64 {
 	if x != nil {
 		return x.Id
 	}
@@ -2074,11 +2067,11 @@ func (x *LogRecord) GetStatementSample() *LogRecordStatementSample {
 
 type LogRecordStatementSample struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	Id             int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Id             uint64                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	Query          string                 `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"`
 	DurationMs     float64                `protobuf:"fixed64,3,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
 	HasExplainPlan bool                   `protobuf:"varint,4,opt,name=has_explain_plan,json=hasExplainPlan,proto3" json:"has_explain_plan,omitempty"`
-	StatementId    int64                  `protobuf:"varint,5,opt,name=statement_id,json=statementId,proto3" json:"statement_id,omitempty"`
+	StatementId    uint64                 `protobuf:"varint,5,opt,name=statement_id,json=statementId,proto3" json:"statement_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -2113,7 +2106,7 @@ func (*LogRecordStatementSample) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{19}
 }
 
-func (x *LogRecordStatementSample) GetId() int64 {
+func (x *LogRecordStatementSample) GetId() uint64 {
 	if x != nil {
 		return x.Id
 	}
@@ -2141,7 +2134,7 @@ func (x *LogRecordStatementSample) GetHasExplainPlan() bool {
 	return false
 }
 
-func (x *LogRecordStatementSample) GetStatementId() int64 {
+func (x *LogRecordStatementSample) GetStatementId() uint64 {
 	if x != nil {
 		return x.StatementId
 	}
@@ -2397,7 +2390,7 @@ const file_querysheriff_v1_log_proto_rawDesc = "" +
 	"\x05count\x18\x02 \x01(\x03R\x05count\x12A\n" +
 	"\bcategory\x18\x03 \x01(\x0e2%.querysheriff.v1.LogEvent.LogCategoryR\bcategory\"\xc5\x05\n" +
 	"\tLogRecord\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x12;\n" +
+	"\x02id\x18\x01 \x01(\x04R\x02id\x12;\n" +
 	"\voccurred_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"occurredAt\x12?\n" +
 	"\tlog_level\x18\x03 \x01(\x0e2\".querysheriff.v1.LogEvent.LogLevelR\blogLevel\x12S\n" +
@@ -2418,12 +2411,12 @@ const file_querysheriff_v1_log_proto_rawDesc = "" +
 	"\bcategory\x18\x10 \x01(\x0e2%.querysheriff.v1.LogEvent.LogCategoryR\bcategory\x12T\n" +
 	"\x10statement_sample\x18\x11 \x01(\v2).querysheriff.v1.LogRecordStatementSampleR\x0fstatementSample\"\xae\x01\n" +
 	"\x18LogRecordStatementSample\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x14\n" +
+	"\x02id\x18\x01 \x01(\x04R\x02id\x12\x14\n" +
 	"\x05query\x18\x02 \x01(\tR\x05query\x12\x1f\n" +
 	"\vduration_ms\x18\x03 \x01(\x01R\n" +
 	"durationMs\x12(\n" +
 	"\x10has_explain_plan\x18\x04 \x01(\bR\x0ehasExplainPlan\x12!\n" +
-	"\fstatement_id\x18\x05 \x01(\x03R\vstatementId*\xd8\x01\n" +
+	"\fstatement_id\x18\x05 \x01(\x04R\vstatementId*\xd8\x01\n" +
 	"\rLogSortColumn\x12\x1f\n" +
 	"\x1bLOG_SORT_COLUMN_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12LOG_SORT_COLUMN_AT\x10\x01\x12\x19\n" +

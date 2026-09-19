@@ -38,13 +38,11 @@ enum QueryKind {
 
 enum StatementSortColumn {
   STATEMENT_SORT_COLUMN_UNSPECIFIED = 0;
-  STATEMENT_SORT_COLUMN_QUERY = 1;
-  STATEMENT_SORT_COLUMN_USER = 2;
-  STATEMENT_SORT_COLUMN_AVG = 3;
-  STATEMENT_SORT_COLUMN_CALLS = 4;
-  STATEMENT_SORT_COLUMN_ROWS_PER_CALL = 5;
-  STATEMENT_SORT_COLUMN_PCT_IO = 6;
-  STATEMENT_SORT_COLUMN_PCT_TIME = 7;
+  STATEMENT_SORT_COLUMN_AVG = 1;
+  STATEMENT_SORT_COLUMN_CALLS = 2;
+  STATEMENT_SORT_COLUMN_ROWS_PER_CALL = 3;
+  STATEMENT_SORT_COLUMN_PCT_IO = 4;
+  STATEMENT_SORT_COLUMN_PCT_TIME = 5;
 }
 
 enum SampleSortColumn {
@@ -54,7 +52,6 @@ enum SampleSortColumn {
   SAMPLE_SORT_COLUMN_PLAN = 3;
 }
 
-// Values within a filter are ORed, separate filters are ANDed.
 message TagFilter {
   string key = 1;
   TagFilterOperator op = 2;
@@ -92,14 +89,8 @@ message QueryStatementsRequest {
   string database_name = 2;
   google.protobuf.Timestamp from = 3;
   google.protobuf.Timestamp to = 4;
-
-  // Case-insensitive substring match against the normalized query text.
   string query_text = 5;
-
-  // Page size. Defaults to 50 when unset.
   int32 limit = 6;
-
-  // ANDed with query_text.
   repeated TagFilter tag_filters = 7;
   repeated QueryKind kinds = 8;
   int32 offset = 9;
@@ -115,7 +106,7 @@ message QueryStatementsResponse {
 message SeriesScope {
   string server_name = 1;
   string database_name = 2;
-  int64 statement_id = 3;
+  uint64 statement_id = 3;
   google.protobuf.Timestamp from = 4;
   google.protobuf.Timestamp to = 5;
 }
@@ -151,26 +142,22 @@ message QueryStatementTimingSeriesResponse {
 }
 
 message QueryStatementDetailRequest {
-  int64 id = 1;
+  uint64 id = 1;
   google.protobuf.Timestamp from = 2;
   google.protobuf.Timestamp to = 3;
 }
 
 message QueryStatementDetailResponse {
   string query = 1;
-
-  // Deduped across the window's samples: a key appears only when every sample agrees on its value.
   map<string, string> tags = 2;
   string server_name = 5;
   string database_name = 6;
 }
 
 message QueryStatementSamplesRequest {
-  int64 id = 1;
+  uint64 id = 1;
   google.protobuf.Timestamp from = 2;
   google.protobuf.Timestamp to = 3;
-
-  // Page size. Defaults to 50 when unset.
   int32 limit = 4;
   int32 offset = 5;
   SampleSortColumn sort_column = 6;
@@ -183,32 +170,25 @@ message QueryStatementSamplesResponse {
 }
 
 message StatementSample {
-  int64 id = 1;
+  uint64 id = 1;
   google.protobuf.Timestamp occurred_at = 2;
-
-  // Short concretized query for display; full text via GetStatementSampleText.
   string query = 3;
-
-  // All tags as captured, including high-cardinality values.
   map<string, string> tags = 4;
   bool has_plan = 5;
   double duration_ms = 6;
 }
 
 message GetStatementSamplePlanRequest {
-  int64 sample_id = 1;
+  uint64 sample_id = 1;
 }
 
 message GetStatementSamplePlanResponse {
-  // Concretized statement text (actual parameter values).
   string query = 1;
-
-  // Raw Auto Explain plan as captured (JSON or text EXPLAIN output).
   string plan_json = 2;
 }
 
 message GetStatementSampleTextRequest {
-  int64 sample_id = 1;
+  uint64 sample_id = 1;
 }
 
 message GetStatementSampleTextResponse {
@@ -216,7 +196,7 @@ message GetStatementSampleTextResponse {
 }
 
 message GetStatementTextRequest {
-  int64 id = 1;
+  uint64 id = 1;
 }
 
 message GetStatementTextResponse {
@@ -233,25 +213,18 @@ message MetricPoint {
 }
 
 message StatementStat {
-  int64 id = 1;
+  uint64 id = 1;
   string preview = 2;
   string user_name = 3;
   double total_exec_time = 4;
-
-  // Share of total execution time across all matching statements.
   double pct_of_total = 5;
   int64 calls = 6;
   double avg_exec_time = 7;
   int64 rows = 8;
-
-  // Same logic as QueryStatementDetailResponse.tags.
   map<string, string> tags = 9;
-
-  // Share of total IO time across all matching statements.
   double pct_io = 10;
 }
 
-// Delta of one pg_stat_statements row since the previous collection.
 message StatementDelta {
   string user_name = 1;
   string database_name = 2;
@@ -259,8 +232,6 @@ message StatementDelta {
   int64 calls = 4;
   int64 rows = 5;
   double total_exec_time = 6;
-
-  // Total block-IO time (ms) summed across all IO-timing columns.
   double total_io_time = 7;
 }
 
@@ -277,7 +248,6 @@ message ListTagKeysResponse {
 
 message TagKey {
   string key = 1;
-
   int64 value_count = 2;
 }
 
@@ -295,6 +265,5 @@ message ListTagValuesResponse {
 
 message TagValue {
   string value = 1;
-
   int64 statement_count = 2;
 }

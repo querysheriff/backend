@@ -13,7 +13,7 @@ import (
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 	"github.com/querysheriff/backend/internal/alerts"
-	"github.com/querysheriff/backend/internal/db"
+	"github.com/querysheriff/backend/internal/gen/db"
 )
 
 const slackWebhookHost = "hooks.slack.com"

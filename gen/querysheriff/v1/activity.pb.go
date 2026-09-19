@@ -260,7 +260,6 @@ func (*ReportActivityResponse) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_activity_proto_rawDescGZIP(), []int{1}
 }
 
-// One row from pg_stat_activity.
 type ActivitySnapshot struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Pid             int32                  `protobuf:"varint,1,opt,name=pid,proto3" json:"pid,omitempty"`
@@ -274,15 +273,13 @@ type ActivitySnapshot struct {
 	XactStart       *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=xact_start,json=xactStart,proto3" json:"xact_start,omitempty"`
 	QueryStart      *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=query_start,json=queryStart,proto3" json:"query_start,omitempty"`
 	QueryId         int64                  `protobuf:"varint,11,opt,name=query_id,json=queryId,proto3" json:"query_id,omitempty"`
-	// The leading tag comment is stripped out; its tags arrive in query_tags.
-	Query string `protobuf:"bytes,12,opt,name=query,proto3" json:"query,omitempty"`
-	// key=value tags parsed from the query's leading comment.
-	QueryTags     map[string]string      `protobuf:"bytes,13,rep,name=query_tags,json=queryTags,proto3" json:"query_tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	BlockedByPid  int32                  `protobuf:"varint,14,opt,name=blocked_by_pid,json=blockedByPid,proto3" json:"blocked_by_pid,omitempty"`
-	LockWaitStart *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=lock_wait_start,json=lockWaitStart,proto3" json:"lock_wait_start,omitempty"`
-	LockMode      string                 `protobuf:"bytes,16,opt,name=lock_mode,json=lockMode,proto3" json:"lock_mode,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Query           string                 `protobuf:"bytes,12,opt,name=query,proto3" json:"query,omitempty"`
+	QueryTags       map[string]string      `protobuf:"bytes,13,rep,name=query_tags,json=queryTags,proto3" json:"query_tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	BlockedByPid    int32                  `protobuf:"varint,14,opt,name=blocked_by_pid,json=blockedByPid,proto3" json:"blocked_by_pid,omitempty"`
+	LockWaitStart   *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=lock_wait_start,json=lockWaitStart,proto3" json:"lock_wait_start,omitempty"`
+	LockMode        string                 `protobuf:"bytes,16,opt,name=lock_mode,json=lockMode,proto3" json:"lock_mode,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ActivitySnapshot) Reset() {
@@ -428,17 +425,16 @@ func (x *ActivitySnapshot) GetLockMode() string {
 }
 
 type QueryTransactionsRequest struct {
-	state        protoimpl.MessageState `protogen:"open.v1"`
-	ServerName   string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
-	DatabaseName string                 `protobuf:"bytes,2,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
-	From         *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
-	To           *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
-	// Page size. Defaults to 50 when unset.
-	Limit         int32                 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
-	Offset        int32                 `protobuf:"varint,6,opt,name=offset,proto3" json:"offset,omitempty"`
-	SortColumn    TransactionSortColumn `protobuf:"varint,7,opt,name=sort_column,json=sortColumn,proto3,enum=querysheriff.v1.TransactionSortColumn" json:"sort_column,omitempty"`
-	SortDesc      bool                  `protobuf:"varint,8,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
-	MinOpenMs     int64                 `protobuf:"varint,9,opt,name=min_open_ms,json=minOpenMs,proto3" json:"min_open_ms,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ServerName    string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
+	DatabaseName  string                 `protobuf:"bytes,2,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
+	From          *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
+	To            *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
+	Limit         int32                  `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
+	Offset        int32                  `protobuf:"varint,6,opt,name=offset,proto3" json:"offset,omitempty"`
+	SortColumn    TransactionSortColumn  `protobuf:"varint,7,opt,name=sort_column,json=sortColumn,proto3,enum=querysheriff.v1.TransactionSortColumn" json:"sort_column,omitempty"`
+	SortDesc      bool                   `protobuf:"varint,8,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
+	MinOpenMs     int64                  `protobuf:"varint,9,opt,name=min_open_ms,json=minOpenMs,proto3" json:"min_open_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -588,17 +584,15 @@ func (x *QueryTransactionsResponse) GetHasMore() bool {
 	return false
 }
 
-// A reconstructed transaction from a series of activity snapshots.
 type Transaction struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Pid             int32                  `protobuf:"varint,1,opt,name=pid,proto3" json:"pid,omitempty"`
 	ApplicationName string                 `protobuf:"bytes,2,opt,name=application_name,json=applicationName,proto3" json:"application_name,omitempty"`
 	Start           *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=start,proto3" json:"start,omitempty"`
-	// The last time the transaction was observed in a snapshot (≈ its end).
-	End           *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=end,proto3" json:"end,omitempty"`
-	Events        []*TransactionEvent    `protobuf:"bytes,6,rep,name=events,proto3" json:"events,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	End             *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=end,proto3" json:"end,omitempty"`
+	Events          []*TransactionEvent    `protobuf:"bytes,6,rep,name=events,proto3" json:"events,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Transaction) Reset() {
@@ -666,7 +660,6 @@ func (x *Transaction) GetEvents() []*TransactionEvent {
 	return nil
 }
 
-// One stretch of a transaction where its activity attributes did not meaningfully change.
 type TransactionEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	From          *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
@@ -895,7 +888,6 @@ func (x *QueryLockWaitSeriesResponse) GetBucketMs() int64 {
 	return 0
 }
 
-// Session-time lost to lock waits in one bucket.
 type LockWaitPoint struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	At            *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=at,proto3" json:"at,omitempty"`
@@ -949,16 +941,15 @@ func (x *LockWaitPoint) GetWaitSeconds() float64 {
 }
 
 type QueryLockWaitsRequest struct {
-	state        protoimpl.MessageState `protogen:"open.v1"`
-	ServerName   string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
-	DatabaseName string                 `protobuf:"bytes,2,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
-	From         *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
-	To           *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
-	// Page size. Defaults to 50 when unset.
-	Limit         int32              `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
-	Offset        int32              `protobuf:"varint,6,opt,name=offset,proto3" json:"offset,omitempty"`
-	SortColumn    LockWaitSortColumn `protobuf:"varint,7,opt,name=sort_column,json=sortColumn,proto3,enum=querysheriff.v1.LockWaitSortColumn" json:"sort_column,omitempty"`
-	SortDesc      bool               `protobuf:"varint,8,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ServerName    string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
+	DatabaseName  string                 `protobuf:"bytes,2,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
+	From          *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
+	To            *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
+	Limit         int32                  `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
+	Offset        int32                  `protobuf:"varint,6,opt,name=offset,proto3" json:"offset,omitempty"`
+	SortColumn    LockWaitSortColumn     `protobuf:"varint,7,opt,name=sort_column,json=sortColumn,proto3,enum=querysheriff.v1.LockWaitSortColumn" json:"sort_column,omitempty"`
+	SortDesc      bool                   `protobuf:"varint,8,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1106,11 +1097,10 @@ type LockWait struct {
 	Waiting        *LockParty             `protobuf:"bytes,1,opt,name=waiting,proto3" json:"waiting,omitempty"`
 	Blocking       *LockParty             `protobuf:"bytes,2,opt,name=blocking,proto3" json:"blocking,omitempty"`
 	StartedWaiting *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=started_waiting,json=startedWaiting,proto3" json:"started_waiting,omitempty"`
-	// Last time the wait was observed (≈ when it ended).
-	LastSeen      *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"`
-	LockMode      string                 `protobuf:"bytes,5,opt,name=lock_mode,json=lockMode,proto3" json:"lock_mode,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	LastSeen       *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"`
+	LockMode       string                 `protobuf:"bytes,5,opt,name=lock_mode,json=lockMode,proto3" json:"lock_mode,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *LockWait) Reset() {
@@ -1366,7 +1356,6 @@ func (x *QueryTransactionAgeSeriesResponse) GetBucketMs() int64 {
 	return 0
 }
 
-// How old the longest-running open transaction was at the end of one bucket.
 type TransactionAgePoint struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	At            *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=at,proto3" json:"at,omitempty"`

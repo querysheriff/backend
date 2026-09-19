@@ -1,0 +1,63 @@
+name: querysheriff-dev
+
+services:
+  clickhouse:
+    image: clickhouse:25.12
+    environment:
+      CLICKHOUSE_DB: querysheriff
+      CLICKHOUSE_USER: querysheriff_backend
+      CLICKHOUSE_PASSWORD: querysheriff_backend
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - ./ch/config.xml:/etc/clickhouse-server/config.d/dev.xml:ro
+      - ./ch/users.xml:/etc/clickhouse-server/users.d/dev.xml:ro
+      - chdata:/var/lib/clickhouse
+    mem_limit: 8g
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "clickhouse-client --user querysheriff_backend --password querysheriff_backend -q 'SELECT 1' >/dev/null",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./pg/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "PGPASSWORD=querysheriff_backend psql -U querysheriff_backend -d querysheriff -c 'SELECT 1' >/dev/null",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  adminer:
+    image: adminer:6.0.1
+    ports:
+      - "8080:8080"
+
+  ch-ui:
+    image: ghcr.io/caioricciuti/ch-ui:v2.11.1
+    environment:
+      CLICKHOUSE_URL: http://clickhouse:8123
+    ports:
+      - "8081:3488"
+
+volumes:
+  chdata:
+  pgdata:

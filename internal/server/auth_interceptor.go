@@ -11,7 +11,7 @@ import (
 
 	"github.com/querysheriff/backend/gen/querysheriff/v1/querysheriffv1connect"
 	"github.com/querysheriff/backend/internal/auth"
-	"github.com/querysheriff/backend/internal/db"
+	"github.com/querysheriff/backend/internal/gen/db"
 )
 
 const (
@@ -20,8 +20,8 @@ const (
 	adminServicePrefix = "/querysheriff.v1.AdminService/"
 )
 
-// NewAuthInterceptor authenticates every RPC: collector Report* calls by bearer token, everything else
-// (except Login) by session cookie, and AdminService additionally requires the super admin.
+// NewAuthInterceptor authenticates collectors/users and enforces admin access.
+// Example: collector Bearer token -> server in context; user session -> principal in context.
 func NewAuthInterceptor(queries *db.Queries) connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {

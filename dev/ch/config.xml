@@ -1,0 +1,3 @@
+<clickhouse>
+    <mark_cache_size>268435456</mark_cache_size>
+</clickhouse>

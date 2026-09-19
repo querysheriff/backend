@@ -8,13 +8,15 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 	"github.com/querysheriff/backend/internal/alerts"
-	"github.com/querysheriff/backend/internal/db"
+	"github.com/querysheriff/backend/internal/clickhouse"
+	"github.com/querysheriff/backend/internal/gen/db"
+	"github.com/querysheriff/backend/internal/humanize"
+	"github.com/querysheriff/backend/internal/timeseries"
 )
 
 const (
@@ -22,20 +24,21 @@ const (
 	longQueryThreshold = time.Minute
 	blockingThreshold  = 10 * time.Second
 	openTxnThreshold   = 10 * time.Minute
-
-	microsPerMilli = 1000
 )
 
 type ActivityServer struct {
 	pool     *pgxpool.Pool
 	queries  *db.Queries
+	stats    *clickhouse.Client
 	notifier *alerts.Notifier
 }
 
-func NewActivityServer(pool *pgxpool.Pool, notifier *alerts.Notifier) *ActivityServer {
-	return &ActivityServer{pool: pool, queries: db.New(pool), notifier: notifier}
+func NewActivityServer(pool *pgxpool.Pool, stats *clickhouse.Client, notifier *alerts.Notifier) *ActivityServer {
+	return &ActivityServer{pool: pool, queries: db.New(pool), stats: stats, notifier: notifier}
 }
 
+// ReportActivity stores transaction activity snapshots and evaluates alerts.
+// Example: 3 transaction snapshots -> 3 rows in transaction_activity.
 func (s *ActivityServer) ReportActivity(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.ReportActivityRequest],
@@ -62,31 +65,14 @@ func (s *ActivityServer) ReportActivity(
 		return nil, err
 	}
 
-	collectedAt := pgtype.Timestamptz{Time: msg.GetCollectedAt().AsTime(), Valid: true}
+	collectedAt := msg.GetCollectedAt().AsTime()
 
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	q := s.queries.WithTx(tx)
-
-	params := make([]db.RecordTransactionEventParams, len(txnSnapshots))
+	rows := make([]clickhouse.TransactionActivity, len(txnSnapshots))
 	for i, snap := range txnSnapshots {
-		param, paramErr := transactionEventParams(serverName, collectedAt, snap)
-		if paramErr != nil {
-			return nil, connect.NewError(connect.CodeInternal, paramErr)
-		}
-
-		params[i] = param
+		rows[i] = transactionActivityRow(serverName, collectedAt, snap)
 	}
 
-	if err = drainRecordBatch(q.RecordTransactionEvent(ctx, params)); err != nil {
-		return nil, err
-	}
-
-	if err = tx.Commit(ctx); err != nil {
+	if err = s.stats.InsertTransactionActivity(ctx, rows); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
@@ -100,7 +86,6 @@ func (s *ActivityServer) evaluateAlerts(
 	collectedAt time.Time,
 	snapshots []*querysheriffv1.ActivitySnapshot,
 ) {
-	// Postgres reports the wait on the blocked session's row, so that is the snapshot to measure.
 	blocked, blockedFor := longestOver(snapshots, blockingThreshold,
 		func(snap *querysheriffv1.ActivitySnapshot) (time.Duration, bool) {
 			if snap.GetBlockedByPid() == 0 || snap.GetLockWaitStart() == nil {
@@ -171,13 +156,12 @@ func sessionText(
 		subject,
 		inDatabase(snap.GetDatabaseName()),
 		verb,
-		alerts.HumanDuration(elapsed),
-		alerts.QueryPreview(snap.GetQuery()),
+		humanize.Duration(elapsed),
+		humanize.QueryPreview(snap.GetQuery()),
 		snap.GetPid(),
 	)
 }
 
-// The blocker can be missing: a session holding a lock while idle outside a transaction is never sampled.
 func blockedQueryText(
 	blocked *querysheriffv1.ActivitySnapshot,
 	waited time.Duration,
@@ -186,7 +170,7 @@ func blockedQueryText(
 	blockerQuery := "not captured"
 	for _, snap := range snapshots {
 		if snap.GetPid() == blocked.GetBlockedByPid() {
-			blockerQuery = alerts.QueryPreview(snap.GetQuery())
+			blockerQuery = humanize.QueryPreview(snap.GetQuery())
 
 			break
 		}
@@ -195,14 +179,16 @@ func blockedQueryText(
 	return fmt.Sprintf(
 		"A query%s has been waiting %s for a lock.\n\nwaiting: %s\nblocking: %s\npids: %d blocked by %d",
 		inDatabase(blocked.GetDatabaseName()),
-		alerts.HumanDuration(waited),
-		alerts.QueryPreview(blocked.GetQuery()),
+		humanize.Duration(waited),
+		humanize.QueryPreview(blocked.GetQuery()),
 		blockerQuery,
 		blocked.GetPid(),
 		blocked.GetBlockedByPid(),
 	)
 }
 
+// QueryTransactions returns filtered, sorted, paginated transactions with reconstructed events.
+// Example: minOpen=30s, limit=50 -> transactions open for at least 30s.
 func (s *ActivityServer) QueryTransactions(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.QueryTransactionsRequest],
@@ -223,23 +209,19 @@ func (s *ActivityServer) QueryTransactions(
 		return nil, err
 	}
 
-	allowedServers := principal.AllowedServerFilter()
-
 	limit := resolveLimit(msg.GetLimit())
 
-	rows, err := s.queries.ListTransactions(ctx, db.ListTransactionsParams{
-		ServerName:     textFilter(msg.GetServerName()),
-		DatabaseName:   textFilter(msg.GetDatabaseName()),
-		AllowedServers: allowedServers,
-		FromTime:       timestamptzFromProto(from),
-		ToTime:         timestamptzFromProto(to),
-		MinOpen:        pgtype.Interval{Microseconds: msg.GetMinOpenMs() * microsPerMilli, Valid: true},
-		SortKey:        transactionSortKey(msg.GetSortColumn()),
-		SortDesc:       msg.GetSortDesc(),
-		// One extra row answers "is there another page" without a second count query.
-		RowLimit:   limit + 1,
-		OffsetRows: resolveOffset(msg.GetOffset()),
-	})
+	scope := clickhouse.TransactionScope{
+		ServerName:   msg.GetServerName(),
+		DatabaseName: msg.GetDatabaseName(),
+		From:         from.AsTime(),
+		To:           to.AsTime(),
+	}
+
+	rows, err := s.stats.ListTransactions(ctx, scope,
+		time.Duration(msg.GetMinOpenMs())*time.Millisecond,
+		transactionSortKey(msg.GetSortColumn()), msg.GetSortDesc(),
+		limit+1, resolveOffset(msg.GetOffset()))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -253,37 +235,31 @@ func (s *ActivityServer) QueryTransactions(
 		return connect.NewResponse(&querysheriffv1.QueryTransactionsResponse{}), nil
 	}
 
-	ids := make([]int64, len(rows))
+	ids := make([]uint64, len(rows))
 	for i, row := range rows {
 		ids[i] = row.ID
 	}
 
-	eventRows, err := s.queries.ListTransactionEvents(ctx, db.ListTransactionEventsParams{
-		TransactionIds: ids,
-		AllowedServers: allowedServers,
-	})
+	eventRows, err := s.stats.ListTransactionEvents(ctx, scope, ids)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	eventsByTxn := make(map[int64][]reconstructedEvent, len(rows))
+	eventsByTxn := make(map[uint64][]reconstructedEvent, len(rows))
 	for _, row := range eventRows {
-		event, convErr := reconstructedEventFromRow(row)
-		if convErr != nil {
-			return nil, connect.NewError(connect.CodeInternal, convErr)
-		}
-		eventsByTxn[row.TransactionID] = append(eventsByTxn[row.TransactionID], event)
+		eventsByTxn[row.TransactionID] = append(
+			eventsByTxn[row.TransactionID], reconstructedEventFromRow(row))
 	}
 
 	transactions := make([]*querysheriffv1.Transaction, len(rows))
 	for i, row := range rows {
 		events := eventsByTxn[row.ID]
 		transactions[i] = &querysheriffv1.Transaction{
-			Pid:             row.Pid,
+			Pid:             signedPid(row.Pid),
 			ApplicationName: row.ApplicationName,
-			Start:           protoFromTimestamptz(row.XactStart),
-			End:             protoFromTimestamptz(row.LastSeenAt),
-			Events:          buildTransactionEvents(row.XactStart.Time, events),
+			Start:           timestamppb.New(row.XactStart),
+			End:             timestamppb.New(row.LastSeenAt),
+			Events:          buildTransactionEvents(row.XactStart, events),
 		}
 	}
 
@@ -306,10 +282,9 @@ func transactionSortKey(col querysheriffv1.TransactionSortColumn) string {
 }
 
 type activitySeriesScope struct {
-	bounds         seriesBounds
-	serverName     pgtype.Text
-	databaseName   pgtype.Text
-	allowedServers []string
+	bounds       timeseries.Bounds
+	serverName   string
+	databaseName string
 }
 
 func (s *ActivityServer) resolveSeriesScope(
@@ -332,37 +307,23 @@ func (s *ActivityServer) resolveSeriesScope(
 	}
 
 	return activitySeriesScope{
-		bounds:         newSeriesBounds(from.AsTime(), to.AsTime(), time.Now()),
-		serverName:     textFilter(serverName),
-		databaseName:   textFilter(databaseName),
-		allowedServers: principal.AllowedServerFilter(),
+		bounds:       timeseries.NewBounds(from.AsTime(), to.AsTime(), time.Now()),
+		serverName:   serverName,
+		databaseName: databaseName,
 	}, nil
 }
 
-func (a activitySeriesScope) lockWaitParams() db.LockWaitSeriesParams {
-	return db.LockWaitSeriesParams{
-		RangeStart:     pgtype.Timestamptz{Time: a.bounds.rangeStart, Valid: true},
-		RangeEnd:       pgtype.Timestamptz{Time: a.bounds.anchor, Valid: true},
-		Anchor:         pgtype.Timestamptz{Time: a.bounds.anchor, Valid: true},
-		Bucket:         pgtype.Interval{Microseconds: a.bounds.bucket.Microseconds(), Valid: true},
-		ServerName:     a.serverName,
-		DatabaseName:   a.databaseName,
-		AllowedServers: a.allowedServers,
+func (a activitySeriesScope) transactionScope() clickhouse.TransactionScope {
+	return clickhouse.TransactionScope{
+		ServerName:   a.serverName,
+		DatabaseName: a.databaseName,
+		From:         a.bounds.RangeStart,
+		To:           a.bounds.Anchor,
 	}
 }
 
-func (a activitySeriesScope) transactionAgeParams() db.TransactionAgeSeriesParams {
-	return db.TransactionAgeSeriesParams{
-		RangeStart:     pgtype.Timestamptz{Time: a.bounds.rangeStart, Valid: true},
-		RangeEnd:       pgtype.Timestamptz{Time: a.bounds.anchor, Valid: true},
-		Anchor:         pgtype.Timestamptz{Time: a.bounds.anchor, Valid: true},
-		Bucket:         pgtype.Interval{Microseconds: a.bounds.bucket.Microseconds(), Valid: true},
-		ServerName:     a.serverName,
-		DatabaseName:   a.databaseName,
-		AllowedServers: a.allowedServers,
-	}
-}
-
+// QueryTransactionAgeSeries returns the oldest transaction age per time bucket.
+// Example: 1m buckets -> [{12:01, 120s}, {12:02, 180s}, ...].
 func (s *ActivityServer) QueryTransactionAgeSeries(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.QueryTransactionAgeSeriesRequest],
@@ -374,31 +335,30 @@ func (s *ActivityServer) QueryTransactionAgeSeries(
 		return nil, err
 	}
 
-	rows, err := s.queries.TransactionAgeSeries(ctx, scope.transactionAgeParams())
+	rows, err := s.stats.TransactionAgeSeries(ctx, scope.transactionScope(), scope.bounds.Bucket)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
 	return connect.NewResponse(&querysheriffv1.QueryTransactionAgeSeriesResponse{
-		Series:   transactionAgePoints(scope.bounds.bucketEnds(), rows),
-		BucketMs: scope.bounds.bucket.Milliseconds(),
+		Series:   transactionAgePoints(scope.bounds.Ends(), rows),
+		BucketMs: scope.bounds.Bucket.Milliseconds(),
 	}), nil
 }
 
-func transactionAgePoints(ends []time.Time, rows []db.TransactionAgeSeriesRow) []*querysheriffv1.TransactionAgePoint {
+func transactionAgePoints(ends []time.Time, rows []clickhouse.TransactionAgeBin) []*querysheriffv1.TransactionAgePoint {
 	endedAge := make(map[int64]float64, len(rows))
 	for _, r := range rows {
-		endedAge[r.BucketEnd.Time.UnixNano()] = r.EndedAge
+		endedAge[r.BucketEnd.UnixNano()] = r.EndedAge
 	}
 
-	// The rows come back oldest bucket first, but the loop below walks them newest to oldest.
 	next := len(rows) - 1
 	var oldestOpen time.Time
 
 	points := make([]*querysheriffv1.TransactionAgePoint, len(ends))
 	for i, end := range slices.Backward(ends) {
-		for next >= 0 && rows[next].BucketEnd.Time.After(end) {
-			if start := rows[next].OldestStart.Time; oldestOpen.IsZero() || start.Before(oldestOpen) {
+		for next >= 0 && rows[next].BucketEnd.After(end) {
+			if start := rows[next].OldestStart; oldestOpen.IsZero() || start.Before(oldestOpen) {
 				oldestOpen = start
 			}
 			next--
@@ -417,49 +377,117 @@ func transactionAgePoints(ends []time.Time, rows []db.TransactionAgeSeriesRow) [
 	return points
 }
 
-func transactionEventParams(
+func transactionActivityRow(
 	serverName string,
-	collectedAt pgtype.Timestamptz,
+	collectedAt time.Time,
 	snap *querysheriffv1.ActivitySnapshot,
-) (db.RecordTransactionEventParams, error) {
-	tags, err := jsonbFromStringMap(snap.GetQueryTags())
-	if err != nil {
-		return db.RecordTransactionEventParams{}, err
-	}
+) clickhouse.TransactionActivity {
+	pid := uint32(max(snap.GetPid(), 0))
+	backendStart := snap.GetBackendStart().AsTime()
+	xactStart := snap.GetXactStart().AsTime()
 
-	return db.RecordTransactionEventParams{
+	row := clickhouse.TransactionActivity{
+		TransactionID:   clickhouse.TransactionID(serverName, pid, backendStart, xactStart),
 		ServerName:      serverName,
-		Pid:             snap.GetPid(),
-		BackendStart:    timestamptzFromProto(snap.GetBackendStart()),
-		XactStart:       timestamptzFromProto(snap.GetXactStart()),
 		DatabaseName:    snap.GetDatabaseName(),
 		UserName:        snap.GetUserName(),
 		ApplicationName: snap.GetApplicationName(),
+		Pid:             pid,
+		BackendStart:    backendStart,
+		XactStart:       xactStart,
 		CollectedAt:     collectedAt,
+		QueryStart:      snap.GetQueryStart().AsTime(),
+		Query:           snap.GetQuery(),
+		QueryTags:       snap.GetQueryTags(),
 		State:           snap.GetState(),
 		WaitEventType:   snap.GetWaitEventType(),
 		WaitEvent:       snap.GetWaitEvent(),
-		QueryStart:      timestamptzFromProto(snap.GetQueryStart()),
-		Query:           snap.GetQuery(),
-		QueryTags:       tags,
-		BlockedByPid:    snap.GetBlockedByPid(),
-		LockWaitStart:   timestamptzFromProto(snap.GetLockWaitStart()),
+		BlockedByPid:    uint32(max(snap.GetBlockedByPid(), 0)),
 		LockMode:        snap.GetLockMode(),
-	}, nil
-}
-
-func drainRecordBatch(results *db.RecordTransactionEventBatchResults) error {
-	var execErr error
-
-	results.Exec(func(_ int, err error) {
-		if err != nil && execErr == nil {
-			execErr = err
-		}
-	})
-
-	if execErr != nil {
-		return connect.NewError(connect.CodeInternal, execErr)
 	}
 
-	return nil
+	if lockWait := snap.GetLockWaitStart(); lockWait != nil {
+		at := lockWait.AsTime()
+		row.LockWaitStart = &at
+	}
+
+	return row
+}
+
+const (
+	stateActive                   = "active"
+	stateIdleInTransaction        = "idle in transaction"
+	stateIdleInTransactionAborted = "idle in transaction (aborted)"
+)
+
+const (
+	statusActive  = querysheriffv1.TransactionEventStatus_TRANSACTION_EVENT_STATUS_ACTIVE
+	statusIdle    = querysheriffv1.TransactionEventStatus_TRANSACTION_EVENT_STATUS_IDLE
+	statusAborted = querysheriffv1.TransactionEventStatus_TRANSACTION_EVENT_STATUS_ABORTED
+)
+
+type reconstructedEvent struct {
+	state         string
+	waitEventType string
+	waitEvent     string
+	lockMode      string
+	query         string
+	queryTags     map[string]string
+	queryStart    time.Time
+	firstSeen     time.Time
+	lastSeen      time.Time
+}
+
+func reconstructedEventFromRow(row clickhouse.TransactionEvent) reconstructedEvent {
+	return reconstructedEvent{
+		state:         row.State,
+		waitEventType: row.WaitEventType,
+		waitEvent:     row.WaitEvent,
+		lockMode:      row.LockMode,
+		query:         row.Query,
+		queryTags:     row.QueryTags,
+		queryStart:    row.QueryStart,
+		firstSeen:     row.FirstSeenAt,
+		lastSeen:      row.LastSeenAt,
+	}
+}
+
+func buildTransactionEvents(start time.Time, events []reconstructedEvent) []*querysheriffv1.TransactionEvent {
+	out := make([]*querysheriffv1.TransactionEvent, len(events))
+	for i, e := range events {
+		from := e.firstSeen
+		if i == 0 && start.Before(from) {
+			from = start
+		}
+
+		to := e.lastSeen
+		if i+1 < len(events) {
+			to = events[i+1].firstSeen
+		}
+
+		out[i] = &querysheriffv1.TransactionEvent{
+			From:          timestamppb.New(from),
+			To:            timestamppb.New(to),
+			Status:        eventStatus(e.state),
+			WaitEventType: e.waitEventType,
+			WaitEvent:     e.waitEvent,
+			LockMode:      e.lockMode,
+			Query:         e.query,
+			QueryTags:     e.queryTags,
+			QueryStart:    timestamppb.New(e.queryStart),
+		}
+	}
+
+	return out
+}
+
+func eventStatus(state string) querysheriffv1.TransactionEventStatus {
+	switch state {
+	case stateIdleInTransactionAborted:
+		return statusAborted
+	case stateIdleInTransaction:
+		return statusIdle
+	default:
+		return statusActive
+	}
 }

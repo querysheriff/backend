@@ -14,10 +14,9 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/querysheriff/backend/internal/alerts"
+	chstats "github.com/querysheriff/backend/internal/clickhouse"
 	"github.com/querysheriff/backend/internal/config"
-	"github.com/querysheriff/backend/internal/db"
-	"github.com/querysheriff/backend/internal/retention"
-	"github.com/querysheriff/backend/internal/rollup"
+	"github.com/querysheriff/backend/internal/gen/db"
 )
 
 const connectTimeout = 10 * time.Second
@@ -50,13 +49,19 @@ func run(logger *slog.Logger) error {
 	}
 	defer pool.Close()
 
+	conn, err := chstats.Connect(ctx, cfg.ClickHouseURL)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+
+	stats := chstats.New(conn)
+
 	queries := db.New(pool)
 	notifier := alerts.NewNotifier(queries, logger)
 
 	jobs := []func(context.Context){
-		func(c context.Context) { retention.Run(c, pool, cfg.RetentionDays, logger) },
-		func(c context.Context) { alerts.RunScheduler(c, queries, notifier, cfg.DashboardURL, logger) },
-		func(c context.Context) { rollup.Run(c, pool, logger) },
+		func(c context.Context) { alerts.RunScheduler(c, queries, stats, notifier, cfg.DashboardURL, logger) },
 	}
 
 	logger.InfoContext(ctx, "querysheriff jobs started")

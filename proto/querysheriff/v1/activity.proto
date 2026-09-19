@@ -21,7 +21,6 @@ message ReportActivityRequest {
 
 message ReportActivityResponse {}
 
-// One row from pg_stat_activity.
 message ActivitySnapshot {
   int32 pid = 1;
   google.protobuf.Timestamp backend_start = 2;
@@ -34,15 +33,9 @@ message ActivitySnapshot {
   google.protobuf.Timestamp xact_start = 9;
   google.protobuf.Timestamp query_start = 10;
   int64 query_id = 11;
-
-  // The leading tag comment is stripped out; its tags arrive in query_tags.
   string query = 12;
-
-  // key=value tags parsed from the query's leading comment.
   map<string, string> query_tags = 13;
-
   int32 blocked_by_pid = 14;
-
   google.protobuf.Timestamp lock_wait_start = 15;
   string lock_mode = 16;
 }
@@ -65,13 +58,10 @@ message QueryTransactionsRequest {
   string database_name = 2;
   google.protobuf.Timestamp from = 3;
   google.protobuf.Timestamp to = 4;
-
-  // Page size. Defaults to 50 when unset.
   int32 limit = 5;
   int32 offset = 6;
   TransactionSortColumn sort_column = 7;
   bool sort_desc = 8;
-
   int64 min_open_ms = 9;
 }
 
@@ -80,18 +70,14 @@ message QueryTransactionsResponse {
   bool has_more = 2;
 }
 
-// A reconstructed transaction from a series of activity snapshots.
 message Transaction {
   int32 pid = 1;
   string application_name = 2;
   google.protobuf.Timestamp start = 3;
-
-  // The last time the transaction was observed in a snapshot (≈ its end).
   google.protobuf.Timestamp end = 4;
   repeated TransactionEvent events = 6;
 }
 
-// One stretch of a transaction where its activity attributes did not meaningfully change.
 message TransactionEvent {
   google.protobuf.Timestamp from = 1;
   google.protobuf.Timestamp to = 2;
@@ -113,11 +99,9 @@ message QueryLockWaitSeriesRequest {
 
 message QueryLockWaitSeriesResponse {
   repeated LockWaitPoint series = 1;
-
   int64 bucket_ms = 2;
 }
 
-// Session-time lost to lock waits in one bucket.
 message LockWaitPoint {
   google.protobuf.Timestamp at = 1;
   double wait_seconds = 2;
@@ -134,8 +118,6 @@ message QueryLockWaitsRequest {
   string database_name = 2;
   google.protobuf.Timestamp from = 3;
   google.protobuf.Timestamp to = 4;
-
-  // Page size. Defaults to 50 when unset.
   int32 limit = 5;
   int32 offset = 6;
   LockWaitSortColumn sort_column = 7;
@@ -151,8 +133,6 @@ message LockWait {
   LockParty waiting = 1;
   LockParty blocking = 2;
   google.protobuf.Timestamp started_waiting = 3;
-
-  // Last time the wait was observed (≈ when it ended).
   google.protobuf.Timestamp last_seen = 4;
   string lock_mode = 5;
 }
@@ -173,11 +153,9 @@ message QueryTransactionAgeSeriesRequest {
 
 message QueryTransactionAgeSeriesResponse {
   repeated TransactionAgePoint series = 1;
-
   int64 bucket_ms = 2;
 }
 
-// How old the longest-running open transaction was at the end of one bucket.
 message TransactionAgePoint {
   google.protobuf.Timestamp at = 1;
   double age_seconds = 2;

@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
-	"github.com/querysheriff/backend/internal/db"
+	"github.com/querysheriff/backend/internal/gen/db"
 )
 
 type HealthServer struct {
@@ -18,6 +18,8 @@ func NewHealthServer(queries *db.Queries) *HealthServer {
 	return &HealthServer{queries: queries}
 }
 
+// ReportHealth stores the latest collector health for its server.
+// Example: databases=["app","postgres"] -> health updated for authenticated collector.
 func (s *HealthServer) ReportHealth(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.ReportHealthRequest],
@@ -45,6 +47,8 @@ func (s *HealthServer) ReportHealth(
 	return connect.NewResponse(&querysheriffv1.ReportHealthResponse{}), nil
 }
 
+// QueryServers returns monitored servers visible to the current user.
+// Example: allowed=["prod"] -> only prod server is returned.
 func (s *HealthServer) QueryServers(
 	ctx context.Context,
 	_ *connect.Request[querysheriffv1.QueryServersRequest],
@@ -67,7 +71,7 @@ func (s *HealthServer) QueryServers(
 func decodeMonitoredServer(row db.CollectorHealth) (*querysheriffv1.MonitoredServer, error) {
 	return &querysheriffv1.MonitoredServer{
 		ServerName:  row.ServerName,
-		CollectedAt: protoFromTimestamptz(row.CollectedAt),
+		CollectedAt: timestamptzProto(row.CollectedAt),
 		Databases:   row.Databases,
 	}, nil
 }

@@ -17,6 +17,8 @@ const (
 	base62Alphabet       = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 )
 
+// GenerateToken creates a cryptographically random Base62 token with a prefix.
+// Example: GenerateToken("qss_") -> "qss_8Fa2...".
 func GenerateToken(prefix string) (string, error) {
 	buf := make([]byte, tokenRandomBytes)
 	if _, err := rand.Read(buf); err != nil {
@@ -26,12 +28,16 @@ func GenerateToken(prefix string) (string, error) {
 	return prefix + base62Encode(buf), nil
 }
 
+// HashToken returns a SHA-256 hex hash of a token.
+// Example: "qss_abc" -> "9f86...".
 func HashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 
 	return hex.EncodeToString(sum[:])
 }
 
+// HashPassword hashes a password with bcrypt.
+// Example: "secret" -> "$2a$10$...".
 func HashPassword(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -41,6 +47,8 @@ func HashPassword(password string) (string, error) {
 	return string(hash), nil
 }
 
+// CheckPassword reports whether a password matches a bcrypt hash.
+// Example: CheckPassword(hash, "secret") -> true.
 func CheckPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }

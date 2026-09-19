@@ -12,7 +12,7 @@ import (
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 	"github.com/querysheriff/backend/internal/auth"
-	"github.com/querysheriff/backend/internal/db"
+	"github.com/querysheriff/backend/internal/gen/db"
 )
 
 const emailExistsMsg = "a user with that email already exists"
@@ -26,6 +26,8 @@ func NewAdminServer(pool *pgxpool.Pool) *AdminServer {
 	return &AdminServer{pool: pool, queries: db.New(pool)}
 }
 
+// ListCollectorTokens returns all collector tokens.
+// Example: -> [{ID:1, ServerName:"prod"}, {ID:2, ServerName:"staging"}].
 func (s *AdminServer) ListCollectorTokens(
 	ctx context.Context,
 	_ *connect.Request[querysheriffv1.ListCollectorTokensRequest],
@@ -40,13 +42,15 @@ func (s *AdminServer) ListCollectorTokens(
 		tokens[i] = &querysheriffv1.CollectorToken{
 			Id:         row.ID,
 			ServerName: row.ServerName,
-			CreatedAt:  protoFromTimestamptz(row.CreatedAt),
+			CreatedAt:  timestamptzProto(row.CreatedAt),
 		}
 	}
 
 	return connect.NewResponse(&querysheriffv1.ListCollectorTokensResponse{Tokens: tokens}), nil
 }
 
+// CreateCollectorToken creates a collector token for a server.
+// Example: serverName="prod" -> token "qsc_..." for prod.
 func (s *AdminServer) CreateCollectorToken(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.CreateCollectorTokenRequest],
@@ -73,12 +77,14 @@ func (s *AdminServer) CreateCollectorToken(
 		Token: &querysheriffv1.CollectorToken{
 			Id:         row.ID,
 			ServerName: row.ServerName,
-			CreatedAt:  protoFromTimestamptz(row.CreatedAt),
+			CreatedAt:  timestamptzProto(row.CreatedAt),
 		},
 		TokenValue: token,
 	}), nil
 }
 
+// DeleteCollectorToken deletes a collector token and cleans server access if it was the last one.
+// Example: delete last token for "prod" -> removes "prod" from users and alert config.
 func (s *AdminServer) DeleteCollectorToken(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.DeleteCollectorTokenRequest],
@@ -98,7 +104,6 @@ func (s *AdminServer) DeleteCollectorToken(
 
 	serverName, err := q.DeleteCollectorToken(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		// Already gone; nothing to clean up.
 		return connect.NewResponse(&querysheriffv1.DeleteCollectorTokenResponse{}), nil
 	}
 	if err != nil {
@@ -126,6 +131,8 @@ func (s *AdminServer) DeleteCollectorToken(
 	return connect.NewResponse(&querysheriffv1.DeleteCollectorTokenResponse{}), nil
 }
 
+// ListUsers returns all users.
+// Example: -> [{ID:1, Email:"admin@example.com"}, ...].
 func (s *AdminServer) ListUsers(
 	ctx context.Context,
 	_ *connect.Request[querysheriffv1.ListUsersRequest],
@@ -142,7 +149,7 @@ func (s *AdminServer) ListUsers(
 			row.Name,
 			row.Email,
 			row.IsSuperAdmin,
-			protoFromTimestamptz(row.CreatedAt),
+			timestamptzProto(row.CreatedAt),
 			row.AllowedServers,
 		)
 	}
@@ -150,6 +157,8 @@ func (s *AdminServer) ListUsers(
 	return connect.NewResponse(&querysheriffv1.ListUsersResponse{Users: users}), nil
 }
 
+// CreateUser creates a non-super-admin user.
+// Example: name="Bob", email="bob@example.com" -> new User.
 func (s *AdminServer) CreateUser(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.CreateUserRequest],
@@ -187,12 +196,14 @@ func (s *AdminServer) CreateUser(
 			created.Name,
 			created.Email,
 			false,
-			protoFromTimestamptz(created.CreatedAt),
+			timestamptzProto(created.CreatedAt),
 			created.AllowedServers,
 		),
 	}), nil
 }
 
+// UpdateUser updates a user's profile, server access, and optionally password.
+// Example: id=2, name="Bob", password="" -> updates user without changing password.
 func (s *AdminServer) UpdateUser(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.UpdateUserRequest],
@@ -238,7 +249,7 @@ func (s *AdminServer) UpdateUser(
 			updated.Name,
 			updated.Email,
 			updated.IsSuperAdmin,
-			protoFromTimestamptz(updated.CreatedAt),
+			timestamptzProto(updated.CreatedAt),
 			updated.AllowedServers,
 		),
 	}), nil
@@ -252,6 +263,8 @@ func orEmptyStrings(values []string) []string {
 	return values
 }
 
+// DeleteUser deletes a non-super-admin user.
+// Example: id=2 -> user deleted; super admin -> error.
 func (s *AdminServer) DeleteUser(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.DeleteUserRequest],

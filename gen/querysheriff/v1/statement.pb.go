@@ -130,36 +130,30 @@ type StatementSortColumn int32
 
 const (
 	StatementSortColumn_STATEMENT_SORT_COLUMN_UNSPECIFIED   StatementSortColumn = 0
-	StatementSortColumn_STATEMENT_SORT_COLUMN_QUERY         StatementSortColumn = 1
-	StatementSortColumn_STATEMENT_SORT_COLUMN_USER          StatementSortColumn = 2
-	StatementSortColumn_STATEMENT_SORT_COLUMN_AVG           StatementSortColumn = 3
-	StatementSortColumn_STATEMENT_SORT_COLUMN_CALLS         StatementSortColumn = 4
-	StatementSortColumn_STATEMENT_SORT_COLUMN_ROWS_PER_CALL StatementSortColumn = 5
-	StatementSortColumn_STATEMENT_SORT_COLUMN_PCT_IO        StatementSortColumn = 6
-	StatementSortColumn_STATEMENT_SORT_COLUMN_PCT_TIME      StatementSortColumn = 7
+	StatementSortColumn_STATEMENT_SORT_COLUMN_AVG           StatementSortColumn = 1
+	StatementSortColumn_STATEMENT_SORT_COLUMN_CALLS         StatementSortColumn = 2
+	StatementSortColumn_STATEMENT_SORT_COLUMN_ROWS_PER_CALL StatementSortColumn = 3
+	StatementSortColumn_STATEMENT_SORT_COLUMN_PCT_IO        StatementSortColumn = 4
+	StatementSortColumn_STATEMENT_SORT_COLUMN_PCT_TIME      StatementSortColumn = 5
 )
 
 // Enum value maps for StatementSortColumn.
 var (
 	StatementSortColumn_name = map[int32]string{
 		0: "STATEMENT_SORT_COLUMN_UNSPECIFIED",
-		1: "STATEMENT_SORT_COLUMN_QUERY",
-		2: "STATEMENT_SORT_COLUMN_USER",
-		3: "STATEMENT_SORT_COLUMN_AVG",
-		4: "STATEMENT_SORT_COLUMN_CALLS",
-		5: "STATEMENT_SORT_COLUMN_ROWS_PER_CALL",
-		6: "STATEMENT_SORT_COLUMN_PCT_IO",
-		7: "STATEMENT_SORT_COLUMN_PCT_TIME",
+		1: "STATEMENT_SORT_COLUMN_AVG",
+		2: "STATEMENT_SORT_COLUMN_CALLS",
+		3: "STATEMENT_SORT_COLUMN_ROWS_PER_CALL",
+		4: "STATEMENT_SORT_COLUMN_PCT_IO",
+		5: "STATEMENT_SORT_COLUMN_PCT_TIME",
 	}
 	StatementSortColumn_value = map[string]int32{
 		"STATEMENT_SORT_COLUMN_UNSPECIFIED":   0,
-		"STATEMENT_SORT_COLUMN_QUERY":         1,
-		"STATEMENT_SORT_COLUMN_USER":          2,
-		"STATEMENT_SORT_COLUMN_AVG":           3,
-		"STATEMENT_SORT_COLUMN_CALLS":         4,
-		"STATEMENT_SORT_COLUMN_ROWS_PER_CALL": 5,
-		"STATEMENT_SORT_COLUMN_PCT_IO":        6,
-		"STATEMENT_SORT_COLUMN_PCT_TIME":      7,
+		"STATEMENT_SORT_COLUMN_AVG":           1,
+		"STATEMENT_SORT_COLUMN_CALLS":         2,
+		"STATEMENT_SORT_COLUMN_ROWS_PER_CALL": 3,
+		"STATEMENT_SORT_COLUMN_PCT_IO":        4,
+		"STATEMENT_SORT_COLUMN_PCT_TIME":      5,
 	}
 )
 
@@ -242,7 +236,6 @@ func (SampleSortColumn) EnumDescriptor() ([]byte, []int) {
 	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{3}
 }
 
-// Values within a filter are ORed, separate filters are ANDed.
 type TagFilter struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
@@ -592,21 +585,18 @@ func (x *StatementText) GetQuery() string {
 }
 
 type QueryStatementsRequest struct {
-	state        protoimpl.MessageState `protogen:"open.v1"`
-	ServerName   string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
-	DatabaseName string                 `protobuf:"bytes,2,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
-	From         *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
-	To           *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
-	// Case-insensitive substring match against the normalized query text.
-	QueryText string `protobuf:"bytes,5,opt,name=query_text,json=queryText,proto3" json:"query_text,omitempty"`
-	// Page size. Defaults to 50 when unset.
-	Limit int32 `protobuf:"varint,6,opt,name=limit,proto3" json:"limit,omitempty"`
-	// ANDed with query_text.
-	TagFilters    []*TagFilter        `protobuf:"bytes,7,rep,name=tag_filters,json=tagFilters,proto3" json:"tag_filters,omitempty"`
-	Kinds         []QueryKind         `protobuf:"varint,8,rep,packed,name=kinds,proto3,enum=querysheriff.v1.QueryKind" json:"kinds,omitempty"`
-	Offset        int32               `protobuf:"varint,9,opt,name=offset,proto3" json:"offset,omitempty"`
-	SortColumn    StatementSortColumn `protobuf:"varint,10,opt,name=sort_column,json=sortColumn,proto3,enum=querysheriff.v1.StatementSortColumn" json:"sort_column,omitempty"`
-	SortDesc      bool                `protobuf:"varint,11,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ServerName    string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
+	DatabaseName  string                 `protobuf:"bytes,2,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
+	From          *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
+	To            *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
+	QueryText     string                 `protobuf:"bytes,5,opt,name=query_text,json=queryText,proto3" json:"query_text,omitempty"`
+	Limit         int32                  `protobuf:"varint,6,opt,name=limit,proto3" json:"limit,omitempty"`
+	TagFilters    []*TagFilter           `protobuf:"bytes,7,rep,name=tag_filters,json=tagFilters,proto3" json:"tag_filters,omitempty"`
+	Kinds         []QueryKind            `protobuf:"varint,8,rep,packed,name=kinds,proto3,enum=querysheriff.v1.QueryKind" json:"kinds,omitempty"`
+	Offset        int32                  `protobuf:"varint,9,opt,name=offset,proto3" json:"offset,omitempty"`
+	SortColumn    StatementSortColumn    `protobuf:"varint,10,opt,name=sort_column,json=sortColumn,proto3,enum=querysheriff.v1.StatementSortColumn" json:"sort_column,omitempty"`
+	SortDesc      bool                   `protobuf:"varint,11,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -774,7 +764,7 @@ type SeriesScope struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ServerName    string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
 	DatabaseName  string                 `protobuf:"bytes,2,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
-	StatementId   int64                  `protobuf:"varint,3,opt,name=statement_id,json=statementId,proto3" json:"statement_id,omitempty"`
+	StatementId   uint64                 `protobuf:"varint,3,opt,name=statement_id,json=statementId,proto3" json:"statement_id,omitempty"`
 	From          *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=from,proto3" json:"from,omitempty"`
 	To            *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=to,proto3" json:"to,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -825,7 +815,7 @@ func (x *SeriesScope) GetDatabaseName() string {
 	return ""
 }
 
-func (x *SeriesScope) GetStatementId() int64 {
+func (x *SeriesScope) GetStatementId() uint64 {
 	if x != nil {
 		return x.StatementId
 	}
@@ -1160,7 +1150,7 @@ func (x *QueryStatementTimingSeriesResponse) GetBucketMs() int64 {
 
 type QueryStatementDetailRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Id            uint64                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	From          *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
 	To            *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1197,7 +1187,7 @@ func (*QueryStatementDetailRequest) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{16}
 }
 
-func (x *QueryStatementDetailRequest) GetId() int64 {
+func (x *QueryStatementDetailRequest) GetId() uint64 {
 	if x != nil {
 		return x.Id
 	}
@@ -1219,12 +1209,11 @@ func (x *QueryStatementDetailRequest) GetTo() *timestamppb.Timestamp {
 }
 
 type QueryStatementDetailResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Query string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
-	// Deduped across the window's samples: a key appears only when every sample agrees on its value.
-	Tags          map[string]string `protobuf:"bytes,2,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	ServerName    string            `protobuf:"bytes,5,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
-	DatabaseName  string            `protobuf:"bytes,6,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	Tags          map[string]string      `protobuf:"bytes,2,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ServerName    string                 `protobuf:"bytes,5,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
+	DatabaseName  string                 `protobuf:"bytes,6,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1288,15 +1277,14 @@ func (x *QueryStatementDetailResponse) GetDatabaseName() string {
 }
 
 type QueryStatementSamplesRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Id    int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	From  *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
-	To    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
-	// Page size. Defaults to 50 when unset.
-	Limit         int32            `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
-	Offset        int32            `protobuf:"varint,5,opt,name=offset,proto3" json:"offset,omitempty"`
-	SortColumn    SampleSortColumn `protobuf:"varint,6,opt,name=sort_column,json=sortColumn,proto3,enum=querysheriff.v1.SampleSortColumn" json:"sort_column,omitempty"`
-	SortDesc      bool             `protobuf:"varint,7,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            uint64                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	From          *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	To            *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	Limit         int32                  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	Offset        int32                  `protobuf:"varint,5,opt,name=offset,proto3" json:"offset,omitempty"`
+	SortColumn    SampleSortColumn       `protobuf:"varint,6,opt,name=sort_column,json=sortColumn,proto3,enum=querysheriff.v1.SampleSortColumn" json:"sort_column,omitempty"`
+	SortDesc      bool                   `protobuf:"varint,7,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1331,7 +1319,7 @@ func (*QueryStatementSamplesRequest) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{18}
 }
 
-func (x *QueryStatementSamplesRequest) GetId() int64 {
+func (x *QueryStatementSamplesRequest) GetId() uint64 {
 	if x != nil {
 		return x.Id
 	}
@@ -1433,15 +1421,13 @@ func (x *QueryStatementSamplesResponse) GetHasMore() bool {
 }
 
 type StatementSample struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	Id         int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	OccurredAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=occurred_at,json=occurredAt,proto3" json:"occurred_at,omitempty"`
-	// Short concretized query for display; full text via GetStatementSampleText.
-	Query string `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
-	// All tags as captured, including high-cardinality values.
-	Tags          map[string]string `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	HasPlan       bool              `protobuf:"varint,5,opt,name=has_plan,json=hasPlan,proto3" json:"has_plan,omitempty"`
-	DurationMs    float64           `protobuf:"fixed64,6,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            uint64                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	OccurredAt    *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=occurred_at,json=occurredAt,proto3" json:"occurred_at,omitempty"`
+	Query         string                 `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
+	Tags          map[string]string      `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	HasPlan       bool                   `protobuf:"varint,5,opt,name=has_plan,json=hasPlan,proto3" json:"has_plan,omitempty"`
+	DurationMs    float64                `protobuf:"fixed64,6,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1476,7 +1462,7 @@ func (*StatementSample) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{20}
 }
 
-func (x *StatementSample) GetId() int64 {
+func (x *StatementSample) GetId() uint64 {
 	if x != nil {
 		return x.Id
 	}
@@ -1520,7 +1506,7 @@ func (x *StatementSample) GetDurationMs() float64 {
 
 type GetStatementSamplePlanRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SampleId      int64                  `protobuf:"varint,1,opt,name=sample_id,json=sampleId,proto3" json:"sample_id,omitempty"`
+	SampleId      uint64                 `protobuf:"varint,1,opt,name=sample_id,json=sampleId,proto3" json:"sample_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1555,7 +1541,7 @@ func (*GetStatementSamplePlanRequest) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{21}
 }
 
-func (x *GetStatementSamplePlanRequest) GetSampleId() int64 {
+func (x *GetStatementSamplePlanRequest) GetSampleId() uint64 {
 	if x != nil {
 		return x.SampleId
 	}
@@ -1563,11 +1549,9 @@ func (x *GetStatementSamplePlanRequest) GetSampleId() int64 {
 }
 
 type GetStatementSamplePlanResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Concretized statement text (actual parameter values).
-	Query string `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
-	// Raw Auto Explain plan as captured (JSON or text EXPLAIN output).
-	PlanJson      string `protobuf:"bytes,2,opt,name=plan_json,json=planJson,proto3" json:"plan_json,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	PlanJson      string                 `protobuf:"bytes,2,opt,name=plan_json,json=planJson,proto3" json:"plan_json,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1618,7 +1602,7 @@ func (x *GetStatementSamplePlanResponse) GetPlanJson() string {
 
 type GetStatementSampleTextRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SampleId      int64                  `protobuf:"varint,1,opt,name=sample_id,json=sampleId,proto3" json:"sample_id,omitempty"`
+	SampleId      uint64                 `protobuf:"varint,1,opt,name=sample_id,json=sampleId,proto3" json:"sample_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1653,7 +1637,7 @@ func (*GetStatementSampleTextRequest) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{23}
 }
 
-func (x *GetStatementSampleTextRequest) GetSampleId() int64 {
+func (x *GetStatementSampleTextRequest) GetSampleId() uint64 {
 	if x != nil {
 		return x.SampleId
 	}
@@ -1706,7 +1690,7 @@ func (x *GetStatementSampleTextResponse) GetQuery() string {
 
 type GetStatementTextRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Id            uint64                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1741,7 +1725,7 @@ func (*GetStatementTextRequest) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{25}
 }
 
-func (x *GetStatementTextRequest) GetId() int64 {
+func (x *GetStatementTextRequest) GetId() uint64 {
 	if x != nil {
 		return x.Id
 	}
@@ -1890,19 +1874,16 @@ func (x *MetricPoint) GetValue() float64 {
 
 type StatementStat struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Id            uint64                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	Preview       string                 `protobuf:"bytes,2,opt,name=preview,proto3" json:"preview,omitempty"`
 	UserName      string                 `protobuf:"bytes,3,opt,name=user_name,json=userName,proto3" json:"user_name,omitempty"`
 	TotalExecTime float64                `protobuf:"fixed64,4,opt,name=total_exec_time,json=totalExecTime,proto3" json:"total_exec_time,omitempty"`
-	// Share of total execution time across all matching statements.
-	PctOfTotal  float64 `protobuf:"fixed64,5,opt,name=pct_of_total,json=pctOfTotal,proto3" json:"pct_of_total,omitempty"`
-	Calls       int64   `protobuf:"varint,6,opt,name=calls,proto3" json:"calls,omitempty"`
-	AvgExecTime float64 `protobuf:"fixed64,7,opt,name=avg_exec_time,json=avgExecTime,proto3" json:"avg_exec_time,omitempty"`
-	Rows        int64   `protobuf:"varint,8,opt,name=rows,proto3" json:"rows,omitempty"`
-	// Same logic as QueryStatementDetailResponse.tags.
-	Tags map[string]string `protobuf:"bytes,9,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Share of total IO time across all matching statements.
-	PctIo         float64 `protobuf:"fixed64,10,opt,name=pct_io,json=pctIo,proto3" json:"pct_io,omitempty"`
+	PctOfTotal    float64                `protobuf:"fixed64,5,opt,name=pct_of_total,json=pctOfTotal,proto3" json:"pct_of_total,omitempty"`
+	Calls         int64                  `protobuf:"varint,6,opt,name=calls,proto3" json:"calls,omitempty"`
+	AvgExecTime   float64                `protobuf:"fixed64,7,opt,name=avg_exec_time,json=avgExecTime,proto3" json:"avg_exec_time,omitempty"`
+	Rows          int64                  `protobuf:"varint,8,opt,name=rows,proto3" json:"rows,omitempty"`
+	Tags          map[string]string      `protobuf:"bytes,9,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	PctIo         float64                `protobuf:"fixed64,10,opt,name=pct_io,json=pctIo,proto3" json:"pct_io,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1937,7 +1918,7 @@ func (*StatementStat) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_statement_proto_rawDescGZIP(), []int{29}
 }
 
-func (x *StatementStat) GetId() int64 {
+func (x *StatementStat) GetId() uint64 {
 	if x != nil {
 		return x.Id
 	}
@@ -2007,7 +1988,6 @@ func (x *StatementStat) GetPctIo() float64 {
 	return 0
 }
 
-// Delta of one pg_stat_statements row since the previous collection.
 type StatementDelta struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserName      string                 `protobuf:"bytes,1,opt,name=user_name,json=userName,proto3" json:"user_name,omitempty"`
@@ -2016,8 +1996,7 @@ type StatementDelta struct {
 	Calls         int64                  `protobuf:"varint,4,opt,name=calls,proto3" json:"calls,omitempty"`
 	Rows          int64                  `protobuf:"varint,5,opt,name=rows,proto3" json:"rows,omitempty"`
 	TotalExecTime float64                `protobuf:"fixed64,6,opt,name=total_exec_time,json=totalExecTime,proto3" json:"total_exec_time,omitempty"`
-	// Total block-IO time (ms) summed across all IO-timing columns.
-	TotalIoTime   float64 `protobuf:"fixed64,7,opt,name=total_io_time,json=totalIoTime,proto3" json:"total_io_time,omitempty"`
+	TotalIoTime   float64                `protobuf:"fixed64,7,opt,name=total_io_time,json=totalIoTime,proto3" json:"total_io_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2487,7 +2466,7 @@ const file_querysheriff_v1_statement_proto_rawDesc = "" +
 	"\vserver_name\x18\x01 \x01(\tR\n" +
 	"serverName\x12#\n" +
 	"\rdatabase_name\x18\x02 \x01(\tR\fdatabaseName\x12!\n" +
-	"\fstatement_id\x18\x03 \x01(\x03R\vstatementId\x12.\n" +
+	"\fstatement_id\x18\x03 \x01(\x04R\vstatementId\x12.\n" +
 	"\x04from\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
 	"\x02to\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\"V\n" +
 	" QueryStatementCallsSeriesRequest\x122\n" +
@@ -2509,7 +2488,7 @@ const file_querysheriff_v1_statement_proto_rawDesc = "" +
 	"\x06avg_io\x18\x02 \x01(\v2 .querysheriff.v1.StatementMetricR\x05avgIo\x12\x1b\n" +
 	"\tbucket_ms\x18\x03 \x01(\x03R\bbucketMs\"\x89\x01\n" +
 	"\x1bQueryStatementDetailRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x12.\n" +
+	"\x02id\x18\x01 \x01(\x04R\x02id\x12.\n" +
 	"\x04from\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
 	"\x02to\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\"\x80\x02\n" +
 	"\x1cQueryStatementDetailResponse\x12\x14\n" +
@@ -2522,7 +2501,7 @@ const file_querysheriff_v1_statement_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x99\x02\n" +
 	"\x1cQueryStatementSamplesRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x12.\n" +
+	"\x02id\x18\x01 \x01(\x04R\x02id\x12.\n" +
 	"\x04from\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
 	"\x02to\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\x12\x14\n" +
 	"\x05limit\x18\x04 \x01(\x05R\x05limit\x12\x16\n" +
@@ -2534,7 +2513,7 @@ const file_querysheriff_v1_statement_proto_rawDesc = "" +
 	"\asamples\x18\x01 \x03(\v2 .querysheriff.v1.StatementSampleR\asamples\x12\x19\n" +
 	"\bhas_more\x18\x02 \x01(\bR\ahasMore\"\xa9\x02\n" +
 	"\x0fStatementSample\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x12;\n" +
+	"\x02id\x18\x01 \x01(\x04R\x02id\x12;\n" +
 	"\voccurred_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"occurredAt\x12\x14\n" +
 	"\x05query\x18\x03 \x01(\tR\x05query\x12>\n" +
@@ -2546,16 +2525,16 @@ const file_querysheriff_v1_statement_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"<\n" +
 	"\x1dGetStatementSamplePlanRequest\x12\x1b\n" +
-	"\tsample_id\x18\x01 \x01(\x03R\bsampleId\"S\n" +
+	"\tsample_id\x18\x01 \x01(\x04R\bsampleId\"S\n" +
 	"\x1eGetStatementSamplePlanResponse\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x1b\n" +
 	"\tplan_json\x18\x02 \x01(\tR\bplanJson\"<\n" +
 	"\x1dGetStatementSampleTextRequest\x12\x1b\n" +
-	"\tsample_id\x18\x01 \x01(\x03R\bsampleId\"6\n" +
+	"\tsample_id\x18\x01 \x01(\x04R\bsampleId\"6\n" +
 	"\x1eGetStatementSampleTextResponse\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\")\n" +
 	"\x17GetStatementTextRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\"0\n" +
+	"\x02id\x18\x01 \x01(\x04R\x02id\"0\n" +
 	"\x18GetStatementTextResponse\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\"G\n" +
 	"\x0fStatementMetric\x124\n" +
@@ -2564,7 +2543,7 @@ const file_querysheriff_v1_statement_proto_rawDesc = "" +
 	"\x02at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x01R\x05value\"\xfc\x02\n" +
 	"\rStatementStat\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\x04R\x02id\x12\x18\n" +
 	"\apreview\x18\x02 \x01(\tR\apreview\x12\x1b\n" +
 	"\tuser_name\x18\x03 \x01(\tR\buserName\x12&\n" +
 	"\x0ftotal_exec_time\x18\x04 \x01(\x01R\rtotalExecTime\x12 \n" +
@@ -2620,16 +2599,14 @@ const file_querysheriff_v1_statement_proto_rawDesc = "" +
 	"\x16QUERY_KIND_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10QUERY_KIND_READS\x10\x01\x12\x15\n" +
 	"\x11QUERY_KIND_WRITES\x10\x02\x12\x15\n" +
-	"\x11QUERY_KIND_OTHERS\x10\x03*\xac\x02\n" +
+	"\x11QUERY_KIND_OTHERS\x10\x03*\xeb\x01\n" +
 	"\x13StatementSortColumn\x12%\n" +
-	"!STATEMENT_SORT_COLUMN_UNSPECIFIED\x10\x00\x12\x1f\n" +
-	"\x1bSTATEMENT_SORT_COLUMN_QUERY\x10\x01\x12\x1e\n" +
-	"\x1aSTATEMENT_SORT_COLUMN_USER\x10\x02\x12\x1d\n" +
-	"\x19STATEMENT_SORT_COLUMN_AVG\x10\x03\x12\x1f\n" +
-	"\x1bSTATEMENT_SORT_COLUMN_CALLS\x10\x04\x12'\n" +
-	"#STATEMENT_SORT_COLUMN_ROWS_PER_CALL\x10\x05\x12 \n" +
-	"\x1cSTATEMENT_SORT_COLUMN_PCT_IO\x10\x06\x12\"\n" +
-	"\x1eSTATEMENT_SORT_COLUMN_PCT_TIME\x10\a*\x8f\x01\n" +
+	"!STATEMENT_SORT_COLUMN_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19STATEMENT_SORT_COLUMN_AVG\x10\x01\x12\x1f\n" +
+	"\x1bSTATEMENT_SORT_COLUMN_CALLS\x10\x02\x12'\n" +
+	"#STATEMENT_SORT_COLUMN_ROWS_PER_CALL\x10\x03\x12 \n" +
+	"\x1cSTATEMENT_SORT_COLUMN_PCT_IO\x10\x04\x12\"\n" +
+	"\x1eSTATEMENT_SORT_COLUMN_PCT_TIME\x10\x05*\x8f\x01\n" +
 	"\x10SampleSortColumn\x12\"\n" +
 	"\x1eSAMPLE_SORT_COLUMN_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15SAMPLE_SORT_COLUMN_AT\x10\x01\x12\x1f\n" +

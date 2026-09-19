@@ -19,8 +19,9 @@ import (
 
 	"github.com/querysheriff/backend/gen/querysheriff/v1/querysheriffv1connect"
 	"github.com/querysheriff/backend/internal/alerts"
+	chstats "github.com/querysheriff/backend/internal/clickhouse"
 	"github.com/querysheriff/backend/internal/config"
-	"github.com/querysheriff/backend/internal/db"
+	"github.com/querysheriff/backend/internal/gen/db"
 	"github.com/querysheriff/backend/internal/server"
 )
 
@@ -64,45 +65,15 @@ func run(logger *slog.Logger) error {
 	queries := db.New(pool)
 	interceptors := connect.WithInterceptors(server.NewAuthInterceptor(queries))
 
-	notifier := alerts.NewNotifier(queries, logger)
+	conn, err := chstats.Connect(ctx, cfg.ClickHouseURL)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
 
-	apiMux := http.NewServeMux()
+	stats := chstats.New(conn)
 
-	activityPath, activityHandler := querysheriffv1connect.NewActivityServiceHandler(
-		server.NewActivityServer(pool, notifier),
-		interceptors,
-	)
-	apiMux.Handle(activityPath, activityHandler)
-
-	statementPath, statementHandler := querysheriffv1connect.NewStatementServiceHandler(
-		server.NewStatementServer(queries),
-		interceptors,
-	)
-	apiMux.Handle(statementPath, statementHandler)
-
-	logPath, logHandler := querysheriffv1connect.NewLogServiceHandler(
-		server.NewLogServer(queries, notifier),
-		interceptors,
-	)
-	apiMux.Handle(logPath, logHandler)
-
-	healthPath, healthHandler := querysheriffv1connect.NewHealthServiceHandler(
-		server.NewHealthServer(queries),
-		interceptors,
-	)
-	apiMux.Handle(healthPath, healthHandler)
-
-	authPath, authHandler := querysheriffv1connect.NewAuthServiceHandler(
-		server.NewAuthServer(pool, cfg.CookieSecure),
-		interceptors,
-	)
-	apiMux.Handle(authPath, authHandler)
-
-	adminPath, adminHandler := querysheriffv1connect.NewAdminServiceHandler(server.NewAdminServer(pool), interceptors)
-	apiMux.Handle(adminPath, adminHandler)
-
-	alertPath, alertHandler := querysheriffv1connect.NewAlertServiceHandler(server.NewAlertServer(pool), interceptors)
-	apiMux.Handle(alertPath, alertHandler)
+	apiMux := registerServices(pool, queries, stats, cfg, logger, interceptors)
 
 	mux := http.NewServeMux()
 
@@ -168,8 +139,8 @@ func connectPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error)
 	}
 
 	// This mode never creates named prepared statements, which have two problems:
-	//  1) they don't survive PgBouncer's transaction pooling
-	//  2) Postgres can plan them generically instead of for the actual arguments, which is slower
+	//  1) They don't survive PgBouncer's transaction pooling
+	//  2) Postgres plan them generically instead of for the actual arguments, which is slower
 	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeCacheDescribe
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
@@ -199,4 +170,54 @@ func withCORS(handler http.Handler, allowedOrigins []string) http.Handler {
 	})
 
 	return middleware.Handler(handler)
+}
+
+func registerServices(
+	pool *pgxpool.Pool,
+	queries *db.Queries,
+	stats *chstats.Client,
+	cfg config.APIConfig,
+	logger *slog.Logger,
+	interceptors connect.Option,
+) *http.ServeMux {
+	notifier := alerts.NewNotifier(queries, logger)
+	apiMux := http.NewServeMux()
+
+	activityPath, activityHandler := querysheriffv1connect.NewActivityServiceHandler(
+		server.NewActivityServer(pool, stats, notifier),
+		interceptors,
+	)
+	apiMux.Handle(activityPath, activityHandler)
+
+	statementPath, statementHandler := querysheriffv1connect.NewStatementServiceHandler(
+		server.NewStatementServer(queries, stats, logger),
+		interceptors,
+	)
+	apiMux.Handle(statementPath, statementHandler)
+
+	logPath, logHandler := querysheriffv1connect.NewLogServiceHandler(
+		server.NewLogServer(queries, stats, notifier),
+		interceptors,
+	)
+	apiMux.Handle(logPath, logHandler)
+
+	healthPath, healthHandler := querysheriffv1connect.NewHealthServiceHandler(
+		server.NewHealthServer(queries),
+		interceptors,
+	)
+	apiMux.Handle(healthPath, healthHandler)
+
+	authPath, authHandler := querysheriffv1connect.NewAuthServiceHandler(
+		server.NewAuthServer(pool, cfg.CookieSecure),
+		interceptors,
+	)
+	apiMux.Handle(authPath, authHandler)
+
+	adminPath, adminHandler := querysheriffv1connect.NewAdminServiceHandler(server.NewAdminServer(pool), interceptors)
+	apiMux.Handle(adminPath, adminHandler)
+
+	alertPath, alertHandler := querysheriffv1connect.NewAlertServiceHandler(server.NewAlertServer(pool), interceptors)
+	apiMux.Handle(alertPath, alertHandler)
+
+	return apiMux
 }

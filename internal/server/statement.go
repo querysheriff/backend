@@ -2,40 +2,31 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"strings"
+	"log/slog"
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
-	"github.com/querysheriff/backend/internal/auth"
-	"github.com/querysheriff/backend/internal/db"
+	"github.com/querysheriff/backend/internal/clickhouse"
+	"github.com/querysheriff/backend/internal/gen/db"
 	"github.com/querysheriff/backend/internal/sqltext"
-)
-
-const (
-	metricSeriesPoints = 60
-	minMetricBucket    = time.Minute
-
-	maxTagFilters      = 20
-	maxTagFilterValues = 50
-	maxTagValueLen     = 256
 )
 
 type StatementServer struct {
 	queries *db.Queries
+	stats   *clickhouse.Client
+	logger  *slog.Logger
 }
 
-func NewStatementServer(queries *db.Queries) *StatementServer {
-	return &StatementServer{queries: queries}
+func NewStatementServer(queries *db.Queries, stats *clickhouse.Client, logger *slog.Logger) *StatementServer {
+	return &StatementServer{queries: queries, stats: stats, logger: logger}
 }
 
+// ReportStatements stores statement metric deltas and returns statements missing query text.
+// Example: 3 deltas, 1 unknown statement -> UnknownStatements=[...].
 func (s *StatementServer) ReportStatements(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.ReportStatementsRequest],
@@ -56,50 +47,95 @@ func (s *StatementServer) ReportStatements(
 		return nil, err
 	}
 
-	collectedAt := pgtype.Timestamptz{Time: msg.GetCollectedAt().AsTime(), Valid: true}
+	collectedAt := msg.GetCollectedAt().AsTime()
 
-	statementParams := make([]db.EnsureStatementsParams, len(deltas))
+	statementIDs := make([]uint64, len(deltas))
 	for i, delta := range deltas {
-		statementParams[i] = db.EnsureStatementsParams{
-			ServerName:   serverName,
-			DatabaseName: delta.GetDatabaseName(),
-			UserName:     delta.GetUserName(),
-			QueryID:      delta.GetQueryId(),
+		statementIDs[i] = clickhouse.StatementID(
+			serverName, delta.GetDatabaseName(), delta.GetUserName(), delta.GetQueryId())
+	}
+
+	known, err := s.stats.StatementsWithText(ctx, statementIDs)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	var missing []clickhouse.StatementIdentity
+
+	for i, delta := range deltas {
+		if !known[statementIDs[i]] {
+			missing = append(missing, clickhouse.StatementIdentity{
+				UserName:     delta.GetUserName(),
+				DatabaseName: delta.GetDatabaseName(),
+				QueryID:      delta.GetQueryId(),
+			})
 		}
 	}
 
-	statementIDs, err := ensureStatements(ctx, s.queries, statementParams)
-	if err != nil {
-		return nil, err
+	if err = s.storeDeltas(ctx, serverName, collectedAt, deltas, statementIDs, missing); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	deltaParams := make([]db.InsertStatementDeltasParams, len(deltas))
+	return connect.NewResponse(&querysheriffv1.ReportStatementsResponse{
+		UnknownStatements: unknownStatementsProto(missing),
+	}), nil
+}
+
+func (s *StatementServer) storeDeltas(
+	ctx context.Context,
+	serverName string,
+	collectedAt time.Time,
+	deltas []*querysheriffv1.StatementDelta,
+	statementIDs []uint64,
+	missing []clickhouse.StatementIdentity,
+) error {
+	unseen := make(map[statementIdentity]bool, len(missing))
+	for _, row := range missing {
+		unseen[statementIdentity{row.UserName, row.DatabaseName, row.QueryID}] = true
+	}
+
+	rows := make([]clickhouse.StatementDelta, len(deltas))
+
+	var mirrored []clickhouse.Statement
+
 	for i, delta := range deltas {
-		deltaParams[i] = db.InsertStatementDeltasParams{
-			StatementID:   statementIDs[i],
+		rows[i] = clickhouse.StatementDelta{
 			CollectedAt:   collectedAt,
+			ServerName:    serverName,
+			DatabaseName:  delta.GetDatabaseName(),
+			StatementID:   statementIDs[i],
 			Calls:         delta.GetCalls(),
 			Rows:          delta.GetRows(),
 			TotalExecTime: delta.GetTotalExecTime(),
 			TotalIoTime:   delta.GetTotalIoTime(),
 		}
+
+		identity := statementIdentity{delta.GetUserName(), delta.GetDatabaseName(), delta.GetQueryId()}
+		if unseen[identity] {
+			mirrored = append(mirrored, clickhouse.Statement{
+				ID:           statementIDs[i],
+				ServerName:   serverName,
+				DatabaseName: delta.GetDatabaseName(),
+				UserName:     delta.GetUserName(),
+				QueryID:      delta.GetQueryId(),
+			})
+		}
 	}
 
-	if _, err = s.queries.InsertStatementDeltas(ctx, deltaParams); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+	if err := s.stats.UpsertStatements(ctx, mirrored); err != nil {
+		return err
 	}
 
-	missing, err := s.queries.ListStatementsMissingText(ctx, statementIDs)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-
-	return connect.NewResponse(&querysheriffv1.ReportStatementsResponse{
-		UnknownStatements: unknownStatementsToProto(missing),
-	}), nil
+	return s.stats.InsertStatementDeltas(ctx, rows)
 }
 
-func unknownStatementsToProto(rows []db.ListStatementsMissingTextRow) []*querysheriffv1.StatementIdentity {
+type statementIdentity struct {
+	userName     string
+	databaseName string
+	queryID      int64
+}
+
+func unknownStatementsProto(rows []clickhouse.StatementIdentity) []*querysheriffv1.StatementIdentity {
 	out := make([]*querysheriffv1.StatementIdentity, len(rows))
 	for i, row := range rows {
 		out[i] = &querysheriffv1.StatementIdentity{
@@ -112,6 +148,8 @@ func unknownStatementsToProto(rows []db.ListStatementsMissingTextRow) []*querysh
 	return out
 }
 
+// ReportStatementTexts stores normalized full/short query text and query kind.
+// Example: "SELECT  * FROM users" -> Clean="SELECT * FROM users", Kind=READS.
 func (s *StatementServer) ReportStatementTexts(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.ReportStatementTextsRequest],
@@ -126,68 +164,54 @@ func (s *StatementServer) ReportStatementTexts(
 		return nil, err
 	}
 
-	params := make([]db.FillStatementTextParams, len(texts))
+	filled := make([]clickhouse.Statement, len(texts))
 	for i, text := range texts {
 		identity := text.GetIdentity()
 		summary := sqltext.Process(text.GetQuery())
-		params[i] = db.FillStatementTextParams{
+		filled[i] = clickhouse.Statement{
+			ID: clickhouse.StatementID(serverName, identity.GetDatabaseName(),
+				identity.GetUserName(), identity.GetQueryId()),
 			ServerName:   serverName,
 			DatabaseName: identity.GetDatabaseName(),
 			UserName:     identity.GetUserName(),
 			QueryID:      identity.GetQueryId(),
-			QueryFull:    summary.Clean,
 			QueryShort:   summary.Preview,
+			QueryFull:    summary.Clean,
 			QueryKind:    int32(summary.Kind),
 		}
 	}
 
-	if err = drainFillTextBatch(s.queries.FillStatementText(ctx, params)); err != nil {
-		return nil, err
+	if err = s.stats.UpsertStatements(ctx, filled); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
 	return connect.NewResponse(&querysheriffv1.ReportStatementTextsResponse{}), nil
 }
 
-func drainFillTextBatch(results *db.FillStatementTextBatchResults) error {
-	var execErr error
-
-	results.Exec(func(_ int, err error) {
-		if err != nil && execErr == nil {
-			execErr = err
-		}
-	})
-
-	if execErr != nil {
-		return connect.NewError(connect.CodeInternal, execErr)
-	}
-
-	return nil
-}
-
+// QueryStatements returns filtered, sorted, paginated statement statistics.
+// Example: server=prod, db=app, limit=50 -> up to 50 matching statements.
 func (s *StatementServer) QueryStatements(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.QueryStatementsRequest],
 ) (*connect.Response[querysheriffv1.QueryStatementsResponse], error) {
 	msg := req.Msg
 
-	principal, err := s.authorizeStatementQuery(ctx, msg.GetServerName(), msg.GetFrom(), msg.GetTo())
-	if err != nil {
+	if err := s.authorizeStatementQuery(
+		ctx, msg.GetServerName(), msg.GetDatabaseName(), msg.GetFrom(), msg.GetTo()); err != nil {
 		return nil, err
 	}
 
 	serverName := textFilter(msg.GetServerName())
 	databaseName := textFilter(msg.GetDatabaseName())
-	allowedServers := principal.AllowedServerFilter()
 
 	filter, err := s.resolveStatementFilter(
-		ctx, msg.GetQueryText(), msg.GetTagFilters(),
-		serverName, databaseName, msg.GetFrom().AsTime(), msg.GetTo().AsTime(), allowedServers,
+		ctx, msg.GetQueryText(), msg.GetTagFilters(), serverName, databaseName,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	statements, hasMore, err := s.listStatements(ctx, msg, serverName, databaseName, filter, allowedServers)
+	statements, hasMore, err := s.listStatements(ctx, msg, serverName, databaseName, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -198,118 +222,8 @@ func (s *StatementServer) QueryStatements(
 	}), nil
 }
 
-type seriesRequest struct {
-	statementID              pgtype.Int8
-	serverName, databaseName pgtype.Text
-	allowedServers           []string
-	from, to                 time.Time
-}
-
-func (s *StatementServer) resolveSeriesRequest(
-	ctx context.Context,
-	scope *querysheriffv1.SeriesScope,
-) (seriesRequest, error) {
-	principal, err := s.authorizeStatementQuery(ctx, scope.GetServerName(), scope.GetFrom(), scope.GetTo())
-	if err != nil {
-		return seriesRequest{}, err
-	}
-
-	return seriesRequest{
-		statementID:    int8FromProto(scope.GetStatementId()),
-		serverName:     textFilter(scope.GetServerName()),
-		databaseName:   textFilter(scope.GetDatabaseName()),
-		allowedServers: principal.AllowedServerFilter(),
-		from:           scope.GetFrom().AsTime(),
-		to:             scope.GetTo().AsTime(),
-	}, nil
-}
-
-func (s *StatementServer) QueryStatementCallsSeries(
-	ctx context.Context,
-	req *connect.Request[querysheriffv1.QueryStatementCallsSeriesRequest],
-) (*connect.Response[querysheriffv1.QueryStatementCallsSeriesResponse], error) {
-	scope, err := s.resolveSeriesRequest(ctx, req.Msg.GetScope())
-	if err != nil {
-		return nil, err
-	}
-
-	series, bucket, err := s.statementSums(ctx, scope)
-	if err != nil {
-		return nil, err
-	}
-
-	return connect.NewResponse(&querysheriffv1.QueryStatementCallsSeriesResponse{
-		Calls:    series.calls,
-		BucketMs: bucket.Milliseconds(),
-	}), nil
-}
-
-func (s *StatementServer) QueryStatementTimingSeries(
-	ctx context.Context,
-	req *connect.Request[querysheriffv1.QueryStatementTimingSeriesRequest],
-) (*connect.Response[querysheriffv1.QueryStatementTimingSeriesResponse], error) {
-	scope, err := s.resolveSeriesRequest(ctx, req.Msg.GetScope())
-	if err != nil {
-		return nil, err
-	}
-
-	series, bucket, err := s.statementSums(ctx, scope)
-	if err != nil {
-		return nil, err
-	}
-
-	return connect.NewResponse(&querysheriffv1.QueryStatementTimingSeriesResponse{
-		Avg:      series.avg,
-		AvgIo:    series.avgIo,
-		BucketMs: bucket.Milliseconds(),
-	}), nil
-}
-
-func (s *StatementServer) QueryStatementPercentileSeries(
-	ctx context.Context,
-	req *connect.Request[querysheriffv1.QueryStatementPercentileSeriesRequest],
-) (*connect.Response[querysheriffv1.QueryStatementPercentileSeriesResponse], error) {
-	scope, err := s.resolveSeriesRequest(ctx, req.Msg.GetScope())
-	if err != nil {
-		return nil, err
-	}
-
-	p90, p95, p99, err := s.statementPercentiles(
-		ctx, scope.serverName, scope.databaseName, scope.from, scope.to, scope.allowedServers,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return connect.NewResponse(&querysheriffv1.QueryStatementPercentileSeriesResponse{
-		P90:      p90,
-		P95:      p95,
-		P99:      p99,
-		BucketMs: metricBucket(scope.to.Sub(scope.from)).Milliseconds(),
-	}), nil
-}
-
-func (s *StatementServer) authorizeStatementQuery(
-	ctx context.Context,
-	serverName string,
-	from, to *timestamppb.Timestamp,
-) (*auth.Principal, error) {
-	principal, err := requirePrincipal(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if serverName != "" && !principal.CanViewServer(serverName) {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("access to that server is not allowed"))
-	}
-
-	if err = requireRange(from, to); err != nil {
-		return nil, err
-	}
-
-	return principal, nil
-}
-
+// QueryStatementDetail returns query text, scope, and tags for one statement.
+// Example: id=42 -> {Query:"SELECT ...", ServerName:"prod", DatabaseName:"app", Tags:{...}}.
 func (s *StatementServer) QueryStatementDetail(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.QueryStatementDetailRequest],
@@ -321,32 +235,28 @@ func (s *StatementServer) QueryStatementDetail(
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
 	}
 
-	principal, err := requirePrincipal(ctx)
-	if err != nil {
+	if err := s.authorizeStatementID(ctx, id); err != nil {
 		return nil, err
 	}
 
 	from, to := msg.GetFrom(), msg.GetTo()
-	if err = requireRange(from, to); err != nil {
+	if err := requireRange(from, to); err != nil {
 		return nil, err
 	}
 
-	detail, err := s.queries.GetStatementDetail(ctx, db.GetStatementDetailParams{
-		StatementID:    id,
-		Since:          timestamptzFromProto(from),
-		Until:          timestamptzFromProto(to),
-		AllowedServers: principal.AllowedServerFilter(),
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("statement %d not found", id))
+	detail, err := s.stats.StatementDetail(ctx, id)
+	if err != nil {
+		return nil, statementLookupError(id, err)
 	}
+
+	tagsByID, err := s.stats.StatementTags(ctx, []uint64{id})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	tags, err := protoFromJSONB(detail.Tags)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+	tags := tagsByID[id]
+	if tags == nil {
+		tags = map[string]string{}
 	}
 
 	return connect.NewResponse(&querysheriffv1.QueryStatementDetailResponse{
@@ -357,6 +267,8 @@ func (s *StatementServer) QueryStatementDetail(
 	}), nil
 }
 
+// QueryStatementSamples returns filtered, sorted, paginated samples for one statement.
+// Example: id=42, limit=50 -> up to 50 execution samples.
 func (s *StatementServer) QueryStatementSamples(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.QueryStatementSamplesRequest],
@@ -368,27 +280,25 @@ func (s *StatementServer) QueryStatementSamples(
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
 	}
 
-	principal, err := requirePrincipal(ctx)
-	if err != nil {
+	if err := s.authorizeStatementID(ctx, id); err != nil {
 		return nil, err
 	}
 
 	from, to := msg.GetFrom(), msg.GetTo()
-	if err = requireRange(from, to); err != nil {
+	if err := requireRange(from, to); err != nil {
 		return nil, err
 	}
 
 	limit := resolveLimit(msg.GetLimit())
 
-	rows, err := s.queries.ListStatementSamples(ctx, db.ListStatementSamplesParams{
-		StatementID:    int8FromProto(id),
-		AllowedServers: principal.AllowedServerFilter(),
-		Since:          timestamptzFromProto(from),
-		Until:          timestamptzFromProto(to),
-		SortKey:        sampleSortKey(msg.GetSortColumn()),
-		SortDesc:       msg.GetSortDesc(),
-		RowLimit:       limit + 1,
-		OffsetRows:     resolveOffset(msg.GetOffset()),
+	rows, err := s.stats.ListStatementSamples(ctx, clickhouse.ListSamplesParams{
+		StatementID: id,
+		From:        from.AsTime(),
+		To:          to.AsTime(),
+		SortKey:     sampleSortKey(msg.GetSortColumn()),
+		SortDesc:    msg.GetSortDesc(),
+		RowLimit:    limit + 1,
+		OffsetRows:  resolveOffset(msg.GetOffset()),
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -401,11 +311,7 @@ func (s *StatementServer) QueryStatementSamples(
 
 	samples := make([]*querysheriffv1.StatementSample, len(rows))
 	for i, row := range rows {
-		sample, sampleErr := statementSampleToProto(row)
-		if sampleErr != nil {
-			return nil, sampleErr
-		}
-		samples[i] = sample
+		samples[i] = statementSampleProto(row)
 	}
 
 	return connect.NewResponse(&querysheriffv1.QueryStatementSamplesResponse{
@@ -414,22 +320,24 @@ func (s *StatementServer) QueryStatementSamples(
 	}), nil
 }
 
-func statementSampleToProto(row db.ListStatementSamplesRow) (*querysheriffv1.StatementSample, error) {
-	tags, err := protoFromJSONB(row.Tags)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+func statementSampleProto(row clickhouse.Sample) *querysheriffv1.StatementSample {
+	sample := &querysheriffv1.StatementSample{
+		Id:         row.ID,
+		Query:      sqltext.SamplePreview(row.Query, row.Parameters),
+		Tags:       row.Tags,
+		HasPlan:    row.ExplainPlanJSON != "",
+		DurationMs: row.DurationMs,
 	}
 
-	return &querysheriffv1.StatementSample{
-		Id:         row.ID,
-		OccurredAt: protoFromTimestamptz(row.OccurredAt),
-		Query:      sqltext.SamplePreview(row.Query, row.Parameters),
-		Tags:       tags,
-		HasPlan:    protoFromText(row.ExplainPlanJson) != "",
-		DurationMs: row.DurationMs,
-	}, nil
+	if !row.OccurredAt.IsZero() {
+		sample.OccurredAt = timestamppb.New(row.OccurredAt)
+	}
+
+	return sample
 }
 
+// GetStatementSamplePlan returns a sample's concretized query and explain plan.
+// Example: "WHERE id=$1", ["42"] -> Query="WHERE id=42", PlanJson="{...}".
 func (s *StatementServer) GetStatementSamplePlan(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.GetStatementSamplePlanRequest],
@@ -439,28 +347,23 @@ func (s *StatementServer) GetStatementSamplePlan(
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("sample_id is required"))
 	}
 
-	principal, err := requirePrincipal(ctx)
-	if err != nil {
+	if err := s.authorizeSampleID(ctx, sampleID); err != nil {
 		return nil, err
 	}
 
-	plan, err := s.queries.GetStatementSamplePlan(ctx, db.GetStatementSamplePlanParams{
-		SampleID:       sampleID,
-		AllowedServers: principal.AllowedServerFilter(),
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("statement sample %d not found", sampleID))
-	}
+	query, parameters, plan, err := s.stats.SampleText(ctx, sampleID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, sampleLookupError(sampleID, err)
 	}
 
 	return connect.NewResponse(&querysheriffv1.GetStatementSamplePlanResponse{
-		Query:    sqltext.Concretize(plan.Query, plan.Parameters),
-		PlanJson: protoFromText(plan.ExplainPlanJson),
+		Query:    sqltext.Concretize(query, parameters),
+		PlanJson: plan,
 	}), nil
 }
 
+// GetStatementSampleText returns a sample's query with parameters substituted.
+// Example: "WHERE id=$1", ["42"] -> "WHERE id=42".
 func (s *StatementServer) GetStatementSampleText(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.GetStatementSampleTextRequest],
@@ -470,27 +373,22 @@ func (s *StatementServer) GetStatementSampleText(
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("sample_id is required"))
 	}
 
-	principal, err := requirePrincipal(ctx)
-	if err != nil {
+	if err := s.authorizeSampleID(ctx, sampleID); err != nil {
 		return nil, err
 	}
 
-	sample, err := s.queries.GetStatementSampleText(ctx, db.GetStatementSampleTextParams{
-		SampleID:       sampleID,
-		AllowedServers: principal.AllowedServerFilter(),
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("statement sample %d not found", sampleID))
-	}
+	query, parameters, _, err := s.stats.SampleText(ctx, sampleID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, sampleLookupError(sampleID, err)
 	}
 
 	return connect.NewResponse(&querysheriffv1.GetStatementSampleTextResponse{
-		Query: sqltext.Concretize(sample.Query, sample.Parameters),
+		Query: sqltext.Concretize(query, parameters),
 	}), nil
 }
 
+// GetStatementText returns the full query text for one statement.
+// Example: id=42 -> "SELECT * FROM users".
 func (s *StatementServer) GetStatementText(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.GetStatementTextRequest],
@@ -500,511 +398,14 @@ func (s *StatementServer) GetStatementText(
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
 	}
 
-	principal, err := requirePrincipal(ctx)
-	if err != nil {
+	if err := s.authorizeStatementID(ctx, id); err != nil {
 		return nil, err
 	}
 
-	query, err := s.queries.GetStatementText(ctx, db.GetStatementTextParams{
-		ID:             id,
-		AllowedServers: principal.AllowedServerFilter(),
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("statement %d not found", id))
-	}
+	query, err := s.stats.StatementText(ctx, id)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, statementLookupError(id, err)
 	}
 
 	return connect.NewResponse(&querysheriffv1.GetStatementTextResponse{Query: query}), nil
-}
-
-type statementFilter struct {
-	text         pgtype.Text
-	statementIDs []int64
-}
-
-type tagFilterJSON struct {
-	Key    string   `json:"key"`
-	Op     string   `json:"op"`
-	Values []string `json:"values"`
-}
-
-func tagFilterOp(tf *querysheriffv1.TagFilter) (string, error) {
-	switch tf.GetOp() {
-	case querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_EXISTS:
-		if len(tf.GetValues()) != 0 {
-			return "", connect.NewError(connect.CodeInvalidArgument,
-				errors.New("an exists tag filter must not carry values"))
-		}
-
-		return "exists", nil
-	case querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_EQUAL:
-		return "eq", validateTagValues(tf.GetValues())
-	case querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_NOT_EQUAL:
-		return "ne", validateTagValues(tf.GetValues())
-	case querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_UNSPECIFIED:
-		return "", connect.NewError(connect.CodeInvalidArgument, errors.New("tag filter op is required"))
-	}
-
-	return "", connect.NewError(connect.CodeInvalidArgument, errors.New("unknown tag filter op"))
-}
-
-func validateTagValues(values []string) error {
-	if len(values) == 0 {
-		return connect.NewError(connect.CodeInvalidArgument, errors.New("tag filter requires at least one value"))
-	}
-
-	if len(values) > maxTagFilterValues {
-		return connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("a tag filter accepts at most %d values", maxTagFilterValues))
-	}
-
-	for _, v := range values {
-		if v == "" {
-			return connect.NewError(connect.CodeInvalidArgument, errors.New("tag filter values must not be empty"))
-		}
-
-		if len(v) > maxTagValueLen {
-			return connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("tag filter values must be at most %d bytes", maxTagValueLen))
-		}
-	}
-
-	return nil
-}
-
-func validTagKey(s string) bool {
-	if s == "" || s[0] < 'a' || s[0] > 'z' {
-		return false
-	}
-
-	for i := 1; i < len(s); i++ {
-		c := s[i]
-		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '_' {
-			return false
-		}
-	}
-
-	return true
-}
-
-func buildTagFilterJSON(filters []*querysheriffv1.TagFilter) ([]byte, error) {
-	if len(filters) == 0 {
-		return nil, nil
-	}
-
-	if len(filters) > maxTagFilters {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("at most %d tag filters are allowed", maxTagFilters))
-	}
-
-	encoded := make([]tagFilterJSON, len(filters))
-	for i, tf := range filters {
-		op, err := tagFilterOp(tf)
-		if err != nil {
-			return nil, err
-		}
-
-		key := tf.GetKey()
-		if !validTagKey(key) {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("tag key %q must match ^[a-z][a-z0-9_]*$", key))
-		}
-
-		values := tf.GetValues()
-		if values == nil {
-			values = []string{}
-		}
-
-		encoded[i] = tagFilterJSON{Key: key, Op: op, Values: values}
-	}
-
-	raw, err := json.Marshal(encoded)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-
-	return raw, nil
-}
-
-func (s *StatementServer) resolveStatementFilter(
-	ctx context.Context,
-	queryText string,
-	filters []*querysheriffv1.TagFilter,
-	serverName, databaseName pgtype.Text,
-	from, to time.Time,
-	allowedServers []string,
-) (statementFilter, error) {
-	filter := statementFilter{text: textFilter(strings.TrimSpace(queryText))}
-
-	tagFilters, err := buildTagFilterJSON(filters)
-	if err != nil {
-		return statementFilter{}, err
-	}
-
-	if tagFilters == nil {
-		return filter, nil
-	}
-
-	ids, err := s.queries.FilterStatementIDsByTags(ctx, db.FilterStatementIDsByTagsParams{
-		ServerName:     serverName,
-		DatabaseName:   databaseName,
-		AllowedServers: allowedServers,
-		TagFilters:     tagFilters,
-		Since:          pgtype.Timestamptz{Time: from, Valid: true},
-		Until:          pgtype.Timestamptz{Time: to, Valid: true},
-	})
-	if err != nil {
-		return statementFilter{}, connect.NewError(connect.CodeInternal, err)
-	}
-
-	if ids == nil {
-		ids = []int64{}
-	}
-	filter.statementIDs = ids
-
-	return filter, nil
-}
-
-func requestedKinds(kinds []querysheriffv1.QueryKind) []int32 {
-	out := make([]int32, len(kinds))
-	for i, k := range kinds {
-		out[i] = int32(k)
-	}
-	return out
-}
-
-func (s *StatementServer) listStatements(
-	ctx context.Context,
-	msg *querysheriffv1.QueryStatementsRequest,
-	serverName, databaseName pgtype.Text,
-	filter statementFilter,
-	allowedServers []string,
-) ([]*querysheriffv1.StatementStat, bool, error) {
-	limit := resolveLimit(msg.GetLimit())
-
-	rows, err := s.queries.ListStatementStats(ctx, db.ListStatementStatsParams{
-		ServerName:     serverName,
-		DatabaseName:   databaseName,
-		AllowedServers: allowedServers,
-		TextFilter:     filter.text,
-		StatementIds:   filter.statementIDs,
-		Since:          timestamptzFromProto(msg.GetFrom()),
-		Until:          timestamptzFromProto(msg.GetTo()),
-		Kinds:          requestedKinds(msg.GetKinds()),
-		SortKey:        sortKey(msg.GetSortColumn()),
-		SortDesc:       msg.GetSortDesc(),
-		OffsetRows:     resolveOffset(msg.GetOffset()),
-		RowLimit:       limit + 1,
-	})
-	if err != nil {
-		return nil, false, connect.NewError(connect.CodeInternal, err)
-	}
-
-	hasMore := len(rows) > int(limit)
-	if hasMore {
-		rows = rows[:limit]
-	}
-
-	statements := make([]*querysheriffv1.StatementStat, len(rows))
-	for i, row := range rows {
-		tags, tagErr := protoFromJSONB(row.Tags)
-		if tagErr != nil {
-			return nil, false, connect.NewError(connect.CodeInternal, tagErr)
-		}
-
-		statements[i] = &querysheriffv1.StatementStat{
-			Id:            row.ID,
-			Preview:       row.Preview,
-			UserName:      row.UserName,
-			TotalExecTime: row.TotalExecTime,
-			PctOfTotal:    row.PctOfTotal,
-			Calls:         row.Calls,
-			AvgExecTime:   avgExecTime(row.TotalExecTime, row.Calls),
-			Rows:          row.Rows,
-			Tags:          tags,
-			PctIo:         row.PctIo,
-		}
-	}
-
-	return statements, hasMore, nil
-}
-
-func sortKey(col querysheriffv1.StatementSortColumn) string {
-	switch col {
-	case querysheriffv1.StatementSortColumn_STATEMENT_SORT_COLUMN_QUERY:
-		return "query"
-	case querysheriffv1.StatementSortColumn_STATEMENT_SORT_COLUMN_USER:
-		return "user"
-	case querysheriffv1.StatementSortColumn_STATEMENT_SORT_COLUMN_AVG:
-		return "avg"
-	case querysheriffv1.StatementSortColumn_STATEMENT_SORT_COLUMN_CALLS:
-		return "calls"
-	case querysheriffv1.StatementSortColumn_STATEMENT_SORT_COLUMN_ROWS_PER_CALL:
-		return "rows_per_call"
-	case querysheriffv1.StatementSortColumn_STATEMENT_SORT_COLUMN_PCT_IO:
-		return "pct_io"
-	case querysheriffv1.StatementSortColumn_STATEMENT_SORT_COLUMN_PCT_TIME,
-		querysheriffv1.StatementSortColumn_STATEMENT_SORT_COLUMN_UNSPECIFIED:
-		return "pct_time"
-	}
-
-	return "pct_time"
-}
-
-func sampleSortKey(col querysheriffv1.SampleSortColumn) string {
-	switch col {
-	case querysheriffv1.SampleSortColumn_SAMPLE_SORT_COLUMN_DURATION:
-		return "duration"
-	case querysheriffv1.SampleSortColumn_SAMPLE_SORT_COLUMN_PLAN:
-		return "plan"
-	case querysheriffv1.SampleSortColumn_SAMPLE_SORT_COLUMN_AT,
-		querysheriffv1.SampleSortColumn_SAMPLE_SORT_COLUMN_UNSPECIFIED:
-		return "at"
-	}
-
-	return "at"
-}
-
-type sumSeries struct {
-	calls, avg, avgIo *querysheriffv1.StatementMetric
-}
-
-func (s *StatementServer) statementSums(
-	ctx context.Context,
-	scope seriesRequest,
-) (sumSeries, time.Duration, error) {
-	bounds := newSeriesBounds(scope.from, scope.to, time.Now())
-
-	buckets, err := s.queries.StatementMetricSeries(ctx, db.StatementMetricSeriesParams{
-		RangeStart:     pgtype.Timestamptz{Time: bounds.rangeStart, Valid: true},
-		RangeEnd:       pgtype.Timestamptz{Time: bounds.anchor, Valid: true},
-		Anchor:         pgtype.Timestamptz{Time: bounds.anchor, Valid: true},
-		Bucket:         pgtype.Interval{Microseconds: bounds.bucket.Microseconds(), Valid: true},
-		ServerName:     scope.serverName,
-		DatabaseName:   scope.databaseName,
-		AllowedServers: scope.allowedServers,
-		StatementID:    scope.statementID,
-	})
-	if err != nil {
-		return sumSeries{}, 0, connect.NewError(connect.CodeInternal, err)
-	}
-
-	n := len(buckets)
-	calls := make([]*querysheriffv1.MetricPoint, n)
-	avg := make([]*querysheriffv1.MetricPoint, n)
-	avgIo := make([]*querysheriffv1.MetricPoint, n)
-
-	for i, b := range buckets {
-		at := protoFromTimestamptz(b.BucketEnd)
-		calls[i] = &querysheriffv1.MetricPoint{At: at, Value: float64(b.Calls)}
-		avg[i] = &querysheriffv1.MetricPoint{At: at, Value: avgExecTime(b.TotalExecTime, b.Calls)}
-		avgIo[i] = &querysheriffv1.MetricPoint{At: at, Value: avgExecTime(b.TotalIoTime, b.Calls)}
-	}
-
-	return sumSeries{
-		calls: statementMetric(calls),
-		avg:   statementMetric(avg),
-		avgIo: statementMetric(avgIo),
-	}, bounds.bucket, nil
-}
-
-func (s *StatementServer) statementPercentiles(
-	ctx context.Context,
-	serverName, databaseName pgtype.Text,
-	from, to time.Time,
-	allowedServers []string,
-) (*querysheriffv1.StatementMetric, *querysheriffv1.StatementMetric, *querysheriffv1.StatementMetric, error) {
-	bounds := newSeriesBounds(from, to, time.Now())
-
-	rolled, err := s.queries.StatementLatencyBins(ctx, db.StatementLatencyBinsParams{
-		RangeStart:     pgtype.Timestamptz{Time: bounds.rangeStart, Valid: true},
-		RangeEnd:       pgtype.Timestamptz{Time: bounds.anchor, Valid: true},
-		ServerName:     serverName,
-		DatabaseName:   databaseName,
-		AllowedServers: allowedServers,
-	})
-	if err != nil {
-		return nil, nil, nil, connect.NewError(connect.CodeInternal, err)
-	}
-
-	minutes := make([]latencyMinute, 0, len(rolled))
-
-	tailStart := bounds.rangeStart.Add(-time.Minute)
-
-	for _, r := range rolled {
-		minutes = append(minutes, latencyMinute{start: r.MinuteStart.Time, bins: r.Bins, weights: r.Weights})
-
-		if r.MinuteStart.Time.After(tailStart) {
-			tailStart = r.MinuteStart.Time
-		}
-	}
-
-	tail, err := s.queries.StatementLatencyTailBins(ctx, db.StatementLatencyTailBinsParams{
-		TailStart:      pgtype.Timestamptz{Time: tailStart, Valid: true},
-		RangeEnd:       pgtype.Timestamptz{Time: bounds.anchor, Valid: true},
-		ServerName:     serverName,
-		DatabaseName:   databaseName,
-		AllowedServers: allowedServers,
-		UtilityKind:    int32(querysheriffv1.QueryKind_QUERY_KIND_OTHERS),
-	})
-	if err != nil {
-		return nil, nil, nil, connect.NewError(connect.CodeInternal, err)
-	}
-
-	for _, r := range tail {
-		minutes = append(minutes, latencyMinute{start: r.MinuteStart.Time, bins: r.Bins, weights: r.Weights})
-	}
-
-	p90, p95, p99 := latencyPercentiles(bounds, minutes)
-
-	return p90, p95, p99, nil
-}
-func metricBucket(d time.Duration) time.Duration {
-	bucket := d / metricSeriesPoints
-	if bucket < minMetricBucket {
-		return minMetricBucket
-	}
-
-	return bucket.Round(time.Minute)
-}
-
-type seriesBounds struct {
-	bucket time.Duration
-	// The newest instant in the range: the bucket grid is measured back from here.
-	anchor time.Time
-	// One bucket before the first bucket ends, so that bucket still sums a full window. Exclusive.
-	rangeStart time.Time
-}
-
-func newSeriesBounds(from, to, now time.Time) seriesBounds {
-	bucket := metricBucket(to.Sub(from))
-	if to.After(now) {
-		to = now
-	}
-	anchor := to.Truncate(time.Minute)
-
-	return seriesBounds{
-		bucket:     bucket,
-		anchor:     anchor,
-		rangeStart: binStart(from, anchor, bucket).Add(-bucket),
-	}
-}
-
-func (b seriesBounds) bucketEnds() []time.Time {
-	ends := make([]time.Time, 0, metricSeriesPoints+1)
-	for end := b.rangeStart.Add(b.bucket); !end.After(b.anchor); end = end.Add(b.bucket) {
-		ends = append(ends, end)
-	}
-
-	return ends
-}
-
-func binStart(t, anchor time.Time, bucket time.Duration) time.Time {
-	offset := t.Sub(anchor)
-
-	bins := int64(offset / bucket)
-	if offset%bucket != 0 && offset < 0 {
-		bins--
-	}
-
-	return anchor.Add(time.Duration(bins) * bucket)
-}
-
-func avgExecTime(totalExecTime float64, calls int64) float64 {
-	if calls <= 0 {
-		return 0
-	}
-
-	return totalExecTime / float64(calls)
-}
-
-func statementMetric(series []*querysheriffv1.MetricPoint) *querysheriffv1.StatementMetric {
-	return &querysheriffv1.StatementMetric{Series: series}
-}
-
-func (s *StatementServer) ListTagKeys(
-	ctx context.Context,
-	req *connect.Request[querysheriffv1.ListTagKeysRequest],
-) (*connect.Response[querysheriffv1.ListTagKeysResponse], error) {
-	msg := req.Msg
-
-	principal, err := requirePrincipal(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if name := msg.GetServerName(); name != "" && !principal.CanViewServer(name) {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("access to that server is not allowed"))
-	}
-
-	from, to := msg.GetFrom(), msg.GetTo()
-	if err = requireRange(from, to); err != nil {
-		return nil, err
-	}
-
-	rows, err := s.queries.ListTagKeys(ctx, db.ListTagKeysParams{
-		ServerName:     textFilter(msg.GetServerName()),
-		DatabaseName:   textFilter(msg.GetDatabaseName()),
-		AllowedServers: principal.AllowedServerFilter(),
-		Since:          timestamptzFromProto(from),
-		Until:          timestamptzFromProto(to),
-	})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-
-	keys := make([]*querysheriffv1.TagKey, len(rows))
-	for i, row := range rows {
-		keys[i] = &querysheriffv1.TagKey{Key: row.Key, ValueCount: row.ValueCount}
-	}
-
-	return connect.NewResponse(&querysheriffv1.ListTagKeysResponse{Keys: keys}), nil
-}
-
-func (s *StatementServer) ListTagValues(
-	ctx context.Context,
-	req *connect.Request[querysheriffv1.ListTagValuesRequest],
-) (*connect.Response[querysheriffv1.ListTagValuesResponse], error) {
-	msg := req.Msg
-
-	principal, err := requirePrincipal(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if name := msg.GetServerName(); name != "" && !principal.CanViewServer(name) {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("access to that server is not allowed"))
-	}
-
-	from, to := msg.GetFrom(), msg.GetTo()
-	if err = requireRange(from, to); err != nil {
-		return nil, err
-	}
-
-	key := msg.GetKey()
-	if !validTagKey(key) {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("tag key %q must match ^[a-z][a-z0-9_]*$", key))
-	}
-
-	rows, err := s.queries.ListTagValues(ctx, db.ListTagValuesParams{
-		TagKey:         key,
-		ServerName:     textFilter(msg.GetServerName()),
-		DatabaseName:   textFilter(msg.GetDatabaseName()),
-		AllowedServers: principal.AllowedServerFilter(),
-		Since:          timestamptzFromProto(from),
-		Until:          timestamptzFromProto(to),
-	})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-
-	values := make([]*querysheriffv1.TagValue, len(rows))
-	for i, row := range rows {
-		values[i] = &querysheriffv1.TagValue{Value: row.Value, StatementCount: row.StatementCount}
-	}
-
-	return connect.NewResponse(&querysheriffv1.ListTagValuesResponse{Values: values}), nil
 }

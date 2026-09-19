@@ -15,7 +15,7 @@ import (
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 	"github.com/querysheriff/backend/internal/auth"
-	"github.com/querysheriff/backend/internal/db"
+	"github.com/querysheriff/backend/internal/gen/db"
 )
 
 const (
@@ -32,6 +32,8 @@ func NewAuthServer(pool *pgxpool.Pool, cookieSecure bool) *AuthServer {
 	return &AuthServer{queries: db.New(pool), cookieSecure: cookieSecure}
 }
 
+// Login authenticates a user, creates a session, and sets the session cookie.
+// Example: email+password -> user + Set-Cookie.
 func (s *AuthServer) Login(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.LoginRequest],
@@ -67,6 +69,8 @@ func (s *AuthServer) Login(
 	return resp, nil
 }
 
+// Logout deletes the current session and clears the session cookie.
+// Example: valid session cookie -> session removed.
 func (s *AuthServer) Logout(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.LogoutRequest],
@@ -83,6 +87,8 @@ func (s *AuthServer) Logout(
 	return resp, nil
 }
 
+// CurrentUser returns the authenticated user.
+// Example: logged-in Bob -> {Name:"Bob", Email:"bob@example.com"}.
 func (s *AuthServer) CurrentUser(
 	ctx context.Context,
 	_ *connect.Request[querysheriffv1.CurrentUserRequest],

@@ -148,7 +148,6 @@ message LogEvent {
     LOG_CATEGORY_APPLICATION_ERROR = 9;
   }
 
-  // Straight from the jsonlog record, which calls these 'timestamp', 'error_severity', 'user' and 'dbname'.
   google.protobuf.Timestamp occurred_at = 1;
   LogLevel log_level = 2;
   string message = 3;
@@ -181,14 +180,8 @@ message QueryLogsRequest {
   google.protobuf.Timestamp from = 2;
   google.protobuf.Timestamp to = 3;
   string filter = 4;
-
-  // Empty means every level.
   repeated LogEvent.LogLevel log_levels = 5;
-
-  // Empty means every classification.
   repeated LogEvent.LogClassification classifications = 6;
-
-  // Defaults to 50 when unset.
   int32 limit = 7;
   repeated LogEvent.LogCategory categories = 8;
   repeated string databases = 9;
@@ -196,8 +189,6 @@ message QueryLogsRequest {
   repeated string application_names = 11;
   repeated string backend_types = 12;
   int32 offset = 13;
-
-  // Defaults to LOG_SORT_COLUMN_AT.
   LogSortColumn sort_column = 14;
   bool sort_desc = 15;
 }
@@ -230,24 +221,19 @@ message QueryLogSeriesResponse {
 message LogHistogram {
   repeated LogHistogramBucket buckets = 1;
   repeated LogLevelCount level_totals = 2;
-
   int64 bucket_ms = 3;
   repeated LogCategoryCount category_totals = 4;
 }
 
 message LogHistogramBucket {
   google.protobuf.Timestamp bucket_end = 1;
-
   repeated LogLevelCount counts = 2;
-
   repeated LogCategoryBreakdown categories = 3;
 }
 
 message LogCategoryBreakdown {
   LogEvent.LogCategory category = 1;
   int64 count = 2;
-
-  // Only classifications with at least one event in this bucket, most frequent first.
   repeated LogClassificationCount classifications = 3;
 }
 
@@ -307,7 +293,7 @@ message LogFacetValue {
 }
 
 message LogRecord {
-  int64 id = 1;
+  uint64 id = 1;
   google.protobuf.Timestamp occurred_at = 2;
   LogEvent.LogLevel log_level = 3;
   LogEvent.LogClassification classification = 4;
@@ -322,17 +308,14 @@ message LogRecord {
   string hint = 13;
   string context = 14;
   string statement = 15;
-
   LogEvent.LogCategory category = 16;
-
-  // Set only on STATEMENT_DURATION and STATEMENT_AUTO_EXPLAIN classifications.
   LogRecordStatementSample statement_sample = 17;
 }
 
 message LogRecordStatementSample {
-  int64 id = 1;
+  uint64 id = 1;
   string query = 2;
   double duration_ms = 3;
   bool has_explain_plan = 4;
-  int64 statement_id = 5;
+  uint64 statement_id = 5;
 }

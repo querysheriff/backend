@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/querysheriff/backend/internal/db"
+	"github.com/querysheriff/backend/internal/gen/db"
 )
 
 const fireTimeout = 15 * time.Second
@@ -81,7 +81,6 @@ func (n *Notifier) enabled(ctx context.Context, serverName, alertKey string) boo
 	return on
 }
 
-// Atomically reserves the right to fire; false while the last notification is still in cooldown.
 func (n *Notifier) claim(ctx context.Context, serverName string, def Def) bool {
 	_, err := n.queries.TryClaimAlertNotification(ctx, db.TryClaimAlertNotificationParams{
 		ServerName: serverName,

@@ -21,6 +21,8 @@ type Result struct {
 	Kind    querysheriffv1.QueryKind
 }
 
+// Process normalizes SQL, creates a preview, and classifies it.
+// Example: "SELECT  * FROM users" -> {Clean:"SELECT * FROM users", Preview:"SELECT * FROM users", Kind:READS}.
 func Process(sql string) Result {
 	clean := cleanText(sql)
 	summary, err := pg.Summary(sql, previewLimit)
@@ -31,6 +33,8 @@ func Process(sql string) Result {
 	}
 }
 
+// CleanSample removes SQL comments and normalizes spacing.
+// Example: "SELECT * /* x */ FROM users" -> "SELECT * FROM users".
 func CleanSample(sql string) string {
 	result, err := pg.Scan(sql)
 	if err != nil {
@@ -63,7 +67,8 @@ func CleanSample(sql string) string {
 	return b.String()
 }
 
-// Concretize substitutes actual parameter values into the $N placeholders of a statement.
+// Concretize replaces $n placeholders with matching parameter values.
+// Example: Concretize("WHERE id=$1 AND name=$2", ["42", "'Bob'"]) -> "WHERE id=42 AND name='Bob'".
 func Concretize(query string, params []string) string {
 	if len(params) == 0 {
 		return query
@@ -128,6 +133,8 @@ func concretizeNaive(query string, params []string) string {
 	return b.String()
 }
 
+// SamplePreview cleans comments, inserts parameters, and truncates to 120 characters.
+// Example: "SELECT * FROM users WHERE id=$1 -- x", ["42"] -> "SELECT * FROM users WHERE id=42".
 func SamplePreview(query string, params []string) string {
 	return capLen(Concretize(CleanSample(query), params), samplePreviewLimit)
 }
