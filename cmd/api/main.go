@@ -1,6 +1,8 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
@@ -23,6 +25,7 @@ import (
 	"github.com/querysheriff/backend/internal/config"
 	"github.com/querysheriff/backend/internal/gen/db"
 	"github.com/querysheriff/backend/internal/server"
+	schema "github.com/querysheriff/backend/proto"
 )
 
 const (
@@ -78,6 +81,11 @@ func run(logger *slog.Logger) error {
 	mux := http.NewServeMux()
 
 	registerHealthEndpoints(mux, pool)
+
+	if err = registerSchemaEndpoint(mux); err != nil {
+		return err
+	}
+
 	mux.Handle(apiPrefix+"/", http.StripPrefix(apiPrefix, apiMux))
 
 	var protocols http.Protocols
@@ -130,6 +138,29 @@ func registerHealthEndpoints(mux *http.ServeMux, pool *pgxpool.Pool) {
 
 		w.WriteHeader(http.StatusOK)
 	})
+}
+
+// registerSchemaEndpoint serves the proto sources so clients run `buf generate http://localhost:3000/schema.zip`.
+func registerSchemaEndpoint(mux *http.ServeMux) error {
+	var archive bytes.Buffer
+
+	zipped := zip.NewWriter(&archive)
+	if err := zipped.AddFS(schema.FS); err != nil {
+		return err
+	}
+
+	if err := zipped.Close(); err != nil {
+		return err
+	}
+
+	body := archive.Bytes()
+
+	mux.HandleFunc("/schema.zip", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/zip")
+		_, _ = w.Write(body)
+	})
+
+	return nil
 }
 
 func connectPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {

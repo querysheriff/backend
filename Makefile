@@ -30,10 +30,6 @@ buf-lint:
 buf-fmt:
 	$(BUF) format -w
 
-.PHONY: buf-push
-buf-push:
-	$(BUF) push
-	
 .PHONY: lint
 lint:
 	$(GOLANGCI) run -c .golangci.yml
@@ -99,8 +95,8 @@ dev-down:
 dev:
 	POSTGRES_URL="$(POSTGRES_URL)" CLICKHOUSE_URL="$(CLICKHOUSE_URL)" go run ./cmd/api
 
-.PHONY: jobs
-jobs:
+.PHONY: dev-jobs
+dev-jobs:
 	POSTGRES_URL="$(POSTGRES_URL)" CLICKHOUSE_URL="$(CLICKHOUSE_URL)" go run ./cmd/jobs
 
 .PHONY: test
@@ -110,7 +106,6 @@ test:
 .PHONY: test-unit
 test-unit:
 	go test ./...
-
 
 # Usage: `make release VERSION=0.0.1`.
 # Validates -> tags -> pushes -> fires .github/workflows/release.yml -> builds and publishes images to GHCR.
