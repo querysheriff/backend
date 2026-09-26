@@ -100,6 +100,7 @@ type LatencySeriesParams struct {
 	ServerName   string
 	DatabaseName string
 	UtilityKind  int32
+	MinAvgMs     float64
 }
 
 // latencyBinSQL groups average statement latency into ~1%-wide logarithmic buckets.
@@ -124,6 +125,7 @@ WITH
           AND collected_at >  {range_start:DateTime('UTC')}
           AND collected_at <= {range_end:DateTime('UTC')}
           AND calls > 0
+          AND total_exec_time >= {min_avg_ms:Float64} * calls
           AND s.query_kind != {utility_kind:Int32}
         GROUP BY bucket_end
     )
@@ -134,7 +136,8 @@ SELECT bucket_end,
 FROM percentiles
 ORDER BY bucket_end`
 
-// StatementLatencySeries returns call-weighted P90/P95/P99 latency per time bucket.
+// StatementLatencySeries returns call-weighted P90/P95/P99 latency per time bucket,
+// counting only statements whose average in interval is at least MinAvgMs.
 // Example: 12:01 -> P90=20ms, P95=25ms, P99=50ms.
 func (c *Client) StatementLatencySeries(
 	ctx context.Context,
@@ -146,6 +149,7 @@ func (c *Client) StatementLatencySeries(
 		timeParam("range_end", params.RangeEnd),
 		secondsParam("bucket", params.Bucket),
 		param("utility_kind", params.UtilityKind),
+		param("min_avg_ms", params.MinAvgMs),
 		param("server_name", params.ServerName),
 		param("database_name", params.DatabaseName),
 	); err != nil {

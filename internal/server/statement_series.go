@@ -12,6 +12,8 @@ import (
 	"github.com/querysheriff/backend/internal/timeseries"
 )
 
+const latencyPercentileFloorMs = 10.0
+
 // GetStatementSeries returns calls and average execution/I-O time per time bucket for a statement or database.
 // Example: 1m buckets -> Calls=[12:01: 120], AvgMs=[12:01: 12.5], AvgIoMs=[12:01: 3.2].
 func (s *StatementServer) GetStatementSeries(
@@ -49,7 +51,8 @@ func (s *StatementServer) GetStatementSeries(
 	return connect.NewResponse(resp), nil
 }
 
-// GetLatencySeries returns a database's call-weighted P90/P95/P99 latency per time bucket.
+// GetLatencySeries returns a database's call-weighted P90/P95/P99 latency per time bucket,
+// ignoring statements averaging under latencyPercentileFloorMs, whose volume would hide slow queries.
 // Example: 1m buckets -> P90Ms=[12:01: 20], P95Ms=[25], P99Ms=[50].
 func (s *StatementServer) GetLatencySeries(
 	ctx context.Context,
@@ -71,6 +74,7 @@ func (s *StatementServer) GetLatencySeries(
 		ServerName:   msg.GetServerName(),
 		DatabaseName: msg.GetDatabaseName(),
 		UtilityKind:  int32(querysheriffv1.QueryKind_QUERY_KIND_OTHERS),
+		MinAvgMs:     latencyPercentileFloorMs,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)

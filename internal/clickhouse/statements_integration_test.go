@@ -206,18 +206,19 @@ func TestLatencyAndMetricSeriesShareBucketEnds(t *testing.T) {
 	}
 }
 
-func TestLatencySeriesWeightsPercentilesByCalls(t *testing.T) {
+func TestLatencySeriesWeightsByCallsAndSkipsFastQueries(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	f := newFixture(t, "series-percentiles")
-	f.seedStatement(t, 1, 1, []int64{90}, 1)
-	f.seedStatement(t, 2, 1, []int64{10}, 100)
+	f.seedStatement(t, 1, 1, []int64{900}, 1)
+	f.seedStatement(t, 2, 1, []int64{90}, 20)
+	f.seedStatement(t, 3, 1, []int64{10}, 100)
 	from, to := f.window()
 
 	buckets, err := f.client.StatementLatencySeries(ctx, clickhouse.LatencySeriesParams{
 		RangeStart: from, RangeEnd: to, Bucket: time.Hour,
-		ServerName: f.server, DatabaseName: f.database, UtilityKind: 3,
+		ServerName: f.server, DatabaseName: f.database, UtilityKind: 3, MinAvgMs: 10,
 	})
 	if err != nil {
 		t.Fatalf("StatementLatencySeries: %v", err)
@@ -229,7 +230,8 @@ func TestLatencySeriesWeightsPercentilesByCalls(t *testing.T) {
 
 	within1Pct := func(got, want float64) bool { return math.Abs(got/want-1) <= 0.01 }
 
-	if b := buckets[0]; !within1Pct(b.P90, 1) || !within1Pct(b.P95, 100) || !within1Pct(b.P99, 100) {
-		t.Errorf("P90/P95/P99 = %v/%v/%v ms, want ~1/~100/~100: 90 calls at 1ms, 10 at 100ms", b.P90, b.P95, b.P99)
+	if b := buckets[0]; !within1Pct(b.P90, 20) || !within1Pct(b.P95, 100) || !within1Pct(b.P99, 100) {
+		t.Errorf("P90/P95/P99 = %v/%v/%v ms, want ~20/~100/~100: 900 calls at 1ms skipped, 90 at 20ms, 10 at 100ms",
+			b.P90, b.P95, b.P99)
 	}
 }
