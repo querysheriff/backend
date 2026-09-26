@@ -274,26 +274,26 @@ func (*LogoutResponse) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_auth_proto_rawDescGZIP(), []int{4}
 }
 
-type CurrentUserRequest struct {
+type GetCurrentUserRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CurrentUserRequest) Reset() {
-	*x = CurrentUserRequest{}
+func (x *GetCurrentUserRequest) Reset() {
+	*x = GetCurrentUserRequest{}
 	mi := &file_querysheriff_v1_auth_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CurrentUserRequest) String() string {
+func (x *GetCurrentUserRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CurrentUserRequest) ProtoMessage() {}
+func (*GetCurrentUserRequest) ProtoMessage() {}
 
-func (x *CurrentUserRequest) ProtoReflect() protoreflect.Message {
+func (x *GetCurrentUserRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_querysheriff_v1_auth_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -305,32 +305,32 @@ func (x *CurrentUserRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CurrentUserRequest.ProtoReflect.Descriptor instead.
-func (*CurrentUserRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetCurrentUserRequest.ProtoReflect.Descriptor instead.
+func (*GetCurrentUserRequest) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_auth_proto_rawDescGZIP(), []int{5}
 }
 
-type CurrentUserResponse struct {
+type GetCurrentUserResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	User          *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CurrentUserResponse) Reset() {
-	*x = CurrentUserResponse{}
+func (x *GetCurrentUserResponse) Reset() {
+	*x = GetCurrentUserResponse{}
 	mi := &file_querysheriff_v1_auth_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CurrentUserResponse) String() string {
+func (x *GetCurrentUserResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CurrentUserResponse) ProtoMessage() {}
+func (*GetCurrentUserResponse) ProtoMessage() {}
 
-func (x *CurrentUserResponse) ProtoReflect() protoreflect.Message {
+func (x *GetCurrentUserResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_querysheriff_v1_auth_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -342,12 +342,12 @@ func (x *CurrentUserResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CurrentUserResponse.ProtoReflect.Descriptor instead.
-func (*CurrentUserResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetCurrentUserResponse.ProtoReflect.Descriptor instead.
+func (*GetCurrentUserResponse) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_auth_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *CurrentUserResponse) GetUser() *User {
+func (x *GetCurrentUserResponse) GetUser() *User {
 	if x != nil {
 		return x.User
 	}
@@ -373,14 +373,14 @@ const file_querysheriff_v1_auth_proto_rawDesc = "" +
 	"\rLoginResponse\x12)\n" +
 	"\x04user\x18\x01 \x01(\v2\x15.querysheriff.v1.UserR\x04user\"\x0f\n" +
 	"\rLogoutRequest\"\x10\n" +
-	"\x0eLogoutResponse\"\x14\n" +
-	"\x12CurrentUserRequest\"@\n" +
-	"\x13CurrentUserResponse\x12)\n" +
-	"\x04user\x18\x01 \x01(\v2\x15.querysheriff.v1.UserR\x04user2\x80\x02\n" +
+	"\x0eLogoutResponse\"\x17\n" +
+	"\x15GetCurrentUserRequest\"C\n" +
+	"\x16GetCurrentUserResponse\x12)\n" +
+	"\x04user\x18\x01 \x01(\v2\x15.querysheriff.v1.UserR\x04user2\x89\x02\n" +
 	"\vAuthService\x12H\n" +
 	"\x05Login\x12\x1d.querysheriff.v1.LoginRequest\x1a\x1e.querysheriff.v1.LoginResponse\"\x00\x12K\n" +
-	"\x06Logout\x12\x1e.querysheriff.v1.LogoutRequest\x1a\x1f.querysheriff.v1.LogoutResponse\"\x00\x12Z\n" +
-	"\vCurrentUser\x12#.querysheriff.v1.CurrentUserRequest\x1a$.querysheriff.v1.CurrentUserResponse\"\x00BDZBgithub.com/querysheriff/backend/gen/querysheriff/v1;querysheriffv1b\x06proto3"
+	"\x06Logout\x12\x1e.querysheriff.v1.LogoutRequest\x1a\x1f.querysheriff.v1.LogoutResponse\"\x00\x12c\n" +
+	"\x0eGetCurrentUser\x12&.querysheriff.v1.GetCurrentUserRequest\x1a'.querysheriff.v1.GetCurrentUserResponse\"\x00BDZBgithub.com/querysheriff/backend/gen/querysheriff/v1;querysheriffv1b\x06proto3"
 
 var (
 	file_querysheriff_v1_auth_proto_rawDescOnce sync.Once
@@ -396,25 +396,25 @@ func file_querysheriff_v1_auth_proto_rawDescGZIP() []byte {
 
 var file_querysheriff_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_querysheriff_v1_auth_proto_goTypes = []any{
-	(*User)(nil),                  // 0: querysheriff.v1.User
-	(*LoginRequest)(nil),          // 1: querysheriff.v1.LoginRequest
-	(*LoginResponse)(nil),         // 2: querysheriff.v1.LoginResponse
-	(*LogoutRequest)(nil),         // 3: querysheriff.v1.LogoutRequest
-	(*LogoutResponse)(nil),        // 4: querysheriff.v1.LogoutResponse
-	(*CurrentUserRequest)(nil),    // 5: querysheriff.v1.CurrentUserRequest
-	(*CurrentUserResponse)(nil),   // 6: querysheriff.v1.CurrentUserResponse
-	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
+	(*User)(nil),                   // 0: querysheriff.v1.User
+	(*LoginRequest)(nil),           // 1: querysheriff.v1.LoginRequest
+	(*LoginResponse)(nil),          // 2: querysheriff.v1.LoginResponse
+	(*LogoutRequest)(nil),          // 3: querysheriff.v1.LogoutRequest
+	(*LogoutResponse)(nil),         // 4: querysheriff.v1.LogoutResponse
+	(*GetCurrentUserRequest)(nil),  // 5: querysheriff.v1.GetCurrentUserRequest
+	(*GetCurrentUserResponse)(nil), // 6: querysheriff.v1.GetCurrentUserResponse
+	(*timestamppb.Timestamp)(nil),  // 7: google.protobuf.Timestamp
 }
 var file_querysheriff_v1_auth_proto_depIdxs = []int32{
 	7, // 0: querysheriff.v1.User.created_at:type_name -> google.protobuf.Timestamp
 	0, // 1: querysheriff.v1.LoginResponse.user:type_name -> querysheriff.v1.User
-	0, // 2: querysheriff.v1.CurrentUserResponse.user:type_name -> querysheriff.v1.User
+	0, // 2: querysheriff.v1.GetCurrentUserResponse.user:type_name -> querysheriff.v1.User
 	1, // 3: querysheriff.v1.AuthService.Login:input_type -> querysheriff.v1.LoginRequest
 	3, // 4: querysheriff.v1.AuthService.Logout:input_type -> querysheriff.v1.LogoutRequest
-	5, // 5: querysheriff.v1.AuthService.CurrentUser:input_type -> querysheriff.v1.CurrentUserRequest
+	5, // 5: querysheriff.v1.AuthService.GetCurrentUser:input_type -> querysheriff.v1.GetCurrentUserRequest
 	2, // 6: querysheriff.v1.AuthService.Login:output_type -> querysheriff.v1.LoginResponse
 	4, // 7: querysheriff.v1.AuthService.Logout:output_type -> querysheriff.v1.LogoutResponse
-	6, // 8: querysheriff.v1.AuthService.CurrentUser:output_type -> querysheriff.v1.CurrentUserResponse
+	6, // 8: querysheriff.v1.AuthService.GetCurrentUser:output_type -> querysheriff.v1.GetCurrentUserResponse
 	6, // [6:9] is the sub-list for method output_type
 	3, // [3:6] is the sub-list for method input_type
 	3, // [3:3] is the sub-list for extension type_name

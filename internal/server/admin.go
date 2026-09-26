@@ -144,14 +144,7 @@ func (s *AdminServer) ListUsers(
 
 	users := make([]*querysheriffv1.User, len(rows))
 	for i, row := range rows {
-		users[i] = userProto(
-			row.ID,
-			row.Name,
-			row.Email,
-			row.IsSuperAdmin,
-			timestamptzProto(row.CreatedAt),
-			row.AllowedServers,
-		)
+		users[i] = userProto(principalFromUser(row))
 	}
 
 	return connect.NewResponse(&querysheriffv1.ListUsersResponse{Users: users}), nil
@@ -170,9 +163,9 @@ func (s *AdminServer) CreateUser(
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name, email and password are required"))
 	}
 
-	hash, err := auth.HashPassword(password)
+	hash, err := hashPassword(password)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, err
 	}
 
 	created, err := s.queries.CreateUser(ctx, db.CreateUserParams{
@@ -191,14 +184,7 @@ func (s *AdminServer) CreateUser(
 	}
 
 	return connect.NewResponse(&querysheriffv1.CreateUserResponse{
-		User: userProto(
-			created.ID,
-			created.Name,
-			created.Email,
-			false,
-			timestamptzProto(created.CreatedAt),
-			created.AllowedServers,
-		),
+		User: userProto(principalFromUser(created)),
 	}), nil
 }
 
@@ -217,20 +203,21 @@ func (s *AdminServer) UpdateUser(
 
 	passwordHash := pgtype.Text{String: "", Valid: false}
 	if password := req.Msg.GetPassword(); password != "" {
-		hash, hashErr := auth.HashPassword(password)
+		hash, hashErr := hashPassword(password)
 		if hashErr != nil {
-			return nil, connect.NewError(connect.CodeInternal, hashErr)
+			return nil, hashErr
 		}
 
 		passwordHash = pgtype.Text{String: hash, Valid: true}
 	}
 
 	updated, err := s.queries.UpdateUser(ctx, db.UpdateUserParams{
-		Name:           name,
-		Email:          email,
-		PasswordHash:   passwordHash,
-		AllowedServers: orEmptyStrings(req.Msg.GetAllowedServers()),
-		ID:             id,
+		Name:              name,
+		Email:             email,
+		PasswordHash:      passwordHash,
+		AllowedServers:    orEmptyStrings(req.Msg.GetAllowedServers()),
+		ID:                id,
+		CallerSessionHash: auth.HashToken(sessionTokenFromHeader(req.Header())),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("user not found"))
@@ -244,23 +231,8 @@ func (s *AdminServer) UpdateUser(
 	}
 
 	return connect.NewResponse(&querysheriffv1.UpdateUserResponse{
-		User: userProto(
-			updated.ID,
-			updated.Name,
-			updated.Email,
-			updated.IsSuperAdmin,
-			timestamptzProto(updated.CreatedAt),
-			updated.AllowedServers,
-		),
+		User: userProto(principalFromUser(updated)),
 	}), nil
-}
-
-func orEmptyStrings(values []string) []string {
-	if values == nil {
-		return []string{}
-	}
-
-	return values
 }
 
 // DeleteUser deletes a non-super-admin user.

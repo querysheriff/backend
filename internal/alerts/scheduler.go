@@ -32,6 +32,14 @@ const (
 	weeklyTopRows        = 3
 )
 
+type scheduler struct {
+	queries      *db.Queries
+	stats        *clickhouse.Client
+	notifier     *Notifier
+	dashboardURL string
+	logger       *slog.Logger
+}
+
 func RunScheduler(
 	ctx context.Context,
 	queries *db.Queries,
@@ -40,6 +48,8 @@ func RunScheduler(
 	dashboardURL string,
 	logger *slog.Logger,
 ) {
+	s := scheduler{queries: queries, stats: stats, notifier: notifier, dashboardURL: dashboardURL, logger: logger}
+
 	monitoringTicker := time.NewTicker(monitoringScanEvery)
 	defer monitoringTicker.Stop()
 
@@ -49,120 +59,88 @@ func RunScheduler(
 	pruneTicker := time.NewTicker(pruneScanEvery)
 	defer pruneTicker.Stop()
 
-	pruneFireHistory(ctx, queries, logger)
+	s.prune(ctx)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-monitoringTicker.C:
-			evalStaleServers(ctx, queries, notifier, logger)
+			s.fireStaleServers(ctx)
 		case <-reportTicker.C:
-			evalReports(ctx, queries, stats, notifier, dashboardURL, logger)
+			s.sendReports(ctx)
 		case <-pruneTicker.C:
-			pruneFireHistory(ctx, queries, logger)
+			s.prune(ctx)
 		}
 	}
 }
 
-func evalStaleServers(ctx context.Context, queries *db.Queries, notifier *Notifier, logger *slog.Logger) {
-	servers, err := queries.ListStaleServers(ctx, intervalFromDuration(monitoringStaleAfter))
+func (s scheduler) fireStaleServers(ctx context.Context) {
+	servers, err := s.queries.ListStaleServers(ctx, intervalFromDuration(monitoringStaleAfter))
 	if err != nil {
-		logger.ErrorContext(ctx, "stale-server scan failed", "error", err)
+		s.logger.ErrorContext(ctx, "stale-server scan failed", "error", err)
 
 		return
 	}
 
 	for _, server := range servers {
-		notifier.Fire(server, KeyMonitoringStopped, "No data for over 10 minutes.")
+		s.notifier.Fire(server, KeyMonitoringStopped,
+			fmt.Sprintf("No data for over %s.", humanize.Duration(monitoringStaleAfter)))
 	}
 }
 
-func evalReports(
-	ctx context.Context,
-	queries *db.Queries,
-	stats *clickhouse.Client,
-	notifier *Notifier,
-	dashboardURL string,
-	logger *slog.Logger,
-) {
+func (s scheduler) sendReports(ctx context.Context) {
 	now := time.Now().UTC()
 	if now.Hour() != reportHourUTC {
 		return
 	}
 
-	sendSlowQueryReports(ctx, queries, stats, notifier, dashboardURL, logger)
+	s.sendReport(ctx, KeySlowQueryReport, s.slowQueryReport)
 
 	if now.Weekday() == time.Monday {
-		sendWeeklyReports(ctx, queries, stats, notifier, dashboardURL, logger)
+		s.sendReport(ctx, KeyWeeklyReport, s.weeklyReport)
 	}
 }
 
-func sendSlowQueryReports(
+// sendReport fires the report to every server that has it enabled; an empty report is not sent.
+func (s scheduler) sendReport(
 	ctx context.Context,
-	queries *db.Queries,
-	stats *clickhouse.Client,
-	notifier *Notifier,
-	dashboardURL string,
-	logger *slog.Logger,
+	alertKey string,
+	build func(ctx context.Context, server string) (string, error),
 ) {
-	servers, err := queries.ListServersWithAlertEnabled(ctx, KeySlowQueryReport)
+	servers, err := s.queries.ListServersWithAlertEnabled(ctx, alertKey)
 	if err != nil {
-		logger.ErrorContext(ctx, "slow-query report scan failed", "error", err)
+		s.logger.ErrorContext(ctx, "report scan failed", "alert", alertKey, "error", err)
 
 		return
 	}
 
 	for _, server := range servers {
-		rows, listErr := stats.ListSlowStatements(ctx, clickhouse.SlowStatementsParams{
-			ServerName: server,
-			From:       time.Now().Add(-slowQueryWindow),
-			MinCalls:   slowQueryMinCalls,
-			MinAvgMs:   slowQueryMinAvgMs,
-			MaxRows:    slowQueryMaxRows,
-		})
-		if listErr != nil {
-			logger.ErrorContext(ctx, "slow-query lookup failed", "server", server, "error", listErr)
-
-			continue
-		}
-
-		if len(rows) == 0 {
-			continue
-		}
-
-		notifier.Fire(server, KeySlowQueryReport, slowQueryReportText(rows, dashboardURL))
-	}
-}
-
-func sendWeeklyReports(
-	ctx context.Context,
-	queries *db.Queries,
-	stats *clickhouse.Client,
-	notifier *Notifier,
-	dashboardURL string,
-	logger *slog.Logger,
-) {
-	servers, err := queries.ListServersWithAlertEnabled(ctx, KeyWeeklyReport)
-	if err != nil {
-		logger.ErrorContext(ctx, "weekly report scan failed", "error", err)
-
-		return
-	}
-
-	for _, server := range servers {
-		text, buildErr := weeklyReportText(ctx, stats, server, dashboardURL)
+		text, buildErr := build(ctx, server)
 		if buildErr != nil {
-			logger.ErrorContext(ctx, "weekly report build failed", "server", server, "error", buildErr)
+			s.logger.ErrorContext(ctx, "report build failed", "alert", alertKey, "server", server, "error", buildErr)
 
 			continue
 		}
 
-		notifier.Fire(server, KeyWeeklyReport, text)
+		if text != "" {
+			s.notifier.Fire(server, alertKey, text)
+		}
 	}
 }
 
-func slowQueryReportText(rows []clickhouse.SlowStatement, dashboardURL string) string {
+func (s scheduler) slowQueryReport(ctx context.Context, server string) (string, error) {
+	rows, err := s.stats.TopStatements(ctx, clickhouse.TopStatementsParams{
+		ServerName: server,
+		From:       time.Now().Add(-slowQueryWindow),
+		MinCalls:   slowQueryMinCalls,
+		MinAvgMs:   slowQueryMinAvgMs,
+		MaxRows:    slowQueryMaxRows,
+	})
+	if err != nil || len(rows) == 0 {
+		return "", err
+	}
+
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "%s in the last 24 hours.\n",
@@ -170,48 +148,46 @@ func slowQueryReportText(rows []clickhouse.SlowStatement, dashboardURL string) s
 
 	for _, row := range rows {
 		headline := fmt.Sprintf("%d calls averaging %s", row.Calls, humanize.Millis(row.AvgMs))
-		writeStatement(&b, headline, row.Tags, row.ID, dashboardURL)
+		s.writeStatement(&b, headline, row.Tags, row.ID)
 	}
 
-	return b.String()
+	return b.String(), nil
 }
 
-func weeklyReportText(
-	ctx context.Context,
-	stats *clickhouse.Client,
-	server, dashboardURL string,
-) (string, error) {
+func (s scheduler) weeklyReport(ctx context.Context, server string) (string, error) {
 	now := time.Now()
 	currentStart := now.Add(-weeklyWindow)
 	previousStart := now.Add(-2 * weeklyWindow)
 
-	p99Current, err := stats.LatencyQuantile(ctx, server, currentStart, now, weeklyQuantile, utilityKind)
+	p99Current, err := s.stats.LatencyQuantile(ctx, server, currentStart, now, weeklyQuantile, utilityKind)
 	if err != nil {
 		return "", err
 	}
 
-	p99Previous, err := stats.LatencyQuantile(ctx, server, previousStart, currentStart, weeklyQuantile, utilityKind)
+	p99Previous, err := s.stats.LatencyQuantile(ctx, server, previousStart, currentStart, weeklyQuantile, utilityKind)
 	if err != nil {
 		return "", err
 	}
 
-	callsCurrent, err := stats.CallsBetween(ctx, server, currentStart, now)
+	callsCurrent, err := s.stats.CallsBetween(ctx, server, currentStart, now)
 	if err != nil {
 		return "", err
 	}
 
-	callsPrevious, err := stats.CallsBetween(ctx, server, previousStart, currentStart)
+	callsPrevious, err := s.stats.CallsBetween(ctx, server, previousStart, currentStart)
 	if err != nil {
 		return "", err
 	}
 
-	errorsCurrent, errorsPrevious, err := stats.CountLogErrors(
+	errorsCurrent, errorsPrevious, err := s.stats.CountLogErrors(
 		ctx, server, previousStart, currentStart, now, errorLogLevels())
 	if err != nil {
 		return "", err
 	}
 
-	top, err := stats.TopStatementsByExecTime(ctx, server, currentStart, weeklyTopRows)
+	top, err := s.stats.TopStatements(ctx, clickhouse.TopStatementsParams{
+		ServerName: server, From: currentStart, MaxRows: weeklyTopRows,
+	})
 	if err != nil {
 		return "", err
 	}
@@ -230,7 +206,7 @@ func weeklyReportText(
 		b.WriteString("\n\nBusiest queries:")
 		for _, statement := range top {
 			headline := humanize.Duration(time.Duration(statement.TotalMs) * time.Millisecond)
-			writeStatement(&b, headline, statement.Tags, statement.ID, dashboardURL)
+			s.writeStatement(&b, headline, statement.Tags, statement.ID)
 		}
 	}
 
@@ -238,32 +214,26 @@ func weeklyReportText(
 }
 
 func errorLogLevels() []int32 {
-	return []int32{5, 7, 8}
+	return []int32{
+		int32(querysheriffv1.LogEvent_LOG_LEVEL_ERROR),
+		int32(querysheriffv1.LogEvent_LOG_LEVEL_FATAL),
+		int32(querysheriffv1.LogEvent_LOG_LEVEL_PANIC),
+	}
 }
 
-func writeStatement(
-	b *strings.Builder,
-	headline string,
-	tags map[string]string,
-	statementID uint64,
-	dashboardURL string,
-) {
+func (s scheduler) writeStatement(b *strings.Builder, headline string, tags map[string]string, statementID uint64) {
 	fmt.Fprintf(b, "\n• *%s*", headline)
 
 	if list := formatTags(tags); list != "" {
 		fmt.Fprintf(b, " — %s", list)
 	}
 
-	if dashboardURL != "" {
-		fmt.Fprintf(b, "\n  <%s/queries/%d|open in querysheriff>", dashboardURL, statementID)
+	if s.dashboardURL != "" {
+		fmt.Fprintf(b, "\n  <%s/queries/%d|open in querysheriff>", s.dashboardURL, statementID)
 	}
 }
 
 func formatTags(tags map[string]string) string {
-	if len(tags) == 0 {
-		return ""
-	}
-
 	pairs := make([]string, 0, len(tags))
 	for _, key := range slices.Sorted(maps.Keys(tags)) {
 		pairs = append(pairs, key+"="+tags[key])
@@ -272,9 +242,13 @@ func formatTags(tags map[string]string) string {
 	return strings.Join(pairs, ", ")
 }
 
-func pruneFireHistory(ctx context.Context, queries *db.Queries, logger *slog.Logger) {
-	if err := queries.PruneAlertFires(ctx, intervalFromDuration(FireHistoryWindow)); err != nil {
-		logger.ErrorContext(ctx, "alert fire prune failed", "error", err)
+func (s scheduler) prune(ctx context.Context) {
+	if err := s.queries.PruneAlertFires(ctx, intervalFromDuration(FireHistoryWindow)); err != nil {
+		s.logger.ErrorContext(ctx, "alert fire prune failed", "error", err)
+	}
+
+	if err := s.queries.DeleteExpiredSessions(ctx); err != nil {
+		s.logger.ErrorContext(ctx, "expired session prune failed", "error", err)
 	}
 }
 

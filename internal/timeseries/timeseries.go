@@ -42,12 +42,6 @@ func (b Bounds) Ends() []time.Time {
 	return ends
 }
 
-// BucketEnd returns the end of the bucket containing t.
-// Example: Bucket=1m, t=12:00:30 -> 12:01:00.
-func (b Bounds) BucketEnd(t time.Time) time.Time {
-	return binStart(t, b.Anchor, b.Bucket).Add(b.Bucket)
-}
-
 func bucketFor(d time.Duration) time.Duration {
 	bucket := d / points
 	if bucket < minBucket {

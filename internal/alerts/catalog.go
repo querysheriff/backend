@@ -1,13 +1,15 @@
 package alerts
 
-import "time"
+import (
+	"time"
 
-type Level int
+	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
+)
 
 const (
-	LevelInfo Level = iota
-	LevelWarning
-	LevelCritical
+	info     = querysheriffv1.AlertLevel_ALERT_LEVEL_INFO
+	warning  = querysheriffv1.AlertLevel_ALERT_LEVEL_WARNING
+	critical = querysheriffv1.AlertLevel_ALERT_LEVEL_CRITICAL
 )
 
 const (
@@ -34,24 +36,20 @@ const FireHistoryWindow = 7 * 24 * time.Hour
 type Def struct {
 	Key      string
 	Title    string
-	Level    Level
+	Level    querysheriffv1.AlertLevel
 	Cooldown time.Duration
 }
 
-func defs() []Def {
-	return []Def{
-		{KeyMonitoringStopped, "Monitoring stopped", LevelCritical, monitoringCooldown},
-		{KeyPanic, "Database crashed", LevelCritical, crashCooldown},
-		{KeyBlockedQuery, "Query blocked by a lock", LevelWarning, liveProblemCooldown},
-		{KeyLongQuery, "Query running too long", LevelWarning, liveProblemCooldown},
-		{KeyLongTransaction, "Transaction open too long", LevelWarning, openTxnCooldown},
-		{KeySlowQueryReport, "Daily slow query report", LevelInfo, dailyCadence},
-		{KeyWeeklyReport, "Weekly report", LevelInfo, weeklyCadence},
-	}
-}
-
 func Catalog() []Def {
-	return defs()
+	return []Def{
+		{KeyMonitoringStopped, "Monitoring stopped", critical, monitoringCooldown},
+		{KeyPanic, "Database crashed", critical, crashCooldown},
+		{KeyBlockedQuery, "Query blocked by a lock", warning, liveProblemCooldown},
+		{KeyLongQuery, "Query running too long", warning, liveProblemCooldown},
+		{KeyLongTransaction, "Transaction open too long", warning, openTxnCooldown},
+		{KeySlowQueryReport, "Daily slow query report", info, dailyCadence},
+		{KeyWeeklyReport, "Weekly report", info, weeklyCadence},
+	}
 }
 
 func IsKnownKey(key string) bool {
@@ -61,7 +59,7 @@ func IsKnownKey(key string) bool {
 }
 
 func defByKey(key string) (Def, bool) {
-	for _, def := range defs() {
+	for _, def := range Catalog() {
 		if def.Key == key {
 			return def, true
 		}

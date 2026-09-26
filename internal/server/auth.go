@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
@@ -28,8 +28,8 @@ type AuthServer struct {
 	cookieSecure bool
 }
 
-func NewAuthServer(pool *pgxpool.Pool, cookieSecure bool) *AuthServer {
-	return &AuthServer{queries: db.New(pool), cookieSecure: cookieSecure}
+func NewAuthServer(queries *db.Queries, cookieSecure bool) *AuthServer {
+	return &AuthServer{queries: queries, cookieSecure: cookieSecure}
 }
 
 // Login authenticates a user, creates a session, and sets the session cookie.
@@ -63,8 +63,8 @@ func (s *AuthServer) Login(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	resp := connect.NewResponse(&querysheriffv1.LoginResponse{User: principalProto(principal)})
-	resp.Header().Set("Set-Cookie", sessionCookie(token, s.cookieSecure).String())
+	resp := connect.NewResponse(&querysheriffv1.LoginResponse{User: userProto(principal)})
+	resp.Header().Set("Set-Cookie", sessionCookie(token, int(sessionTTL.Seconds()), s.cookieSecure).String())
 
 	return resp, nil
 }
@@ -82,23 +82,23 @@ func (s *AuthServer) Logout(
 	}
 
 	resp := connect.NewResponse(&querysheriffv1.LogoutResponse{})
-	resp.Header().Set("Set-Cookie", clearedSessionCookie(s.cookieSecure).String())
+	resp.Header().Set("Set-Cookie", sessionCookie("", -1, s.cookieSecure).String())
 
 	return resp, nil
 }
 
-// CurrentUser returns the authenticated user.
+// GetCurrentUser returns the authenticated user.
 // Example: logged-in Bob -> {Name:"Bob", Email:"bob@example.com"}.
-func (s *AuthServer) CurrentUser(
+func (s *AuthServer) GetCurrentUser(
 	ctx context.Context,
-	_ *connect.Request[querysheriffv1.CurrentUserRequest],
-) (*connect.Response[querysheriffv1.CurrentUserResponse], error) {
+	_ *connect.Request[querysheriffv1.GetCurrentUserRequest],
+) (*connect.Response[querysheriffv1.GetCurrentUserResponse], error) {
 	principal, err := requirePrincipal(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	return connect.NewResponse(&querysheriffv1.CurrentUserResponse{User: principalProto(principal)}), nil
+	return connect.NewResponse(&querysheriffv1.GetCurrentUserResponse{User: userProto(principal)}), nil
 }
 
 func (s *AuthServer) authenticate(ctx context.Context, email, password string) (*auth.Principal, error) {
@@ -114,14 +114,7 @@ func (s *AuthServer) authenticate(ctx context.Context, email, password string) (
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New(invalidCredentialsMsg))
 	}
 
-	return &auth.Principal{
-		UserID:         user.ID,
-		Name:           user.Name,
-		Email:          user.Email,
-		IsSuperAdmin:   user.IsSuperAdmin,
-		CreatedAt:      user.CreatedAt.Time,
-		AllowedServers: user.AllowedServers,
-	}, nil
+	return principalFromUser(user), nil
 }
 
 func (s *AuthServer) bootstrapSuperAdmin(ctx context.Context, email, password string) (*auth.Principal, error) {
@@ -130,12 +123,14 @@ func (s *AuthServer) bootstrapSuperAdmin(ctx context.Context, email, password st
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	if count > 0 {
+		auth.CheckPassword(auth.DecoyHash, password)
+
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New(invalidCredentialsMsg))
 	}
 
-	hash, err := auth.HashPassword(password)
+	hash, err := hashPassword(password)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, err
 	}
 
 	created, err := s.queries.CreateUser(ctx, db.CreateUserParams{
@@ -153,41 +148,28 @@ func (s *AuthServer) bootstrapSuperAdmin(ctx context.Context, email, password st
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
+	return principalFromUser(created), nil
+}
+
+func principalFromUser(user db.User) *auth.Principal {
 	return &auth.Principal{
-		UserID:         created.ID,
-		Name:           created.Name,
-		Email:          created.Email,
-		IsSuperAdmin:   true,
-		CreatedAt:      created.CreatedAt.Time,
-		AllowedServers: created.AllowedServers,
-	}, nil
+		UserID:         user.ID,
+		Name:           user.Name,
+		Email:          user.Email,
+		IsSuperAdmin:   user.IsSuperAdmin,
+		CreatedAt:      user.CreatedAt.Time,
+		AllowedServers: user.AllowedServers,
+	}
 }
 
-func principalProto(principal *auth.Principal) *querysheriffv1.User {
-	return userProto(
-		principal.UserID,
-		principal.Name,
-		principal.Email,
-		principal.IsSuperAdmin,
-		timestamppb.New(principal.CreatedAt),
-		principal.AllowedServers,
-	)
-}
-
-func userProto(
-	id int64,
-	name, email string,
-	isSuperAdmin bool,
-	createdAt *timestamppb.Timestamp,
-	allowedServers []string,
-) *querysheriffv1.User {
+func userProto(principal *auth.Principal) *querysheriffv1.User {
 	return &querysheriffv1.User{
-		Id:             id,
-		Name:           name,
-		Email:          email,
-		IsSuperAdmin:   isSuperAdmin,
-		CreatedAt:      createdAt,
-		AllowedServers: allowedServers,
+		Id:             principal.UserID,
+		Name:           principal.Name,
+		Email:          principal.Email,
+		IsSuperAdmin:   principal.IsSuperAdmin,
+		CreatedAt:      timestamppb.New(principal.CreatedAt),
+		AllowedServers: principal.AllowedServers,
 	}
 }
 
@@ -197,6 +179,18 @@ func defaultNameFromEmail(email string) string {
 	}
 
 	return email
+}
+
+func hashPassword(password string) (string, error) {
+	hash, err := auth.HashPassword(password)
+	if errors.Is(err, bcrypt.ErrPasswordTooLong) {
+		return "", connect.NewError(connect.CodeInvalidArgument, errors.New("password must be at most 72 bytes"))
+	}
+	if err != nil {
+		return "", connect.NewError(connect.CodeInternal, err)
+	}
+
+	return hash, nil
 }
 
 func isUniqueViolation(err error) bool {

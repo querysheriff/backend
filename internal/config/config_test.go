@@ -11,31 +11,31 @@ func env(pairs map[string]string) func(string) string {
 	return func(key string) string { return pairs[key] }
 }
 
-func requiredAPIEnv() map[string]string {
+func requiredEnv() map[string]string {
 	return map[string]string{
 		"POSTGRES_URL":   "postgres://localhost/qs",
 		"CLICKHOUSE_URL": "clickhouse://localhost:9000",
 	}
 }
 
-func TestParseAPIRequiresBothStores(t *testing.T) {
+func TestParseRequiresBothStores(t *testing.T) {
 	t.Parallel()
 
 	for _, missing := range []string{"POSTGRES_URL", "CLICKHOUSE_URL"} {
-		pairs := requiredAPIEnv()
+		pairs := requiredEnv()
 		delete(pairs, missing)
 
-		if _, err := config.ParseAPI(env(pairs)); err == nil {
-			t.Errorf("ParseAPI without %s = nil error, want a failure", missing)
+		if _, err := config.Parse(env(pairs)); err == nil {
+			t.Errorf("Parse without %s = nil error, want a failure", missing)
 		}
 	}
 
-	if _, err := config.ParseAPI(env(requiredAPIEnv())); err != nil {
-		t.Errorf("ParseAPI with both stores = %v, want nil", err)
+	if _, err := config.Parse(env(requiredEnv())); err != nil {
+		t.Errorf("Parse with both stores = %v, want nil", err)
 	}
 }
 
-func TestParseAPIListenAddr(t *testing.T) {
+func TestParseListenAddr(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -55,20 +55,20 @@ func TestParseAPIListenAddr(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 
-			pairs := requiredAPIEnv()
+			pairs := requiredEnv()
 			pairs["LISTEN_ADDR"] = c.raw
 
-			cfg, err := config.ParseAPI(env(pairs))
+			cfg, err := config.Parse(env(pairs))
 			if c.wantErr {
 				if err == nil {
-					t.Errorf("ParseAPI(LISTEN_ADDR=%q) = nil error, want a failure", c.raw)
+					t.Errorf("Parse(LISTEN_ADDR=%q) = nil error, want a failure", c.raw)
 				}
 
 				return
 			}
 
 			if err != nil {
-				t.Fatalf("ParseAPI(LISTEN_ADDR=%q): %v", c.raw, err)
+				t.Fatalf("Parse(LISTEN_ADDR=%q): %v", c.raw, err)
 			}
 
 			if cfg.ListenAddr != c.want {
@@ -78,7 +78,7 @@ func TestParseAPIListenAddr(t *testing.T) {
 	}
 }
 
-func TestParseAPIAllowedOrigins(t *testing.T) {
+func TestParseAllowedOrigins(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -101,12 +101,12 @@ func TestParseAPIAllowedOrigins(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 
-			pairs := requiredAPIEnv()
+			pairs := requiredEnv()
 			pairs["CORS_ALLOWED_ORIGINS"] = c.raw
 
-			cfg, err := config.ParseAPI(env(pairs))
+			cfg, err := config.Parse(env(pairs))
 			if err != nil {
-				t.Fatalf("ParseAPI(CORS_ALLOWED_ORIGINS=%q): %v", c.raw, err)
+				t.Fatalf("Parse(CORS_ALLOWED_ORIGINS=%q): %v", c.raw, err)
 			}
 
 			if !slices.Equal(cfg.AllowedOrigins, c.want) {
@@ -116,16 +116,16 @@ func TestParseAPIAllowedOrigins(t *testing.T) {
 	}
 }
 
-func TestParseAPICookieSecureIsOptIn(t *testing.T) {
+func TestParseCookieSecureIsOptIn(t *testing.T) {
 	t.Parallel()
 
 	for raw, want := range map[string]bool{"": false, "false": false, "1": false, "TRUE": false, "true": true} {
-		pairs := requiredAPIEnv()
+		pairs := requiredEnv()
 		pairs["COOKIE_SECURE"] = raw
 
-		cfg, err := config.ParseAPI(env(pairs))
+		cfg, err := config.Parse(env(pairs))
 		if err != nil {
-			t.Fatalf("ParseAPI(COOKIE_SECURE=%q): %v", raw, err)
+			t.Fatalf("Parse(COOKIE_SECURE=%q): %v", raw, err)
 		}
 
 		if cfg.CookieSecure != want {
@@ -134,24 +134,15 @@ func TestParseAPICookieSecureIsOptIn(t *testing.T) {
 	}
 }
 
-func TestParseJobs(t *testing.T) {
+func TestParseTrimsTheDashboardURL(t *testing.T) {
 	t.Parallel()
 
-	for _, missing := range []string{"POSTGRES_URL", "CLICKHOUSE_URL"} {
-		pairs := requiredAPIEnv()
-		delete(pairs, missing)
-
-		if _, err := config.ParseJobs(env(pairs)); err == nil {
-			t.Errorf("ParseJobs without %s = nil error, want a failure", missing)
-		}
-	}
-
-	pairs := requiredAPIEnv()
+	pairs := requiredEnv()
 	pairs["DASHBOARD_URL"] = "  https://qs.example/  "
 
-	cfg, err := config.ParseJobs(env(pairs))
+	cfg, err := config.Parse(env(pairs))
 	if err != nil {
-		t.Fatalf("ParseJobs: %v", err)
+		t.Fatalf("Parse: %v", err)
 	}
 
 	if want := "https://qs.example"; cfg.DashboardURL != want {

@@ -4,6 +4,7 @@ package clickhouse_test
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -152,6 +153,16 @@ func TestStatementIDsNilMatchesAllEmptyMatchesNone(t *testing.T) {
 	if len(none) != 0 {
 		t.Errorf("an empty id filter returned %d statements, want none", len(none))
 	}
+
+	matched, err := f.client.StatementIDsByText(ctx, f.server, f.database, "where ID =")
+	if err != nil || len(matched) != 1 {
+		t.Errorf("text search = %v, %v; want the seeded statement, matched case-insensitively", matched, err)
+	}
+
+	unmatched, err := f.client.StatementIDsByText(ctx, f.server, f.database, "%")
+	if err != nil || unmatched == nil || len(unmatched) != 0 {
+		t.Errorf("text search for a literal %% = %#v, %v; want an empty, non-nil filter", unmatched, err)
+	}
 }
 
 func TestLatencyAndMetricSeriesShareBucketEnds(t *testing.T) {
@@ -192,5 +203,33 @@ func TestLatencyAndMetricSeriesShareBucketEnds(t *testing.T) {
 			t.Errorf("latency bucket %s has no matching metric bucket end; the two charts would disagree",
 				bucket.BucketEnd)
 		}
+	}
+}
+
+func TestLatencySeriesWeightsPercentilesByCalls(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	f := newFixture(t, "series-percentiles")
+	f.seedStatement(t, 1, 1, []int64{90}, 1)
+	f.seedStatement(t, 2, 1, []int64{10}, 100)
+	from, to := f.window()
+
+	buckets, err := f.client.StatementLatencySeries(ctx, clickhouse.LatencySeriesParams{
+		RangeStart: from, RangeEnd: to, Bucket: time.Hour,
+		ServerName: f.server, DatabaseName: f.database, UtilityKind: 3,
+	})
+	if err != nil {
+		t.Fatalf("StatementLatencySeries: %v", err)
+	}
+
+	if len(buckets) != 1 {
+		t.Fatalf("got %d buckets, want 1", len(buckets))
+	}
+
+	within1Pct := func(got, want float64) bool { return math.Abs(got/want-1) <= 0.01 }
+
+	if b := buckets[0]; !within1Pct(b.P90, 1) || !within1Pct(b.P95, 100) || !within1Pct(b.P99, 100) {
+		t.Errorf("P90/P95/P99 = %v/%v/%v ms, want ~1/~100/~100: 90 calls at 1ms, 10 at 100ms", b.P90, b.P95, b.P99)
 	}
 }

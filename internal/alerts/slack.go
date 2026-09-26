@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
+
+	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 )
 
 const (
@@ -37,25 +41,24 @@ type slackPayload struct {
 	Attachments []slackAttachment `json:"attachments"`
 }
 
-func slackColor(level Level) string {
-	switch level {
-	case LevelCritical:
+func slackColor(level querysheriffv1.AlertLevel) string {
+	if level == critical {
 		return colorCritical
-	case LevelWarning:
-		return colorWarning
-	case LevelInfo:
-		return colorInfo
-	default:
-		return colorInfo
 	}
+
+	if level == warning {
+		return colorWarning
+	}
+
+	return colorInfo
 }
 
 func slackTitle(def Def) string {
-	if def.Level == LevelWarning || def.Level == LevelCritical {
-		return severityPrefix + def.Title
+	if def.Level == info {
+		return reportPrefix + def.Title
 	}
 
-	return reportPrefix + def.Title
+	return severityPrefix + def.Title
 }
 
 func postToSlack(ctx context.Context, client *http.Client, webhookURL string, def Def, serverName, text string) error {
@@ -90,13 +93,13 @@ func postToSlack(ctx context.Context, client *http.Client, webhookURL string, de
 func sendSlackRequest(ctx context.Context, client *http.Client, webhookURL string, body []byte) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return withoutURL(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return withoutURL(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -105,4 +108,14 @@ func sendSlackRequest(ctx context.Context, client *http.Client, webhookURL strin
 	}
 
 	return nil
+}
+
+// withoutURL drops the request URL from err: the webhook URL is a secret and errors get logged.
+func withoutURL(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return fmt.Errorf("%s slack webhook: %w", urlErr.Op, urlErr.Err)
+	}
+
+	return err
 }

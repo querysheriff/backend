@@ -3,59 +3,22 @@ syntax = "proto3";
 package querysheriff.v1;
 
 import "google/protobuf/timestamp.proto";
+import "querysheriff/v1/common.proto";
 
 option go_package = "github.com/querysheriff/backend/gen/querysheriff/v1;querysheriffv1";
 
 service StatementService {
   rpc ReportStatements(ReportStatementsRequest) returns (ReportStatementsResponse) {}
   rpc ReportStatementTexts(ReportStatementTextsRequest) returns (ReportStatementTextsResponse) {}
-  rpc QueryStatements(QueryStatementsRequest) returns (QueryStatementsResponse) {}
-  rpc QueryStatementCallsSeries(QueryStatementCallsSeriesRequest) returns (QueryStatementCallsSeriesResponse) {}
-  rpc QueryStatementPercentileSeries(QueryStatementPercentileSeriesRequest) returns (QueryStatementPercentileSeriesResponse) {}
-  rpc QueryStatementTimingSeries(QueryStatementTimingSeriesRequest) returns (QueryStatementTimingSeriesResponse) {}
-  rpc QueryStatementDetail(QueryStatementDetailRequest) returns (QueryStatementDetailResponse) {}
-  rpc QueryStatementSamples(QueryStatementSamplesRequest) returns (QueryStatementSamplesResponse) {}
-  rpc GetStatementSamplePlan(GetStatementSamplePlanRequest) returns (GetStatementSamplePlanResponse) {}
-  rpc GetStatementSampleText(GetStatementSampleTextRequest) returns (GetStatementSampleTextResponse) {}
-  rpc GetStatementText(GetStatementTextRequest) returns (GetStatementTextResponse) {}
+
+  rpc ListStatements(ListStatementsRequest) returns (ListStatementsResponse) {}
+  rpc GetStatement(GetStatementRequest) returns (GetStatementResponse) {}
+  rpc GetStatementSeries(GetStatementSeriesRequest) returns (GetStatementSeriesResponse) {}
+  rpc GetLatencySeries(GetLatencySeriesRequest) returns (GetLatencySeriesResponse) {}
+  rpc ListStatementSamples(ListStatementSamplesRequest) returns (ListStatementSamplesResponse) {}
+  rpc GetStatementSample(GetStatementSampleRequest) returns (GetStatementSampleResponse) {}
   rpc ListTagKeys(ListTagKeysRequest) returns (ListTagKeysResponse) {}
   rpc ListTagValues(ListTagValuesRequest) returns (ListTagValuesResponse) {}
-}
-
-enum TagFilterOperator {
-  TAG_FILTER_OPERATOR_UNSPECIFIED = 0;
-  TAG_FILTER_OPERATOR_EQUAL = 1;
-  TAG_FILTER_OPERATOR_NOT_EQUAL = 2;
-  TAG_FILTER_OPERATOR_EXISTS = 3;
-}
-
-enum QueryKind {
-  QUERY_KIND_UNSPECIFIED = 0;
-  QUERY_KIND_READS = 1;
-  QUERY_KIND_WRITES = 2;
-  QUERY_KIND_OTHERS = 3;
-}
-
-enum StatementSortColumn {
-  STATEMENT_SORT_COLUMN_UNSPECIFIED = 0;
-  STATEMENT_SORT_COLUMN_AVG = 1;
-  STATEMENT_SORT_COLUMN_CALLS = 2;
-  STATEMENT_SORT_COLUMN_ROWS_PER_CALL = 3;
-  STATEMENT_SORT_COLUMN_PCT_IO = 4;
-  STATEMENT_SORT_COLUMN_PCT_TIME = 5;
-}
-
-enum SampleSortColumn {
-  SAMPLE_SORT_COLUMN_UNSPECIFIED = 0;
-  SAMPLE_SORT_COLUMN_AT = 1;
-  SAMPLE_SORT_COLUMN_DURATION = 2;
-  SAMPLE_SORT_COLUMN_PLAN = 3;
-}
-
-message TagFilter {
-  string key = 1;
-  TagFilterOperator op = 2;
-  repeated string values = 3;
 }
 
 message ReportStatementsRequest {
@@ -65,6 +28,16 @@ message ReportStatementsRequest {
 
 message ReportStatementsResponse {
   repeated StatementIdentity unknown_statements = 1;
+}
+
+message StatementDelta {
+  string user_name = 1;
+  string database_name = 2;
+  int64 query_id = 3;
+  int64 calls = 4;
+  int64 rows = 5;
+  double total_exec_time = 6;
+  double total_io_time = 7;
 }
 
 message StatementIdentity {
@@ -84,26 +57,78 @@ message StatementText {
   string query = 2;
 }
 
-message QueryStatementsRequest {
+enum QueryKind {
+  QUERY_KIND_UNSPECIFIED = 0;
+  QUERY_KIND_READS = 1;
+  QUERY_KIND_WRITES = 2;
+  QUERY_KIND_OTHERS = 3;
+}
+
+enum TagFilterOperator {
+  TAG_FILTER_OPERATOR_UNSPECIFIED = 0;
+  TAG_FILTER_OPERATOR_EQUAL = 1;
+  TAG_FILTER_OPERATOR_NOT_EQUAL = 2;
+  TAG_FILTER_OPERATOR_EXISTS = 3;
+}
+
+message TagFilter {
+  string key = 1;
+  TagFilterOperator op = 2;
+  repeated string values = 3;
+}
+
+enum StatementSortColumn {
+  STATEMENT_SORT_COLUMN_UNSPECIFIED = 0;
+  STATEMENT_SORT_COLUMN_AVG = 1;
+  STATEMENT_SORT_COLUMN_CALLS = 2;
+  STATEMENT_SORT_COLUMN_ROWS_PER_CALL = 3;
+  STATEMENT_SORT_COLUMN_PCT_IO = 4;
+  STATEMENT_SORT_COLUMN_PCT_TIME = 5;
+}
+
+message ListStatementsRequest {
   string server_name = 1;
   string database_name = 2;
   google.protobuf.Timestamp from = 3;
   google.protobuf.Timestamp to = 4;
-  string query_text = 5;
-  int32 limit = 6;
-  repeated TagFilter tag_filters = 7;
-  repeated QueryKind kinds = 8;
-  int32 offset = 9;
-  StatementSortColumn sort_column = 10;
-  bool sort_desc = 11;
+  string search = 5;
+  repeated TagFilter tag_filters = 6;
+  repeated QueryKind kinds = 7;
+  StatementSortColumn sort_column = 8;
+  bool sort_desc = 9;
+  int32 limit = 10;
+  int32 offset = 11;
 }
 
-message QueryStatementsResponse {
+message ListStatementsResponse {
   repeated StatementStat statements = 1;
   bool has_more = 2;
 }
 
-message SeriesScope {
+message StatementStat {
+  uint64 id = 1;
+  string preview = 2;
+  string user_name = 3;
+  map<string, string> tags = 4;
+  int64 calls = 5;
+  int64 rows = 6;
+  double avg_ms = 7;
+  double pct_time = 8;
+  double pct_io = 9;
+}
+
+message GetStatementRequest {
+  uint64 id = 1;
+}
+
+message GetStatementResponse {
+  string query = 1;
+  map<string, string> tags = 2;
+  string server_name = 3;
+  string database_name = 4;
+}
+
+message GetStatementSeriesRequest {
   string server_name = 1;
   string database_name = 2;
   uint64 statement_id = 3;
@@ -111,60 +136,46 @@ message SeriesScope {
   google.protobuf.Timestamp to = 5;
 }
 
-message QueryStatementCallsSeriesRequest {
-  SeriesScope scope = 1;
-}
-
-message QueryStatementCallsSeriesResponse {
-  StatementMetric calls = 1;
-  int64 bucket_ms = 2;
-}
-
-message QueryStatementPercentileSeriesRequest {
-  SeriesScope scope = 1;
-}
-
-message QueryStatementPercentileSeriesResponse {
-  StatementMetric p90 = 1;
-  StatementMetric p95 = 2;
-  StatementMetric p99 = 3;
+message GetStatementSeriesResponse {
+  repeated MetricPoint calls = 1;
+  repeated MetricPoint avg_ms = 2;
+  repeated MetricPoint avg_io_ms = 3;
   int64 bucket_ms = 4;
 }
 
-message QueryStatementTimingSeriesRequest {
-  SeriesScope scope = 1;
+message GetLatencySeriesRequest {
+  string server_name = 1;
+  string database_name = 2;
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp to = 4;
 }
 
-message QueryStatementTimingSeriesResponse {
-  StatementMetric avg = 1;
-  StatementMetric avg_io = 2;
-  int64 bucket_ms = 3;
+message GetLatencySeriesResponse {
+  repeated MetricPoint p90_ms = 1;
+  repeated MetricPoint p95_ms = 2;
+  repeated MetricPoint p99_ms = 3;
+  int64 bucket_ms = 4;
 }
 
-message QueryStatementDetailRequest {
-  uint64 id = 1;
-  google.protobuf.Timestamp from = 2;
-  google.protobuf.Timestamp to = 3;
+enum SampleSortColumn {
+  SAMPLE_SORT_COLUMN_UNSPECIFIED = 0;
+  SAMPLE_SORT_COLUMN_AT = 1;
+  SAMPLE_SORT_COLUMN_DURATION = 2;
 }
 
-message QueryStatementDetailResponse {
-  string query = 1;
-  map<string, string> tags = 2;
-  string server_name = 5;
-  string database_name = 6;
-}
-
-message QueryStatementSamplesRequest {
-  uint64 id = 1;
-  google.protobuf.Timestamp from = 2;
-  google.protobuf.Timestamp to = 3;
-  int32 limit = 4;
-  int32 offset = 5;
+message ListStatementSamplesRequest {
+  string server_name = 1;
+  string database_name = 2;
+  uint64 statement_id = 3;
+  google.protobuf.Timestamp from = 4;
+  google.protobuf.Timestamp to = 5;
   SampleSortColumn sort_column = 6;
   bool sort_desc = 7;
+  int32 limit = 8;
+  int32 offset = 9;
 }
 
-message QueryStatementSamplesResponse {
+message ListStatementSamplesResponse {
   repeated StatementSample samples = 1;
   bool has_more = 2;
 }
@@ -172,74 +183,24 @@ message QueryStatementSamplesResponse {
 message StatementSample {
   uint64 id = 1;
   google.protobuf.Timestamp occurred_at = 2;
-  string query = 3;
-  map<string, string> tags = 4;
+  string preview = 3;
+  double duration_ms = 4;
   bool has_plan = 5;
-  double duration_ms = 6;
+  map<string, string> tags = 6;
 }
 
-message GetStatementSamplePlanRequest {
-  uint64 sample_id = 1;
+message GetStatementSampleRequest {
+  uint64 id = 1;
 }
 
-message GetStatementSamplePlanResponse {
+message GetStatementSampleResponse {
   string query = 1;
   string plan_json = 2;
-}
-
-message GetStatementSampleTextRequest {
-  uint64 sample_id = 1;
-}
-
-message GetStatementSampleTextResponse {
-  string query = 1;
-}
-
-message GetStatementTextRequest {
-  uint64 id = 1;
-}
-
-message GetStatementTextResponse {
-  string query = 1;
-}
-
-message StatementMetric {
-  repeated MetricPoint series = 1;
-}
-
-message MetricPoint {
-  google.protobuf.Timestamp at = 1;
-  double value = 2;
-}
-
-message StatementStat {
-  uint64 id = 1;
-  string preview = 2;
-  string user_name = 3;
-  double total_exec_time = 4;
-  double pct_of_total = 5;
-  int64 calls = 6;
-  double avg_exec_time = 7;
-  int64 rows = 8;
-  map<string, string> tags = 9;
-  double pct_io = 10;
-}
-
-message StatementDelta {
-  string user_name = 1;
-  string database_name = 2;
-  int64 query_id = 3;
-  int64 calls = 4;
-  int64 rows = 5;
-  double total_exec_time = 6;
-  double total_io_time = 7;
 }
 
 message ListTagKeysRequest {
   string server_name = 1;
   string database_name = 2;
-  google.protobuf.Timestamp from = 3;
-  google.protobuf.Timestamp to = 4;
 }
 
 message ListTagKeysResponse {
@@ -254,9 +215,7 @@ message TagKey {
 message ListTagValuesRequest {
   string server_name = 1;
   string database_name = 2;
-  google.protobuf.Timestamp from = 3;
-  google.protobuf.Timestamp to = 4;
-  string key = 5;
+  string key = 3;
 }
 
 message ListTagValuesResponse {

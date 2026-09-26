@@ -3,12 +3,15 @@ package clickhouse
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cespare/xxhash/v2"
+
+	"github.com/querysheriff/backend/internal/tagfilter"
 )
 
 type ListStatementStatsParams struct {
@@ -18,6 +21,7 @@ type ListStatementStatsParams struct {
 	DatabaseName string
 
 	StatementIDs []uint64
+	TagFilters   []tagfilter.Filter
 
 	Kinds []int32
 
@@ -28,41 +32,36 @@ type ListStatementStatsParams struct {
 }
 
 type StatementStatRow struct {
-	ID            uint64
-	Preview       string
-	UserName      string
-	Calls         int64
-	Rows          int64
-	TotalExecTime float64
-	PctOfTotal    float64
-	PctIo         float64
+	ID            uint64            `ch:"id"`
+	Preview       string            `ch:"preview"`
+	UserName      string            `ch:"user_name"`
+	Calls         int64             `ch:"calls"`
+	Rows          int64             `ch:"row_count"`
+	TotalExecTime float64           `ch:"total_exec_time"`
+	PctOfTotal    float64           `ch:"pct_of_total"`
+	PctIo         float64           `ch:"pct_io"`
+	Tags          map[string]string `ch:"tags"`
 }
-
-const orderByPlaceholder = "{{order_by}}"
 
 const listStatementStatsSQL = `
 WITH
     dimension AS (
-        SELECT id, user_name, query_short, query_kind
+        SELECT id, user_name, query_short, query_kind, tags
         FROM statements FINAL
         WHERE server_name = {server_name:String}
           AND database_name = {database_name:String}
     ),
-    in_range AS (
-        SELECT statement_id, calls, "rows" AS row_count, total_exec_time, total_io_time
+    per_statement AS (
+        SELECT statement_id,
+               sum(calls)           AS calls,
+               sum("rows")          AS row_count,
+               sum(total_exec_time) AS total_exec_time,
+               sum(total_io_time)   AS total_io_time
         FROM statement_deltas
         WHERE server_name = {server_name:String}
           AND database_name = {database_name:String}
           AND collected_at >= {from:DateTime('UTC')}
           AND collected_at <= {to:DateTime('UTC')}
-    ),
-    per_statement AS (
-        SELECT statement_id,
-               sum(calls)           AS calls,
-               sum(row_count)       AS row_count,
-               sum(total_exec_time) AS total_exec_time,
-               sum(total_io_time)   AS total_io_time
-        FROM in_range
         GROUP BY statement_id
     ),
     with_totals AS (
@@ -76,18 +75,20 @@ WITH
         FROM per_statement
     )
 SELECT d.statement_id AS id,
-       s.query_short,
-       s.user_name,
-       toInt64(d.calls),
-       toInt64(d.row_count),
-       d.total_exec_time,
+       s.query_short AS preview,
+       s.user_name AS user_name,
+       toInt64(d.calls) AS calls,
+       toInt64(d.row_count) AS row_count,
+       d.total_exec_time AS total_exec_time,
        if(d.every_exec_time = 0, 0, d.total_exec_time / d.every_exec_time) * 100 AS pct_of_total,
-       if(d.every_io_time   = 0, 0, d.total_io_time   / d.every_io_time)   * 100 AS pct_io
+       if(d.every_io_time   = 0, 0, d.total_io_time   / d.every_io_time)   * 100 AS pct_io,
+       s.tags AS tags
 FROM with_totals AS d
 INNER JOIN dimension AS s ON s.id = d.statement_id
 WHERE has({kinds:Array(Int32)}, s.query_kind)
   AND ({every_statement:UInt8} = 1 OR d.statement_id IN {statement_ids:Array(UInt64)})
-ORDER BY ` + orderByPlaceholder + `, id DESC
+  %s
+ORDER BY %s, id DESC
 LIMIT {row_limit:UInt32} OFFSET {offset_rows:UInt32}`
 
 // ListStatementStats returns filtered, sorted, paginated statement metrics.
@@ -96,9 +97,11 @@ func (c *Client) ListStatementStats(
 	ctx context.Context,
 	params ListStatementStatsParams,
 ) ([]StatementStatRow, error) {
-	query := strings.Replace(listStatementStatsSQL, orderByPlaceholder, orderBy(params), 1)
+	tagConditions, tagArgs := tagFilterConditions(params.TagFilters)
+	query := fmt.Sprintf(listStatementStatsSQL, tagConditions, orderBy(params))
 
-	rows, err := c.conn.Query(ctx, query,
+	var out []StatementStatRow
+	if err := c.conn.Select(ctx, &out, query, append(tagArgs,
 		timeParam("from", params.From),
 		timeParam("to", params.To),
 		param("server_name", params.ServerName),
@@ -108,31 +111,39 @@ func (c *Client) ListStatementStats(
 		listParam("kinds", params.Kinds),
 		countParam("row_limit", params.RowLimit),
 		countParam("offset_rows", params.OffsetRows),
-	)
-	if err != nil {
+	)...); err != nil {
 		return nil, fmt.Errorf("query statement stats: %w", err)
-	}
-	defer rows.Close()
-
-	var out []StatementStatRow
-
-	for rows.Next() {
-		var row StatementStatRow
-		if err = rows.Scan(
-			&row.ID, &row.Preview, &row.UserName, &row.Calls, &row.Rows,
-			&row.TotalExecTime, &row.PctOfTotal, &row.PctIo,
-		); err != nil {
-			return nil, fmt.Errorf("scan statement stats row: %w", err)
-		}
-
-		out = append(out, row)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("read statement stats rows: %w", err)
 	}
 
 	return out, nil
+}
+
+// tagFilterConditions builds SQL conditions for statement-tag filters.
+// Missing tags read as ""; filter values are always non-empty.
+// Example: env=prod -> AND has({tag_values_0:Array(String)}, s.tags[{tag_key_0:String}]).
+func tagFilterConditions(filters []tagfilter.Filter) (string, []any) {
+	var (
+		sql  strings.Builder
+		args []any
+	)
+
+	for i, filter := range filters {
+		key, values := fmt.Sprintf("tag_key_%d", i), fmt.Sprintf("tag_values_%d", i)
+		value := fmt.Sprintf("s.tags[{%s:String}]", key)
+
+		switch filter.Op {
+		case tagfilter.OpExists:
+			fmt.Fprintf(&sql, "\n  AND mapContains(s.tags, {%s:String})", key)
+		case tagfilter.OpEqual:
+			fmt.Fprintf(&sql, "\n  AND has({%s:Array(String)}, %s)", values, value)
+		case tagfilter.OpNotEqual:
+			fmt.Fprintf(&sql, "\n  AND NOT has({%s:Array(String)}, %s)", values, value)
+		}
+
+		args = append(args, param(key, filter.Key), listParam(values, filter.Values))
+	}
+
+	return sql.String(), args
 }
 
 func orderBy(params ListStatementStatsParams) string {
@@ -157,11 +168,11 @@ func sortColumn(sortKey string) string {
 }
 
 const statementIDsByTextSQL = `
-SELECT DISTINCT id
+SELECT groupUniqArray(id)
 FROM statements
 WHERE server_name = {server_name:String}
   AND database_name = {database_name:String}
-  AND query_full ILIKE concat('%', {text_filter:String}, '%')
+  AND positionCaseInsensitiveUTF8(query_full, {text_filter:String}) > 0
 SETTINGS max_threads = 2, max_block_size = 4096`
 
 // StatementIDsByText returns statement IDs whose full query contains text.
@@ -170,29 +181,13 @@ func (c *Client) StatementIDsByText(
 	ctx context.Context,
 	serverName, databaseName, textFilter string,
 ) ([]uint64, error) {
-	rows, err := c.conn.Query(ctx, statementIDsByTextSQL,
+	ids := []uint64{} // non-nil: an empty match must filter out everything
+	if err := c.conn.QueryRow(ctx, statementIDsByTextSQL,
 		param("server_name", serverName),
 		param("database_name", databaseName),
 		param("text_filter", textFilter),
-	)
-	if err != nil {
+	).Scan(&ids); err != nil {
 		return nil, fmt.Errorf("query statements matching text: %w", err)
-	}
-	defer rows.Close()
-
-	ids := []uint64{}
-
-	for rows.Next() {
-		var id uint64
-		if err = rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scan statement id: %w", err)
-		}
-
-		ids = append(ids, id)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("read statement ids: %w", err)
 	}
 
 	return ids, nil
@@ -206,193 +201,86 @@ func StatementID(serverName, databaseName, userName string, queryID int64) uint6
 	return xxhash.Sum64String(key) & math.MaxInt64
 }
 
-type StatementIdentity struct {
-	UserName     string
-	DatabaseName string
-	QueryID      int64
-}
-
 const statementsWithTextSQL = `
-SELECT id
+SELECT groupArray(id)
 FROM statements FINAL
 WHERE id IN {ids:Array(UInt64)} AND query_full != ''`
 
 // StatementsWithText reports which statement IDs have full query text.
 // Example: [10,20,30] -> {10:true, 30:true}.
 func (c *Client) StatementsWithText(ctx context.Context, ids []uint64) (map[uint64]bool, error) {
-	known := map[uint64]bool{}
-	if len(ids) == 0 {
-		return known, nil
-	}
-
-	rows, err := c.conn.Query(ctx, statementsWithTextSQL, listParam("ids", ids))
-	if err != nil {
+	var withText []uint64
+	if err := c.conn.QueryRow(ctx, statementsWithTextSQL, listParam("ids", ids)).Scan(&withText); err != nil {
 		return nil, fmt.Errorf("query statements with text: %w", err)
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var id uint64
-		if err = rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scan statement id: %w", err)
-		}
-
+	known := make(map[uint64]bool, len(withText))
+	for _, id := range withText {
 		known[id] = true
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("read statement ids: %w", err)
 	}
 
 	return known, nil
 }
 
-const statementTextSQL = `
-SELECT query_full
-FROM statements FINAL
-WHERE id = {id:UInt64}`
-
-// StatementText returns the full query text for one statement.
-// Example: id=42 -> "SELECT * FROM users".
-func (c *Client) StatementText(ctx context.Context, id uint64) (string, error) {
-	var text string
-
-	err := c.conn.QueryRow(ctx, statementTextSQL, param("id", id)).Scan(&text)
-	if err != nil {
-		return "", fmt.Errorf("query statement text: %w", err)
-	}
-
-	return text, nil
-}
-
 type StatementDetail struct {
-	Query        string
-	ServerName   string
-	DatabaseName string
+	Query        string            `ch:"query_full"`
+	ServerName   string            `ch:"server_name"`
+	DatabaseName string            `ch:"database_name"`
+	Tags         map[string]string `ch:"tags"`
 }
 
 const statementDetailSQL = `
-SELECT query_full, server_name, database_name
+SELECT query_full, server_name, database_name, tags
 FROM statements FINAL
 WHERE id = {id:UInt64}`
 
-// StatementDetail returns query text and its server/database scope.
-// Example: id=42 -> {Query:"SELECT ...", ServerName:"prod", DatabaseName:"app"}.
+// StatementDetail returns query text, its server/database scope, and tags.
+// Example: id=42 -> {Query:"SELECT ...", ServerName:"prod", DatabaseName:"app", Tags:{"env":"prod"}}.
 func (c *Client) StatementDetail(ctx context.Context, id uint64) (StatementDetail, error) {
 	var detail StatementDetail
-
-	err := c.conn.QueryRow(ctx, statementDetailSQL, param("id", id)).
-		Scan(&detail.Query, &detail.ServerName, &detail.DatabaseName)
-	if err != nil {
+	if err := c.conn.QueryRow(ctx, statementDetailSQL, param("id", id)).ScanStruct(&detail); err != nil {
 		return StatementDetail{}, fmt.Errorf("query statement detail: %w", err)
 	}
 
 	return detail, nil
 }
 
-const statementScopeSQL = `
-SELECT server_name, database_name FROM statements FINAL WHERE id = {id:UInt64}`
-
-// StatementScope returns the server and database for one statement.
-// Example: id=42 -> ("prod", "app").
-func (c *Client) StatementScope(ctx context.Context, id uint64) (string, string, error) {
-	var serverName, databaseName string
-
-	err := c.conn.QueryRow(ctx, statementScopeSQL, param("id", id)).Scan(&serverName, &databaseName)
-	if err != nil {
-		return "", "", fmt.Errorf("query statement scope: %w", err)
-	}
-
-	return serverName, databaseName, nil
-}
-
 type Statement struct {
-	ID           uint64
-	ServerName   string
-	DatabaseName string
-	UserName     string
-	QueryID      int64
-	QueryFull    string
-	QueryShort   string
-	QueryKind    int32
-	Tags         map[string]string
+	ID           uint64            `ch:"id"`
+	ServerName   string            `ch:"server_name"`
+	DatabaseName string            `ch:"database_name"`
+	UserName     string            `ch:"user_name"`
+	QueryID      int64             `ch:"query_id"`
+	QueryFull    string            `ch:"query_full"`
+	QueryShort   string            `ch:"query_short"`
+	QueryKind    int32             `ch:"query_kind"`
+	Tags         map[string]string `ch:"tags"`
 }
 
 // UpsertStatements inserts or replaces statements using the latest version.
 // Example: existing ID=42 with new tags -> latest row becomes active.
 func (c *Client) UpsertStatements(ctx context.Context, statements []Statement) error {
-	if len(statements) == 0 {
-		return nil
-	}
-
-	batch, err := c.conn.PrepareBatch(ctx, "INSERT INTO statements")
-	if err != nil {
-		return fmt.Errorf("prepare statement batch: %w", err)
-	}
-	defer batch.Close()
-
 	version := uint64(time.Now().UnixNano())
 
-	for _, statement := range statements {
+	return insertBatch(ctx, c, "statements", statements, func(statement Statement) []any {
 		tags := statement.Tags
 		if tags == nil {
 			tags = map[string]string{}
 		}
 
-		if err = batch.Append(
+		return []any{
 			statement.ID, statement.ServerName, statement.DatabaseName, statement.UserName,
 			statement.QueryID, statement.QueryFull, statement.QueryShort, enumOf(statement.QueryKind),
 			tags, version,
-		); err != nil {
-			return fmt.Errorf("append statement: %w", err)
 		}
-	}
-
-	if err = batch.Send(); err != nil {
-		return fmt.Errorf("send statements: %w", err)
-	}
-
-	return nil
+	})
 }
 
 const statementRowsSQL = `
-SELECT id, server_name, database_name, user_name, query_id, query_full, query_short, query_kind, tags
+SELECT id, server_name, database_name, user_name, query_id, query_full, query_short,
+       toInt32(query_kind) AS query_kind, tags
 FROM statements FINAL
 WHERE id IN {ids:Array(UInt64)}`
-
-func (c *Client) statementRows(ctx context.Context, ids []uint64) ([]Statement, error) {
-	rows, err := c.conn.Query(ctx, statementRowsSQL, listParam("ids", ids))
-	if err != nil {
-		return nil, fmt.Errorf("query statement rows: %w", err)
-	}
-	defer rows.Close()
-
-	var out []Statement
-
-	for rows.Next() {
-		var (
-			statement Statement
-			id        uint64
-			queryKind uint8
-		)
-
-		if err = rows.Scan(&id, &statement.ServerName, &statement.DatabaseName, &statement.UserName,
-			&statement.QueryID, &statement.QueryFull, &statement.QueryShort, &queryKind,
-			&statement.Tags); err != nil {
-			return nil, fmt.Errorf("scan statement row: %w", err)
-		}
-
-		statement.ID = id
-		statement.QueryKind = int32(queryKind)
-		out = append(out, statement)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("read statement rows: %w", err)
-	}
-
-	return out, nil
-}
 
 // ReplaceStatementTags updates tags only when they changed.
 // Example: {42:{"env":"prod"}} -> statement 42 gets those tags.
@@ -406,16 +294,16 @@ func (c *Client) ReplaceStatementTags(ctx context.Context, tagsByStatement map[u
 		ids = append(ids, id)
 	}
 
-	current, err := c.statementRows(ctx, ids)
-	if err != nil {
-		return err
+	var current []Statement
+	if err := c.conn.Select(ctx, &current, statementRowsSQL, listParam("ids", ids)); err != nil {
+		return fmt.Errorf("query statement rows: %w", err)
 	}
 
 	updated := make([]Statement, 0, len(current))
 
 	for _, statement := range current {
 		tags := tagsByStatement[statement.ID]
-		if mapsEqual(statement.Tags, tags) {
+		if maps.Equal(statement.Tags, tags) {
 			continue
 		}
 
@@ -426,89 +314,58 @@ func (c *Client) ReplaceStatementTags(ctx context.Context, tagsByStatement map[u
 	return c.UpsertStatements(ctx, updated)
 }
 
-func mapsEqual(left, right map[string]string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-
-	for key, value := range left {
-		if right[key] != value {
-			return false
-		}
-	}
-
-	return true
+type TagKey struct {
+	Key        string `ch:"key"`
+	ValueCount int64  `ch:"value_count"`
 }
 
-type StatementTagSet struct {
-	StatementID uint64
-	Tags        map[string]string
-}
-
-const statementTagsSQL = `
-SELECT id, tags
+const tagKeysSQL = `
+SELECT key, toInt64(uniqExact(tags[key])) AS value_count
 FROM statements FINAL
-WHERE id IN {ids:Array(UInt64)} AND length(tags) > 0`
+ARRAY JOIN mapKeys(tags) AS key
+WHERE server_name = {server_name:String}
+  AND database_name = {database_name:String}
+GROUP BY key
+ORDER BY count() DESC, key`
 
-// StatementTags returns tags keyed by statement ID.
-// Example: [10,20] -> {10:{"env":"prod"}, 20:{"team":"api"}}.
-func (c *Client) StatementTags(ctx context.Context, ids []uint64) (map[uint64]map[string]string, error) {
-	out := map[uint64]map[string]string{}
-	if len(ids) == 0 {
-		return out, nil
-	}
-
-	tags, err := c.scanTagSets(ctx, statementTagsSQL, listParam("ids", ids))
-	if err != nil {
-		return nil, err
-	}
-
-	for _, set := range tags {
-		out[set.StatementID] = set.Tags
+// TagKeys returns the tag keys in one server/database, most used first, with their distinct value counts.
+// Example: ("prod","app") -> [{Key:"env", ValueCount:3}, {Key:"team", ValueCount:5}].
+func (c *Client) TagKeys(ctx context.Context, serverName, databaseName string) ([]TagKey, error) {
+	var out []TagKey
+	if err := c.conn.Select(ctx, &out, tagKeysSQL,
+		param("server_name", serverName),
+		param("database_name", databaseName),
+	); err != nil {
+		return nil, fmt.Errorf("query tag keys: %w", err)
 	}
 
 	return out, nil
 }
 
-const scopedTagsSQL = `
-SELECT id, tags
-FROM statements FINAL
-WHERE server_name = {server_name:String}
-  AND database_name = {database_name:String}`
-
-// TagsInScope returns statement IDs and tags for one server/database.
-// Example: ("prod","app") -> [{StatementID:10, Tags:{"env":"prod"}}].
-func (c *Client) TagsInScope(ctx context.Context, serverName, databaseName string) ([]StatementTagSet, error) {
-	return c.scanTagSets(ctx, scopedTagsSQL,
-		param("server_name", serverName),
-		param("database_name", databaseName),
-	)
+type TagValue struct {
+	Value          string `ch:"value"`
+	StatementCount int64  `ch:"statement_count"`
 }
 
-func (c *Client) scanTagSets(ctx context.Context, query string, args ...any) ([]StatementTagSet, error) {
-	rows, err := c.conn.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("query statement tags: %w", err)
-	}
-	defer rows.Close()
+const tagValuesSQL = `
+SELECT tags[{key:String}] AS value, toInt64(count()) AS statement_count
+FROM statements FINAL
+WHERE server_name = {server_name:String}
+  AND database_name = {database_name:String}
+  AND mapContains(tags, {key:String})
+GROUP BY value
+ORDER BY count() DESC, value`
 
-	var out []StatementTagSet
-
-	for rows.Next() {
-		var (
-			id   uint64
-			tags map[string]string
-		)
-
-		if err = rows.Scan(&id, &tags); err != nil {
-			return nil, fmt.Errorf("scan statement tags: %w", err)
-		}
-
-		out = append(out, StatementTagSet{StatementID: id, Tags: tags})
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("read statement tags: %w", err)
+// TagValues returns one tag key's values in one server/database with their statement counts.
+// Example: key="env" -> [{Value:"prod", StatementCount:20}, {Value:"dev", StatementCount:5}].
+func (c *Client) TagValues(ctx context.Context, serverName, databaseName, key string) ([]TagValue, error) {
+	var out []TagValue
+	if err := c.conn.Select(ctx, &out, tagValuesSQL,
+		param("server_name", serverName),
+		param("database_name", databaseName),
+		param("key", key),
+	); err != nil {
+		return nil, fmt.Errorf("query tag values: %w", err)
 	}
 
 	return out, nil

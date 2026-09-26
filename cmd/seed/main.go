@@ -6,16 +6,12 @@ import (
 	"errors"
 	"log/slog"
 	"os"
-	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 //go:embed seed.sql
 var seedSQL string
-
-const connectTimeout = 10 * time.Second
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
@@ -34,27 +30,13 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		return errors.New("POSTGRES_URL is not set")
 	}
 
-	config, err := pgxpool.ParseConfig(databaseURL)
+	conn, err := pgx.Connect(ctx, databaseURL)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = conn.Close(ctx) }()
 
-	config.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
-
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		return err
-	}
-	defer pool.Close()
-
-	pingCtx, cancel := context.WithTimeout(ctx, connectTimeout)
-	defer cancel()
-
-	if pingErr := pool.Ping(pingCtx); pingErr != nil {
-		return pingErr
-	}
-
-	if _, err = pool.Exec(ctx, seedSQL); err != nil {
+	if _, err = conn.Exec(ctx, seedSQL); err != nil {
 		return err
 	}
 

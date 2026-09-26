@@ -128,6 +128,10 @@ func TestLockWaitNamesTheQueryHoldingTheLock(t *testing.T) {
 	if wait.WaitingPid != 10 || wait.BlockedByPid != 20 {
 		t.Errorf("pids = %d/%d, want 10 blocked by 20", wait.WaitingPid, wait.BlockedByPid)
 	}
+
+	if wait.WaitStart.Nanosecond() == 0 {
+		t.Errorf("wait start %s lost its milliseconds", wait.WaitStart)
+	}
 }
 
 func TestLockWaitBlockingQueryIsStableAsTheBlockerMovesOn(t *testing.T) {
@@ -160,30 +164,6 @@ func TestLockWaitBlockingQueryIsStableAsTheBlockerMovesOn(t *testing.T) {
 
 	if early[0].WaitStart != late[0].WaitStart {
 		t.Errorf("wait start moved from %s to %s", early[0].WaitStart, late[0].WaitStart)
-	}
-}
-
-func TestLockWaitSurvivesSubSecondWaitStart(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	scene := newLockScene(t, "lock-subsecond")
-
-	waits, err := scene.client.ListLockWaits(ctx, scene.scope, "waited", true, 10, 0)
-	if err != nil {
-		t.Fatalf("ListLockWaits: %v", err)
-	}
-
-	if len(waits) != 1 {
-		t.Fatalf("got %d lock waits, want one", len(waits))
-	}
-
-	if waits[0].WaitStart.Nanosecond() == 0 {
-		t.Errorf("wait start %s lost its milliseconds", waits[0].WaitStart)
-	}
-
-	if waits[0].BlockingQuery == "" {
-		t.Error("blocking query is empty, which is what a truncated wait_start key produces")
 	}
 }
 
@@ -265,5 +245,53 @@ func TestLockWaitPicksTheEarliestQueryWhenNonePrecedesTheWait(t *testing.T) {
 
 	if waits[0].BlockingQuery != "first query after the wait" {
 		t.Errorf("blocking query = %q, want the earliest query after the wait began", waits[0].BlockingQuery)
+	}
+}
+
+func TestLockWaitSeriesCountsOneWaitOnceAcrossBlockerChanges(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	server := "lock-series-blocker-change"
+	client := clickhouse.New(testdb.ClickHouse(t))
+	base := time.Now().UTC().Add(-time.Hour).Truncate(time.Minute)
+
+	waitStart := base.Add(-30 * time.Second)
+	waiterXact := base.Add(-time.Minute)
+	waiterID := clickhouse.TransactionID(server, 10, base, waiterXact)
+
+	var rows []clickhouse.TransactionActivity
+
+	for _, sample := range []struct {
+		at      time.Duration
+		blocker uint32
+	}{{2 * time.Second, 20}, {5 * time.Second, 20}, {8 * time.Second, 30}, {10 * time.Second, 30}} {
+		rows = append(rows, clickhouse.TransactionActivity{
+			TransactionID: waiterID, ServerName: server, DatabaseName: "shop", UserName: "app",
+			ApplicationName: "web", Pid: 10, BackendStart: base, XactStart: waiterXact,
+			CollectedAt: base.Add(sample.at), QueryStart: waiterXact, Query: "UPDATE that waits",
+			State: "active", QueryTags: map[string]string{}, BlockedByPid: sample.blocker,
+			LockMode: "ExclusiveLock", WaitEventType: "Lock", LockWaitStart: &waitStart,
+		})
+	}
+
+	if err := client.InsertTransactionActivity(ctx, rows); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	bins, err := client.LockWaitSeries(ctx, clickhouse.TransactionScope{
+		ServerName: server, DatabaseName: "shop", From: base, To: base.Add(2 * time.Minute),
+	}, time.Minute)
+	if err != nil {
+		t.Fatalf("LockWaitSeries with a wait that began before the window: %v", err)
+	}
+
+	var total float64
+	for _, bin := range bins {
+		total += bin.WaitSeconds
+	}
+
+	if total != 10 {
+		t.Errorf("total wait = %vs, want 10s: the window start to the last sample, counted once", total)
 	}
 }

@@ -1,18 +1,17 @@
 package main
 
 import (
+	"context"
 	"database/sql"
-	"embed"
-	"errors"
 	"log/slog"
 	"os"
 
 	_ "github.com/ClickHouse/clickhouse-go/v2"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 
 	chmigrations "github.com/querysheriff/backend/db/ch-migrations"
 	pgmigrations "github.com/querysheriff/backend/db/pg-migrations"
+	"github.com/querysheriff/backend/internal/config"
 )
 
 func main() {
@@ -20,48 +19,37 @@ func main() {
 		Level: slog.LevelInfo,
 	}))
 
-	if err := run(logger); err != nil {
+	if err := run(context.Background(), logger); err != nil {
 		logger.Error("migrate failed", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(logger *slog.Logger) error {
-	databaseURL := os.Getenv("POSTGRES_URL")
-	if databaseURL == "" {
-		return errors.New("POSTGRES_URL is not set")
-	}
-
-	clickhouseURL := os.Getenv("CLICKHOUSE_URL")
-	if clickhouseURL == "" {
-		return errors.New("CLICKHOUSE_URL is not set")
-	}
-
-	if err := migrate(logger, "pgx", databaseURL, "postgres", pgmigrations.FS); err != nil {
-		return err
-	}
-
-	return migrate(logger, "clickhouse", clickhouseURL, "clickhouse", chmigrations.FS)
-}
-
-func migrate(logger *slog.Logger, driver, url, dialect string, files embed.FS) error {
-	sqlDB, err := sql.Open(driver, url)
+func run(ctx context.Context, logger *slog.Logger) error {
+	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
-	defer func() { _ = sqlDB.Close() }()
 
-	goose.SetBaseFS(files)
-
-	if err = goose.SetDialect(dialect); err != nil {
+	if err = migrate(ctx, "pgx", cfg.DatabaseURL, pgmigrations.Up); err != nil {
 		return err
 	}
 
-	if err = goose.Up(sqlDB, "."); err != nil {
+	if err = migrate(ctx, "clickhouse", cfg.ClickHouseURL, chmigrations.Up); err != nil {
 		return err
 	}
 
-	logger.Info("migrations applied", "dialect", dialect)
+	logger.InfoContext(ctx, "migrations applied")
 
 	return nil
+}
+
+func migrate(ctx context.Context, driver, url string, up func(context.Context, *sql.DB) error) error {
+	db, err := sql.Open(driver, url)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+
+	return up(ctx, db)
 }

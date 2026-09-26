@@ -5,7 +5,6 @@ package server_test
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"testing"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 	"github.com/querysheriff/backend/internal/auth"
 	chstats "github.com/querysheriff/backend/internal/clickhouse"
-	"github.com/querysheriff/backend/internal/gen/db"
 	"github.com/querysheriff/backend/internal/server"
 	"github.com/querysheriff/backend/internal/testdb"
 )
@@ -24,9 +22,8 @@ func TestReportStatementsLazyText(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	pool := testdb.Postgres(t)
 	stats := chstats.New(testdb.ClickHouse(t))
-	srv := server.NewStatementServer(db.New(pool), stats, slog.New(slog.DiscardHandler))
+	srv := server.NewStatementServer(stats)
 
 	serverName := fmt.Sprintf("lazytext-test-%d", time.Now().UnixNano())
 
@@ -118,12 +115,12 @@ func assertText(
 ) {
 	t.Helper()
 
-	got, err := stats.StatementText(ctx, chstats.StatementID(serverName, "d1", userName, queryID))
+	got, err := stats.StatementDetail(ctx, chstats.StatementID(serverName, "d1", userName, queryID))
 	if err != nil {
 		t.Fatalf("read query_full for %s: %v", userName, err)
 	}
 
-	if got != want {
-		t.Fatalf("query_full for %s = %q, want %q", userName, got, want)
+	if got.Query != want {
+		t.Fatalf("query_full for %s = %q, want %q", userName, got.Query, want)
 	}
 }

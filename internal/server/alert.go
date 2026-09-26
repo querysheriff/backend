@@ -2,14 +2,12 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 	"github.com/querysheriff/backend/internal/alerts"
@@ -19,18 +17,23 @@ import (
 const slackWebhookHost = "hooks.slack.com"
 
 type AlertServer struct {
-	pool    *pgxpool.Pool
 	queries *db.Queries
 }
 
-func NewAlertServer(pool *pgxpool.Pool) *AlertServer {
-	return &AlertServer{pool: pool, queries: db.New(pool)}
+func NewAlertServer(queries *db.Queries) *AlertServer {
+	return &AlertServer{queries: queries}
 }
 
-func (s *AlertServer) QueryAlerts(
+type serverAlert struct {
+	server, key string
+}
+
+// ListAlertSettings returns every visible server's Slack webhook and alert switches.
+// Example: prod -> {webhook, [{monitoring_stopped, enabled, fires: 2}, ...]}.
+func (s *AlertServer) ListAlertSettings(
 	ctx context.Context,
-	_ *connect.Request[querysheriffv1.QueryAlertsRequest],
-) (*connect.Response[querysheriffv1.QueryAlertsResponse], error) {
+	_ *connect.Request[querysheriffv1.ListAlertSettingsRequest],
+) (*connect.Response[querysheriffv1.ListAlertSettingsResponse], error) {
 	principal, err := requirePrincipal(ctx)
 	if err != nil {
 		return nil, err
@@ -66,20 +69,14 @@ func (s *AlertServer) QueryAlerts(
 		webhookByServer[webhook.ServerName] = webhook.SlackWebhookUrl
 	}
 
-	togglesByServer := make(map[string]map[string]bool, len(toggles))
+	enabled := make(map[serverAlert]bool, len(toggles))
 	for _, toggle := range toggles {
-		if togglesByServer[toggle.ServerName] == nil {
-			togglesByServer[toggle.ServerName] = make(map[string]bool)
-		}
-		togglesByServer[toggle.ServerName][toggle.AlertKey] = toggle.Enabled
+		enabled[serverAlert{toggle.ServerName, toggle.AlertKey}] = toggle.Enabled
 	}
 
-	firesByServer := make(map[string]map[string]int64, len(fires))
+	firesLastWeek := make(map[serverAlert]int64, len(fires))
 	for _, fire := range fires {
-		if firesByServer[fire.ServerName] == nil {
-			firesByServer[fire.ServerName] = make(map[string]int64)
-		}
-		firesByServer[fire.ServerName][fire.AlertKey] = fire.Fires
+		firesLastWeek[serverAlert{fire.ServerName, fire.AlertKey}] = fire.Fires
 	}
 
 	result := make([]*querysheriffv1.ServerAlertSettings, len(servers))
@@ -87,30 +84,23 @@ func (s *AlertServer) QueryAlerts(
 		result[i] = &querysheriffv1.ServerAlertSettings{
 			ServerName:      server.ServerName,
 			SlackWebhookUrl: webhookByServer[server.ServerName],
-			Alerts:          alertSettings(togglesByServer[server.ServerName], firesByServer[server.ServerName]),
+			Alerts:          alertSettingsProto(server.ServerName, enabled, firesLastWeek),
 		}
 	}
 
-	return connect.NewResponse(&querysheriffv1.QueryAlertsResponse{Servers: result}), nil
+	return connect.NewResponse(&querysheriffv1.ListAlertSettingsResponse{Servers: result}), nil
 }
 
-func (s *AlertServer) UpdateAlertSettings(
+// UpdateAlertWebhook sets the Slack webhook a server's alerts go to; an empty URL stops them.
+// Example: prod, "https://hooks.slack.com/services/..." -> prod alerts post there.
+func (s *AlertServer) UpdateAlertWebhook(
 	ctx context.Context,
-	req *connect.Request[querysheriffv1.UpdateAlertSettingsRequest],
-) (*connect.Response[querysheriffv1.UpdateAlertSettingsResponse], error) {
+	req *connect.Request[querysheriffv1.UpdateAlertWebhookRequest],
+) (*connect.Response[querysheriffv1.UpdateAlertWebhookResponse], error) {
 	msg := req.Msg
 
-	principal, err := requirePrincipal(ctx)
-	if err != nil {
+	if err := authorizeServer(ctx, msg.GetServerName()); err != nil {
 		return nil, err
-	}
-
-	serverName := strings.TrimSpace(msg.GetServerName())
-	if serverName == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("server_name is required"))
-	}
-	if !principal.CanViewServer(serverName) {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("access to that server is not allowed"))
 	}
 
 	webhookURL, err := validateWebhookURL(msg.GetSlackWebhookUrl())
@@ -118,48 +108,41 @@ func (s *AlertServer) UpdateAlertSettings(
 		return nil, err
 	}
 
-	toggleParams := make([]db.UpsertAlertToggleParams, 0, len(msg.GetToggles()))
-	for _, toggle := range msg.GetToggles() {
-		if !alerts.IsKnownKey(toggle.GetKey()) {
-			return nil, connect.NewError(
-				connect.CodeInvalidArgument,
-				fmt.Errorf("unknown alert key %q", toggle.GetKey()),
-			)
-		}
-
-		toggleParams = append(toggleParams, db.UpsertAlertToggleParams{
-			ServerName: serverName,
-			AlertKey:   toggle.GetKey(),
-			Enabled:    toggle.GetEnabled(),
-		})
-	}
-
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	q := s.queries.WithTx(tx)
-
-	if err = q.UpsertAlertWebhook(ctx, db.UpsertAlertWebhookParams{
-		ServerName:      serverName,
+	if err = s.queries.UpsertAlertWebhook(ctx, db.UpsertAlertWebhookParams{
+		ServerName:      msg.GetServerName(),
 		SlackWebhookUrl: webhookURL,
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	if len(toggleParams) > 0 {
-		if err = drainToggleBatch(q.UpsertAlertToggle(ctx, toggleParams)); err != nil {
-			return nil, err
-		}
+	return connect.NewResponse(&querysheriffv1.UpdateAlertWebhookResponse{}), nil
+}
+
+// UpdateAlertSetting switches one alert on or off for a server.
+// Example: prod, weekly_report, false -> no more weekly reports for prod.
+func (s *AlertServer) UpdateAlertSetting(
+	ctx context.Context,
+	req *connect.Request[querysheriffv1.UpdateAlertSettingRequest],
+) (*connect.Response[querysheriffv1.UpdateAlertSettingResponse], error) {
+	msg := req.Msg
+
+	if err := authorizeServer(ctx, msg.GetServerName()); err != nil {
+		return nil, err
 	}
 
-	if err = tx.Commit(ctx); err != nil {
+	if !alerts.IsKnownKey(msg.GetKey()) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown alert key %q", msg.GetKey()))
+	}
+
+	if err := s.queries.UpsertAlertToggle(ctx, db.UpsertAlertToggleParams{
+		ServerName: msg.GetServerName(),
+		AlertKey:   msg.GetKey(),
+		Enabled:    msg.GetEnabled(),
+	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	return connect.NewResponse(&querysheriffv1.UpdateAlertSettingsResponse{}), nil
+	return connect.NewResponse(&querysheriffv1.UpdateAlertSettingResponse{}), nil
 }
 
 func validateWebhookURL(raw string) (string, error) {
@@ -183,52 +166,29 @@ func validateWebhookURL(raw string) (string, error) {
 	return trimmed, nil
 }
 
-func alertSettings(overrides map[string]bool, fires map[string]int64) []*querysheriffv1.AlertSetting {
+func alertSettingsProto(
+	serverName string,
+	overrides map[serverAlert]bool,
+	fires map[serverAlert]int64,
+) []*querysheriffv1.AlertSetting {
 	catalog := alerts.Catalog()
 	settings := make([]*querysheriffv1.AlertSetting, len(catalog))
 	for i, def := range catalog {
+		key := serverAlert{serverName, def.Key}
+
 		enabled := true
-		if override, ok := overrides[def.Key]; ok {
+		if override, ok := overrides[key]; ok {
 			enabled = override
 		}
 
 		settings[i] = &querysheriffv1.AlertSetting{
 			Key:           def.Key,
 			Title:         def.Title,
-			Level:         alertLevelProto(def.Level),
+			Level:         def.Level,
 			Enabled:       enabled,
-			FiresLastWeek: fires[def.Key],
+			FiresLastWeek: fires[key],
 		}
 	}
 
 	return settings
-}
-
-func alertLevelProto(level alerts.Level) querysheriffv1.AlertLevel {
-	switch level {
-	case alerts.LevelCritical:
-		return querysheriffv1.AlertLevel_ALERT_LEVEL_CRITICAL
-	case alerts.LevelWarning:
-		return querysheriffv1.AlertLevel_ALERT_LEVEL_WARNING
-	case alerts.LevelInfo:
-		return querysheriffv1.AlertLevel_ALERT_LEVEL_INFO
-	default:
-		return querysheriffv1.AlertLevel_ALERT_LEVEL_UNSPECIFIED
-	}
-}
-
-func drainToggleBatch(results *db.UpsertAlertToggleBatchResults) error {
-	var execErr error
-
-	results.Exec(func(_ int, err error) {
-		if err != nil && execErr == nil {
-			execErr = err
-		}
-	})
-
-	if execErr != nil {
-		return connect.NewError(connect.CodeInternal, execErr)
-	}
-
-	return nil
 }

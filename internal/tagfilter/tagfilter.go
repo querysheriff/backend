@@ -3,7 +3,6 @@ package tagfilter
 import (
 	"errors"
 	"fmt"
-	"slices"
 )
 
 const (
@@ -91,31 +90,6 @@ func ValidKey(s string) bool {
 		c := s[i]
 		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '_' {
 			return false
-		}
-	}
-
-	return true
-}
-
-// Matches reports whether all filters match the provided tags.
-// Example: tags={"env":"prod"}, filter env=prod -> true.
-func Matches(tags map[string]string, filters []Filter) bool {
-	for _, filter := range filters {
-		value, present := tags[filter.Key]
-
-		switch filter.Op {
-		case OpExists:
-			if !present {
-				return false
-			}
-		case OpNotEqual:
-			if present && slices.Contains(filter.Values, value) {
-				return false
-			}
-		case OpEqual:
-			if !present || !slices.Contains(filter.Values, value) {
-				return false
-			}
 		}
 	}
 

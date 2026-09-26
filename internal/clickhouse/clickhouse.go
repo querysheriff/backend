@@ -51,6 +51,11 @@ func Connect(ctx context.Context, dsn string) (driver.Conn, error) {
 	return conn, nil
 }
 
+// bucketEndSQL assigns collected_at to a right-closed chart bucket.
+// Example: start=12:00, bucket=60s -> 12:00:00 belongs to 12:00, while 12:00:01..12:01:00 belong to 12:01.
+const bucketEndSQL = "toStartOfInterval(collected_at - toIntervalSecond(1), INTERVAL {bucket:UInt32} SECOND, " +
+	"{range_start:DateTime('UTC')}) + INTERVAL {bucket:UInt32} SECOND"
+
 type Client struct {
 	conn driver.Conn
 }
@@ -84,13 +89,17 @@ func listParam[T any](name string, values []T) any {
 }
 
 func countParam(name string, value int32) any {
+	return clickhouse.Named(name, countOf(int64(value)))
+}
+
+func countOf(value int64) uint32 {
 	switch {
 	case value < 0:
-		return clickhouse.Named(name, uint32(0))
-	case int64(value) > math.MaxUint32:
-		return clickhouse.Named(name, uint32(math.MaxUint32))
+		return 0
+	case value > math.MaxUint32:
+		return math.MaxUint32
 	default:
-		return clickhouse.Named(name, uint32(value))
+		return uint32(value)
 	}
 }
 
@@ -113,4 +122,28 @@ func enumOf(value int32) uint8 {
 	}
 
 	return uint8(value)
+}
+
+func insertBatch[T any](ctx context.Context, c *Client, table string, rows []T, values func(T) []any) error {
+	if len(rows) == 0 {
+		return nil
+	}
+
+	batch, err := c.conn.PrepareBatch(ctx, "INSERT INTO "+table)
+	if err != nil {
+		return fmt.Errorf("prepare %s batch: %w", table, err)
+	}
+	defer batch.Close()
+
+	for _, row := range rows {
+		if err = batch.Append(values(row)...); err != nil {
+			return fmt.Errorf("append %s row: %w", table, err)
+		}
+	}
+
+	if err = batch.Send(); err != nil {
+		return fmt.Errorf("send %s batch: %w", table, err)
+	}
+
+	return nil
 }

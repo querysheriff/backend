@@ -22,64 +22,73 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type LogSortColumn int32
+type LogCategory int32
 
 const (
-	LogSortColumn_LOG_SORT_COLUMN_UNSPECIFIED LogSortColumn = 0
-	LogSortColumn_LOG_SORT_COLUMN_AT          LogSortColumn = 1
-	LogSortColumn_LOG_SORT_COLUMN_LEVEL       LogSortColumn = 2
-	LogSortColumn_LOG_SORT_COLUMN_EVENT       LogSortColumn = 3
-	LogSortColumn_LOG_SORT_COLUMN_CATEGORY    LogSortColumn = 4
-	LogSortColumn_LOG_SORT_COLUMN_DATABASE    LogSortColumn = 5
-	LogSortColumn_LOG_SORT_COLUMN_USERNAME    LogSortColumn = 6
+	LogCategory_LOG_CATEGORY_UNSPECIFIED          LogCategory = 0
+	LogCategory_LOG_CATEGORY_SERVER               LogCategory = 1
+	LogCategory_LOG_CATEGORY_CONNECTION           LogCategory = 2
+	LogCategory_LOG_CATEGORY_WAL_CHECKPOINT       LogCategory = 3
+	LogCategory_LOG_CATEGORY_AUTOVACUUM           LogCategory = 4
+	LogCategory_LOG_CATEGORY_LOCK                 LogCategory = 5
+	LogCategory_LOG_CATEGORY_STATEMENT            LogCategory = 6
+	LogCategory_LOG_CATEGORY_STANDBY              LogCategory = 7
+	LogCategory_LOG_CATEGORY_CONSTRAINT_VIOLATION LogCategory = 8
+	LogCategory_LOG_CATEGORY_APPLICATION_ERROR    LogCategory = 9
 )
 
-// Enum value maps for LogSortColumn.
+// Enum value maps for LogCategory.
 var (
-	LogSortColumn_name = map[int32]string{
-		0: "LOG_SORT_COLUMN_UNSPECIFIED",
-		1: "LOG_SORT_COLUMN_AT",
-		2: "LOG_SORT_COLUMN_LEVEL",
-		3: "LOG_SORT_COLUMN_EVENT",
-		4: "LOG_SORT_COLUMN_CATEGORY",
-		5: "LOG_SORT_COLUMN_DATABASE",
-		6: "LOG_SORT_COLUMN_USERNAME",
+	LogCategory_name = map[int32]string{
+		0: "LOG_CATEGORY_UNSPECIFIED",
+		1: "LOG_CATEGORY_SERVER",
+		2: "LOG_CATEGORY_CONNECTION",
+		3: "LOG_CATEGORY_WAL_CHECKPOINT",
+		4: "LOG_CATEGORY_AUTOVACUUM",
+		5: "LOG_CATEGORY_LOCK",
+		6: "LOG_CATEGORY_STATEMENT",
+		7: "LOG_CATEGORY_STANDBY",
+		8: "LOG_CATEGORY_CONSTRAINT_VIOLATION",
+		9: "LOG_CATEGORY_APPLICATION_ERROR",
 	}
-	LogSortColumn_value = map[string]int32{
-		"LOG_SORT_COLUMN_UNSPECIFIED": 0,
-		"LOG_SORT_COLUMN_AT":          1,
-		"LOG_SORT_COLUMN_LEVEL":       2,
-		"LOG_SORT_COLUMN_EVENT":       3,
-		"LOG_SORT_COLUMN_CATEGORY":    4,
-		"LOG_SORT_COLUMN_DATABASE":    5,
-		"LOG_SORT_COLUMN_USERNAME":    6,
+	LogCategory_value = map[string]int32{
+		"LOG_CATEGORY_UNSPECIFIED":          0,
+		"LOG_CATEGORY_SERVER":               1,
+		"LOG_CATEGORY_CONNECTION":           2,
+		"LOG_CATEGORY_WAL_CHECKPOINT":       3,
+		"LOG_CATEGORY_AUTOVACUUM":           4,
+		"LOG_CATEGORY_LOCK":                 5,
+		"LOG_CATEGORY_STATEMENT":            6,
+		"LOG_CATEGORY_STANDBY":              7,
+		"LOG_CATEGORY_CONSTRAINT_VIOLATION": 8,
+		"LOG_CATEGORY_APPLICATION_ERROR":    9,
 	}
 )
 
-func (x LogSortColumn) Enum() *LogSortColumn {
-	p := new(LogSortColumn)
+func (x LogCategory) Enum() *LogCategory {
+	p := new(LogCategory)
 	*p = x
 	return p
 }
 
-func (x LogSortColumn) String() string {
+func (x LogCategory) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (LogSortColumn) Descriptor() protoreflect.EnumDescriptor {
+func (LogCategory) Descriptor() protoreflect.EnumDescriptor {
 	return file_querysheriff_v1_log_proto_enumTypes[0].Descriptor()
 }
 
-func (LogSortColumn) Type() protoreflect.EnumType {
+func (LogCategory) Type() protoreflect.EnumType {
 	return &file_querysheriff_v1_log_proto_enumTypes[0]
 }
 
-func (x LogSortColumn) Number() protoreflect.EnumNumber {
+func (x LogCategory) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use LogSortColumn.Descriptor instead.
-func (LogSortColumn) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use LogCategory.Descriptor instead.
+func (LogCategory) EnumDescriptor() ([]byte, []int) {
 	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{0}
 }
 
@@ -551,76 +560,6 @@ func (LogEvent_LogClassification) EnumDescriptor() ([]byte, []int) {
 	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{2, 1}
 }
 
-type LogEvent_LogCategory int32
-
-const (
-	LogEvent_LOG_CATEGORY_UNSPECIFIED          LogEvent_LogCategory = 0
-	LogEvent_LOG_CATEGORY_SERVER               LogEvent_LogCategory = 1
-	LogEvent_LOG_CATEGORY_CONNECTION           LogEvent_LogCategory = 2
-	LogEvent_LOG_CATEGORY_WAL_CHECKPOINT       LogEvent_LogCategory = 3
-	LogEvent_LOG_CATEGORY_AUTOVACUUM           LogEvent_LogCategory = 4
-	LogEvent_LOG_CATEGORY_LOCK                 LogEvent_LogCategory = 5
-	LogEvent_LOG_CATEGORY_STATEMENT            LogEvent_LogCategory = 6
-	LogEvent_LOG_CATEGORY_STANDBY              LogEvent_LogCategory = 7
-	LogEvent_LOG_CATEGORY_CONSTRAINT_VIOLATION LogEvent_LogCategory = 8
-	LogEvent_LOG_CATEGORY_APPLICATION_ERROR    LogEvent_LogCategory = 9
-)
-
-// Enum value maps for LogEvent_LogCategory.
-var (
-	LogEvent_LogCategory_name = map[int32]string{
-		0: "LOG_CATEGORY_UNSPECIFIED",
-		1: "LOG_CATEGORY_SERVER",
-		2: "LOG_CATEGORY_CONNECTION",
-		3: "LOG_CATEGORY_WAL_CHECKPOINT",
-		4: "LOG_CATEGORY_AUTOVACUUM",
-		5: "LOG_CATEGORY_LOCK",
-		6: "LOG_CATEGORY_STATEMENT",
-		7: "LOG_CATEGORY_STANDBY",
-		8: "LOG_CATEGORY_CONSTRAINT_VIOLATION",
-		9: "LOG_CATEGORY_APPLICATION_ERROR",
-	}
-	LogEvent_LogCategory_value = map[string]int32{
-		"LOG_CATEGORY_UNSPECIFIED":          0,
-		"LOG_CATEGORY_SERVER":               1,
-		"LOG_CATEGORY_CONNECTION":           2,
-		"LOG_CATEGORY_WAL_CHECKPOINT":       3,
-		"LOG_CATEGORY_AUTOVACUUM":           4,
-		"LOG_CATEGORY_LOCK":                 5,
-		"LOG_CATEGORY_STATEMENT":            6,
-		"LOG_CATEGORY_STANDBY":              7,
-		"LOG_CATEGORY_CONSTRAINT_VIOLATION": 8,
-		"LOG_CATEGORY_APPLICATION_ERROR":    9,
-	}
-)
-
-func (x LogEvent_LogCategory) Enum() *LogEvent_LogCategory {
-	p := new(LogEvent_LogCategory)
-	*p = x
-	return p
-}
-
-func (x LogEvent_LogCategory) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (LogEvent_LogCategory) Descriptor() protoreflect.EnumDescriptor {
-	return file_querysheriff_v1_log_proto_enumTypes[4].Descriptor()
-}
-
-func (LogEvent_LogCategory) Type() protoreflect.EnumType {
-	return &file_querysheriff_v1_log_proto_enumTypes[4]
-}
-
-func (x LogEvent_LogCategory) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use LogEvent_LogCategory.Descriptor instead.
-func (LogEvent_LogCategory) EnumDescriptor() ([]byte, []int) {
-	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{2, 2}
-}
-
 type ReportLogsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	CollectedAt   *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=collected_at,json=collectedAt,proto3" json:"collected_at,omitempty"`
@@ -957,41 +896,34 @@ func (x *LogStatementSample) GetTags() map[string]string {
 	return nil
 }
 
-type QueryLogsRequest struct {
+type LogFilter struct {
 	state            protoimpl.MessageState       `protogen:"open.v1"`
-	ServerName       string                       `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
-	From             *timestamppb.Timestamp       `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
-	To               *timestamppb.Timestamp       `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
-	Filter           string                       `protobuf:"bytes,4,opt,name=filter,proto3" json:"filter,omitempty"`
-	LogLevels        []LogEvent_LogLevel          `protobuf:"varint,5,rep,packed,name=log_levels,json=logLevels,proto3,enum=querysheriff.v1.LogEvent_LogLevel" json:"log_levels,omitempty"`
-	Classifications  []LogEvent_LogClassification `protobuf:"varint,6,rep,packed,name=classifications,proto3,enum=querysheriff.v1.LogEvent_LogClassification" json:"classifications,omitempty"`
-	Limit            int32                        `protobuf:"varint,7,opt,name=limit,proto3" json:"limit,omitempty"`
-	Categories       []LogEvent_LogCategory       `protobuf:"varint,8,rep,packed,name=categories,proto3,enum=querysheriff.v1.LogEvent_LogCategory" json:"categories,omitempty"`
-	Databases        []string                     `protobuf:"bytes,9,rep,name=databases,proto3" json:"databases,omitempty"`
-	Usernames        []string                     `protobuf:"bytes,10,rep,name=usernames,proto3" json:"usernames,omitempty"`
-	ApplicationNames []string                     `protobuf:"bytes,11,rep,name=application_names,json=applicationNames,proto3" json:"application_names,omitempty"`
-	BackendTypes     []string                     `protobuf:"bytes,12,rep,name=backend_types,json=backendTypes,proto3" json:"backend_types,omitempty"`
-	Offset           int32                        `protobuf:"varint,13,opt,name=offset,proto3" json:"offset,omitempty"`
-	SortColumn       LogSortColumn                `protobuf:"varint,14,opt,name=sort_column,json=sortColumn,proto3,enum=querysheriff.v1.LogSortColumn" json:"sort_column,omitempty"`
-	SortDesc         bool                         `protobuf:"varint,15,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
+	Search           string                       `protobuf:"bytes,1,opt,name=search,proto3" json:"search,omitempty"`
+	Levels           []LogEvent_LogLevel          `protobuf:"varint,2,rep,packed,name=levels,proto3,enum=querysheriff.v1.LogEvent_LogLevel" json:"levels,omitempty"`
+	Classifications  []LogEvent_LogClassification `protobuf:"varint,3,rep,packed,name=classifications,proto3,enum=querysheriff.v1.LogEvent_LogClassification" json:"classifications,omitempty"`
+	Categories       []LogCategory                `protobuf:"varint,4,rep,packed,name=categories,proto3,enum=querysheriff.v1.LogCategory" json:"categories,omitempty"`
+	Databases        []string                     `protobuf:"bytes,5,rep,name=databases,proto3" json:"databases,omitempty"`
+	Usernames        []string                     `protobuf:"bytes,6,rep,name=usernames,proto3" json:"usernames,omitempty"`
+	ApplicationNames []string                     `protobuf:"bytes,7,rep,name=application_names,json=applicationNames,proto3" json:"application_names,omitempty"`
+	BackendTypes     []string                     `protobuf:"bytes,8,rep,name=backend_types,json=backendTypes,proto3" json:"backend_types,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
 
-func (x *QueryLogsRequest) Reset() {
-	*x = QueryLogsRequest{}
+func (x *LogFilter) Reset() {
+	*x = LogFilter{}
 	mi := &file_querysheriff_v1_log_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *QueryLogsRequest) String() string {
+func (x *LogFilter) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*QueryLogsRequest) ProtoMessage() {}
+func (*LogFilter) ProtoMessage() {}
 
-func (x *QueryLogsRequest) ProtoReflect() protoreflect.Message {
+func (x *LogFilter) ProtoReflect() protoreflect.Message {
 	mi := &file_querysheriff_v1_log_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1003,117 +935,160 @@ func (x *QueryLogsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryLogsRequest.ProtoReflect.Descriptor instead.
-func (*QueryLogsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use LogFilter.ProtoReflect.Descriptor instead.
+func (*LogFilter) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *QueryLogsRequest) GetServerName() string {
+func (x *LogFilter) GetSearch() string {
 	if x != nil {
-		return x.ServerName
+		return x.Search
 	}
 	return ""
 }
 
-func (x *QueryLogsRequest) GetFrom() *timestamppb.Timestamp {
+func (x *LogFilter) GetLevels() []LogEvent_LogLevel {
 	if x != nil {
-		return x.From
+		return x.Levels
 	}
 	return nil
 }
 
-func (x *QueryLogsRequest) GetTo() *timestamppb.Timestamp {
-	if x != nil {
-		return x.To
-	}
-	return nil
-}
-
-func (x *QueryLogsRequest) GetFilter() string {
-	if x != nil {
-		return x.Filter
-	}
-	return ""
-}
-
-func (x *QueryLogsRequest) GetLogLevels() []LogEvent_LogLevel {
-	if x != nil {
-		return x.LogLevels
-	}
-	return nil
-}
-
-func (x *QueryLogsRequest) GetClassifications() []LogEvent_LogClassification {
+func (x *LogFilter) GetClassifications() []LogEvent_LogClassification {
 	if x != nil {
 		return x.Classifications
 	}
 	return nil
 }
 
-func (x *QueryLogsRequest) GetLimit() int32 {
-	if x != nil {
-		return x.Limit
-	}
-	return 0
-}
-
-func (x *QueryLogsRequest) GetCategories() []LogEvent_LogCategory {
+func (x *LogFilter) GetCategories() []LogCategory {
 	if x != nil {
 		return x.Categories
 	}
 	return nil
 }
 
-func (x *QueryLogsRequest) GetDatabases() []string {
+func (x *LogFilter) GetDatabases() []string {
 	if x != nil {
 		return x.Databases
 	}
 	return nil
 }
 
-func (x *QueryLogsRequest) GetUsernames() []string {
+func (x *LogFilter) GetUsernames() []string {
 	if x != nil {
 		return x.Usernames
 	}
 	return nil
 }
 
-func (x *QueryLogsRequest) GetApplicationNames() []string {
+func (x *LogFilter) GetApplicationNames() []string {
 	if x != nil {
 		return x.ApplicationNames
 	}
 	return nil
 }
 
-func (x *QueryLogsRequest) GetBackendTypes() []string {
+func (x *LogFilter) GetBackendTypes() []string {
 	if x != nil {
 		return x.BackendTypes
 	}
 	return nil
 }
 
-func (x *QueryLogsRequest) GetOffset() int32 {
-	if x != nil {
-		return x.Offset
-	}
-	return 0
+type ListLogsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ServerName    string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
+	From          *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	To            *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	Filter        *LogFilter             `protobuf:"bytes,4,opt,name=filter,proto3" json:"filter,omitempty"`
+	SortDesc      bool                   `protobuf:"varint,5,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
+	Limit         int32                  `protobuf:"varint,6,opt,name=limit,proto3" json:"limit,omitempty"`
+	Offset        int32                  `protobuf:"varint,7,opt,name=offset,proto3" json:"offset,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *QueryLogsRequest) GetSortColumn() LogSortColumn {
-	if x != nil {
-		return x.SortColumn
-	}
-	return LogSortColumn_LOG_SORT_COLUMN_UNSPECIFIED
+func (x *ListLogsRequest) Reset() {
+	*x = ListLogsRequest{}
+	mi := &file_querysheriff_v1_log_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
 }
 
-func (x *QueryLogsRequest) GetSortDesc() bool {
+func (x *ListLogsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLogsRequest) ProtoMessage() {}
+
+func (x *ListLogsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_log_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLogsRequest.ProtoReflect.Descriptor instead.
+func (*ListLogsRequest) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ListLogsRequest) GetServerName() string {
+	if x != nil {
+		return x.ServerName
+	}
+	return ""
+}
+
+func (x *ListLogsRequest) GetFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.From
+	}
+	return nil
+}
+
+func (x *ListLogsRequest) GetTo() *timestamppb.Timestamp {
+	if x != nil {
+		return x.To
+	}
+	return nil
+}
+
+func (x *ListLogsRequest) GetFilter() *LogFilter {
+	if x != nil {
+		return x.Filter
+	}
+	return nil
+}
+
+func (x *ListLogsRequest) GetSortDesc() bool {
 	if x != nil {
 		return x.SortDesc
 	}
 	return false
 }
 
-type QueryLogsResponse struct {
+func (x *ListLogsRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *ListLogsRequest) GetOffset() int32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+type ListLogsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Records       []*LogRecord           `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
 	HasMore       bool                   `protobuf:"varint,2,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
@@ -1121,21 +1096,21 @@ type QueryLogsResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *QueryLogsResponse) Reset() {
-	*x = QueryLogsResponse{}
-	mi := &file_querysheriff_v1_log_proto_msgTypes[5]
+func (x *ListLogsResponse) Reset() {
+	*x = ListLogsResponse{}
+	mi := &file_querysheriff_v1_log_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *QueryLogsResponse) String() string {
+func (x *ListLogsResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*QueryLogsResponse) ProtoMessage() {}
+func (*ListLogsResponse) ProtoMessage() {}
 
-func (x *QueryLogsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_log_proto_msgTypes[5]
+func (x *ListLogsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_log_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1146,26 +1121,198 @@ func (x *QueryLogsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryLogsResponse.ProtoReflect.Descriptor instead.
-func (*QueryLogsResponse) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{5}
+// Deprecated: Use ListLogsResponse.ProtoReflect.Descriptor instead.
+func (*ListLogsResponse) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *QueryLogsResponse) GetRecords() []*LogRecord {
+func (x *ListLogsResponse) GetRecords() []*LogRecord {
 	if x != nil {
 		return x.Records
 	}
 	return nil
 }
 
-func (x *QueryLogsResponse) GetHasMore() bool {
+func (x *ListLogsResponse) GetHasMore() bool {
 	if x != nil {
 		return x.HasMore
 	}
 	return false
 }
 
-type QueryLogSeriesRequest struct {
+type LogRecord struct {
+	state           protoimpl.MessageState     `protogen:"open.v1"`
+	Id              uint64                     `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	OccurredAt      *timestamppb.Timestamp     `protobuf:"bytes,2,opt,name=occurred_at,json=occurredAt,proto3" json:"occurred_at,omitempty"`
+	LogLevel        LogEvent_LogLevel          `protobuf:"varint,3,opt,name=log_level,json=logLevel,proto3,enum=querysheriff.v1.LogEvent_LogLevel" json:"log_level,omitempty"`
+	Classification  LogEvent_LogClassification `protobuf:"varint,4,opt,name=classification,proto3,enum=querysheriff.v1.LogEvent_LogClassification" json:"classification,omitempty"`
+	Category        LogCategory                `protobuf:"varint,5,opt,name=category,proto3,enum=querysheriff.v1.LogCategory" json:"category,omitempty"`
+	Pid             int32                      `protobuf:"varint,6,opt,name=pid,proto3" json:"pid,omitempty"`
+	DatabaseName    string                     `protobuf:"bytes,7,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
+	Username        string                     `protobuf:"bytes,8,opt,name=username,proto3" json:"username,omitempty"`
+	ApplicationName string                     `protobuf:"bytes,9,opt,name=application_name,json=applicationName,proto3" json:"application_name,omitempty"`
+	BackendType     string                     `protobuf:"bytes,10,opt,name=backend_type,json=backendType,proto3" json:"backend_type,omitempty"`
+	Message         string                     `protobuf:"bytes,11,opt,name=message,proto3" json:"message,omitempty"`
+	StateCode       string                     `protobuf:"bytes,12,opt,name=state_code,json=stateCode,proto3" json:"state_code,omitempty"`
+	Detail          string                     `protobuf:"bytes,13,opt,name=detail,proto3" json:"detail,omitempty"`
+	Hint            string                     `protobuf:"bytes,14,opt,name=hint,proto3" json:"hint,omitempty"`
+	Context         string                     `protobuf:"bytes,15,opt,name=context,proto3" json:"context,omitempty"`
+	Statement       string                     `protobuf:"bytes,16,opt,name=statement,proto3" json:"statement,omitempty"`
+	StatementSample *LogRecord_StatementSample `protobuf:"bytes,17,opt,name=statement_sample,json=statementSample,proto3" json:"statement_sample,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *LogRecord) Reset() {
+	*x = LogRecord{}
+	mi := &file_querysheriff_v1_log_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogRecord) ProtoMessage() {}
+
+func (x *LogRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_log_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogRecord.ProtoReflect.Descriptor instead.
+func (*LogRecord) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *LogRecord) GetId() uint64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *LogRecord) GetOccurredAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.OccurredAt
+	}
+	return nil
+}
+
+func (x *LogRecord) GetLogLevel() LogEvent_LogLevel {
+	if x != nil {
+		return x.LogLevel
+	}
+	return LogEvent_LOG_LEVEL_UNSPECIFIED
+}
+
+func (x *LogRecord) GetClassification() LogEvent_LogClassification {
+	if x != nil {
+		return x.Classification
+	}
+	return LogEvent_LOG_CLASSIFICATION_UNSPECIFIED
+}
+
+func (x *LogRecord) GetCategory() LogCategory {
+	if x != nil {
+		return x.Category
+	}
+	return LogCategory_LOG_CATEGORY_UNSPECIFIED
+}
+
+func (x *LogRecord) GetPid() int32 {
+	if x != nil {
+		return x.Pid
+	}
+	return 0
+}
+
+func (x *LogRecord) GetDatabaseName() string {
+	if x != nil {
+		return x.DatabaseName
+	}
+	return ""
+}
+
+func (x *LogRecord) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *LogRecord) GetApplicationName() string {
+	if x != nil {
+		return x.ApplicationName
+	}
+	return ""
+}
+
+func (x *LogRecord) GetBackendType() string {
+	if x != nil {
+		return x.BackendType
+	}
+	return ""
+}
+
+func (x *LogRecord) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *LogRecord) GetStateCode() string {
+	if x != nil {
+		return x.StateCode
+	}
+	return ""
+}
+
+func (x *LogRecord) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+func (x *LogRecord) GetHint() string {
+	if x != nil {
+		return x.Hint
+	}
+	return ""
+}
+
+func (x *LogRecord) GetContext() string {
+	if x != nil {
+		return x.Context
+	}
+	return ""
+}
+
+func (x *LogRecord) GetStatement() string {
+	if x != nil {
+		return x.Statement
+	}
+	return ""
+}
+
+func (x *LogRecord) GetStatementSample() *LogRecord_StatementSample {
+	if x != nil {
+		return x.StatementSample
+	}
+	return nil
+}
+
+type GetLogSeriesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ServerName    string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
 	From          *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
@@ -1174,21 +1321,21 @@ type QueryLogSeriesRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *QueryLogSeriesRequest) Reset() {
-	*x = QueryLogSeriesRequest{}
-	mi := &file_querysheriff_v1_log_proto_msgTypes[6]
+func (x *GetLogSeriesRequest) Reset() {
+	*x = GetLogSeriesRequest{}
+	mi := &file_querysheriff_v1_log_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *QueryLogSeriesRequest) String() string {
+func (x *GetLogSeriesRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*QueryLogSeriesRequest) ProtoMessage() {}
+func (*GetLogSeriesRequest) ProtoMessage() {}
 
-func (x *QueryLogSeriesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_log_proto_msgTypes[6]
+func (x *GetLogSeriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_log_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1199,54 +1346,56 @@ func (x *QueryLogSeriesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryLogSeriesRequest.ProtoReflect.Descriptor instead.
-func (*QueryLogSeriesRequest) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{6}
+// Deprecated: Use GetLogSeriesRequest.ProtoReflect.Descriptor instead.
+func (*GetLogSeriesRequest) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *QueryLogSeriesRequest) GetServerName() string {
+func (x *GetLogSeriesRequest) GetServerName() string {
 	if x != nil {
 		return x.ServerName
 	}
 	return ""
 }
 
-func (x *QueryLogSeriesRequest) GetFrom() *timestamppb.Timestamp {
+func (x *GetLogSeriesRequest) GetFrom() *timestamppb.Timestamp {
 	if x != nil {
 		return x.From
 	}
 	return nil
 }
 
-func (x *QueryLogSeriesRequest) GetTo() *timestamppb.Timestamp {
+func (x *GetLogSeriesRequest) GetTo() *timestamppb.Timestamp {
 	if x != nil {
 		return x.To
 	}
 	return nil
 }
 
-type QueryLogSeriesResponse struct {
+type GetLogSeriesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Histogram     *LogHistogram          `protobuf:"bytes,1,opt,name=histogram,proto3" json:"histogram,omitempty"`
+	Buckets       []*LogHistogramBucket  `protobuf:"bytes,1,rep,name=buckets,proto3" json:"buckets,omitempty"`
+	LevelTotals   []*LogLevelCount       `protobuf:"bytes,2,rep,name=level_totals,json=levelTotals,proto3" json:"level_totals,omitempty"`
+	BucketMs      int64                  `protobuf:"varint,3,opt,name=bucket_ms,json=bucketMs,proto3" json:"bucket_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *QueryLogSeriesResponse) Reset() {
-	*x = QueryLogSeriesResponse{}
-	mi := &file_querysheriff_v1_log_proto_msgTypes[7]
+func (x *GetLogSeriesResponse) Reset() {
+	*x = GetLogSeriesResponse{}
+	mi := &file_querysheriff_v1_log_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *QueryLogSeriesResponse) String() string {
+func (x *GetLogSeriesResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*QueryLogSeriesResponse) ProtoMessage() {}
+func (*GetLogSeriesResponse) ProtoMessage() {}
 
-func (x *QueryLogSeriesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_log_proto_msgTypes[7]
+func (x *GetLogSeriesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_log_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1257,98 +1406,44 @@ func (x *QueryLogSeriesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryLogSeriesResponse.ProtoReflect.Descriptor instead.
-func (*QueryLogSeriesResponse) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{7}
+// Deprecated: Use GetLogSeriesResponse.ProtoReflect.Descriptor instead.
+func (*GetLogSeriesResponse) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *QueryLogSeriesResponse) GetHistogram() *LogHistogram {
-	if x != nil {
-		return x.Histogram
-	}
-	return nil
-}
-
-type LogHistogram struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Buckets        []*LogHistogramBucket  `protobuf:"bytes,1,rep,name=buckets,proto3" json:"buckets,omitempty"`
-	LevelTotals    []*LogLevelCount       `protobuf:"bytes,2,rep,name=level_totals,json=levelTotals,proto3" json:"level_totals,omitempty"`
-	BucketMs       int64                  `protobuf:"varint,3,opt,name=bucket_ms,json=bucketMs,proto3" json:"bucket_ms,omitempty"`
-	CategoryTotals []*LogCategoryCount    `protobuf:"bytes,4,rep,name=category_totals,json=categoryTotals,proto3" json:"category_totals,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *LogHistogram) Reset() {
-	*x = LogHistogram{}
-	mi := &file_querysheriff_v1_log_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *LogHistogram) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*LogHistogram) ProtoMessage() {}
-
-func (x *LogHistogram) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_log_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use LogHistogram.ProtoReflect.Descriptor instead.
-func (*LogHistogram) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *LogHistogram) GetBuckets() []*LogHistogramBucket {
+func (x *GetLogSeriesResponse) GetBuckets() []*LogHistogramBucket {
 	if x != nil {
 		return x.Buckets
 	}
 	return nil
 }
 
-func (x *LogHistogram) GetLevelTotals() []*LogLevelCount {
+func (x *GetLogSeriesResponse) GetLevelTotals() []*LogLevelCount {
 	if x != nil {
 		return x.LevelTotals
 	}
 	return nil
 }
 
-func (x *LogHistogram) GetBucketMs() int64 {
+func (x *GetLogSeriesResponse) GetBucketMs() int64 {
 	if x != nil {
 		return x.BucketMs
 	}
 	return 0
 }
 
-func (x *LogHistogram) GetCategoryTotals() []*LogCategoryCount {
-	if x != nil {
-		return x.CategoryTotals
-	}
-	return nil
-}
-
 type LogHistogramBucket struct {
-	state         protoimpl.MessageState  `protogen:"open.v1"`
-	BucketEnd     *timestamppb.Timestamp  `protobuf:"bytes,1,opt,name=bucket_end,json=bucketEnd,proto3" json:"bucket_end,omitempty"`
-	Counts        []*LogLevelCount        `protobuf:"bytes,2,rep,name=counts,proto3" json:"counts,omitempty"`
-	Categories    []*LogCategoryBreakdown `protobuf:"bytes,3,rep,name=categories,proto3" json:"categories,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	At            *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=at,proto3" json:"at,omitempty"`
+	Levels        []*LogLevelCount       `protobuf:"bytes,2,rep,name=levels,proto3" json:"levels,omitempty"`
+	Categories    []*LogCategoryCount    `protobuf:"bytes,3,rep,name=categories,proto3" json:"categories,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LogHistogramBucket) Reset() {
 	*x = LogHistogramBucket{}
-	mi := &file_querysheriff_v1_log_proto_msgTypes[9]
+	mi := &file_querysheriff_v1_log_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1360,7 +1455,7 @@ func (x *LogHistogramBucket) String() string {
 func (*LogHistogramBucket) ProtoMessage() {}
 
 func (x *LogHistogramBucket) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_log_proto_msgTypes[9]
+	mi := &file_querysheriff_v1_log_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1373,140 +1468,28 @@ func (x *LogHistogramBucket) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogHistogramBucket.ProtoReflect.Descriptor instead.
 func (*LogHistogramBucket) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{9}
+	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *LogHistogramBucket) GetBucketEnd() *timestamppb.Timestamp {
+func (x *LogHistogramBucket) GetAt() *timestamppb.Timestamp {
 	if x != nil {
-		return x.BucketEnd
+		return x.At
 	}
 	return nil
 }
 
-func (x *LogHistogramBucket) GetCounts() []*LogLevelCount {
+func (x *LogHistogramBucket) GetLevels() []*LogLevelCount {
 	if x != nil {
-		return x.Counts
+		return x.Levels
 	}
 	return nil
 }
 
-func (x *LogHistogramBucket) GetCategories() []*LogCategoryBreakdown {
+func (x *LogHistogramBucket) GetCategories() []*LogCategoryCount {
 	if x != nil {
 		return x.Categories
 	}
 	return nil
-}
-
-type LogCategoryBreakdown struct {
-	state           protoimpl.MessageState    `protogen:"open.v1"`
-	Category        LogEvent_LogCategory      `protobuf:"varint,1,opt,name=category,proto3,enum=querysheriff.v1.LogEvent_LogCategory" json:"category,omitempty"`
-	Count           int64                     `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
-	Classifications []*LogClassificationCount `protobuf:"bytes,3,rep,name=classifications,proto3" json:"classifications,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *LogCategoryBreakdown) Reset() {
-	*x = LogCategoryBreakdown{}
-	mi := &file_querysheriff_v1_log_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *LogCategoryBreakdown) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*LogCategoryBreakdown) ProtoMessage() {}
-
-func (x *LogCategoryBreakdown) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_log_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use LogCategoryBreakdown.ProtoReflect.Descriptor instead.
-func (*LogCategoryBreakdown) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *LogCategoryBreakdown) GetCategory() LogEvent_LogCategory {
-	if x != nil {
-		return x.Category
-	}
-	return LogEvent_LOG_CATEGORY_UNSPECIFIED
-}
-
-func (x *LogCategoryBreakdown) GetCount() int64 {
-	if x != nil {
-		return x.Count
-	}
-	return 0
-}
-
-func (x *LogCategoryBreakdown) GetClassifications() []*LogClassificationCount {
-	if x != nil {
-		return x.Classifications
-	}
-	return nil
-}
-
-type LogClassificationCount struct {
-	state          protoimpl.MessageState     `protogen:"open.v1"`
-	Classification LogEvent_LogClassification `protobuf:"varint,1,opt,name=classification,proto3,enum=querysheriff.v1.LogEvent_LogClassification" json:"classification,omitempty"`
-	Count          int64                      `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *LogClassificationCount) Reset() {
-	*x = LogClassificationCount{}
-	mi := &file_querysheriff_v1_log_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *LogClassificationCount) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*LogClassificationCount) ProtoMessage() {}
-
-func (x *LogClassificationCount) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_log_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use LogClassificationCount.ProtoReflect.Descriptor instead.
-func (*LogClassificationCount) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *LogClassificationCount) GetClassification() LogEvent_LogClassification {
-	if x != nil {
-		return x.Classification
-	}
-	return LogEvent_LOG_CLASSIFICATION_UNSPECIFIED
-}
-
-func (x *LogClassificationCount) GetCount() int64 {
-	if x != nil {
-		return x.Count
-	}
-	return 0
 }
 
 type LogLevelCount struct {
@@ -1519,7 +1502,7 @@ type LogLevelCount struct {
 
 func (x *LogLevelCount) Reset() {
 	*x = LogLevelCount{}
-	mi := &file_querysheriff_v1_log_proto_msgTypes[12]
+	mi := &file_querysheriff_v1_log_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1531,7 +1514,7 @@ func (x *LogLevelCount) String() string {
 func (*LogLevelCount) ProtoMessage() {}
 
 func (x *LogLevelCount) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_log_proto_msgTypes[12]
+	mi := &file_querysheriff_v1_log_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1544,7 +1527,7 @@ func (x *LogLevelCount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogLevelCount.ProtoReflect.Descriptor instead.
 func (*LogLevelCount) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{12}
+	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *LogLevelCount) GetLevel() LogEvent_LogLevel {
@@ -1562,16 +1545,17 @@ func (x *LogLevelCount) GetCount() int64 {
 }
 
 type LogCategoryCount struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Category      LogEvent_LogCategory   `protobuf:"varint,1,opt,name=category,proto3,enum=querysheriff.v1.LogEvent_LogCategory" json:"category,omitempty"`
-	Count         int64                  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState    `protogen:"open.v1"`
+	Category        LogCategory               `protobuf:"varint,1,opt,name=category,proto3,enum=querysheriff.v1.LogCategory" json:"category,omitempty"`
+	Count           int64                     `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
+	Classifications []*LogClassificationCount `protobuf:"bytes,3,rep,name=classifications,proto3" json:"classifications,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *LogCategoryCount) Reset() {
 	*x = LogCategoryCount{}
-	mi := &file_querysheriff_v1_log_proto_msgTypes[13]
+	mi := &file_querysheriff_v1_log_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1583,7 +1567,7 @@ func (x *LogCategoryCount) String() string {
 func (*LogCategoryCount) ProtoMessage() {}
 
 func (x *LogCategoryCount) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_log_proto_msgTypes[13]
+	mi := &file_querysheriff_v1_log_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1596,14 +1580,14 @@ func (x *LogCategoryCount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogCategoryCount.ProtoReflect.Descriptor instead.
 func (*LogCategoryCount) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{13}
+	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *LogCategoryCount) GetCategory() LogEvent_LogCategory {
+func (x *LogCategoryCount) GetCategory() LogCategory {
 	if x != nil {
 		return x.Category
 	}
-	return LogEvent_LOG_CATEGORY_UNSPECIFIED
+	return LogCategory_LOG_CATEGORY_UNSPECIFIED
 }
 
 func (x *LogCategoryCount) GetCount() int64 {
@@ -1613,20 +1597,73 @@ func (x *LogCategoryCount) GetCount() int64 {
 	return 0
 }
 
+func (x *LogCategoryCount) GetClassifications() []*LogClassificationCount {
+	if x != nil {
+		return x.Classifications
+	}
+	return nil
+}
+
+type LogClassificationCount struct {
+	state          protoimpl.MessageState     `protogen:"open.v1"`
+	Classification LogEvent_LogClassification `protobuf:"varint,1,opt,name=classification,proto3,enum=querysheriff.v1.LogEvent_LogClassification" json:"classification,omitempty"`
+	Count          int64                      `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *LogClassificationCount) Reset() {
+	*x = LogClassificationCount{}
+	mi := &file_querysheriff_v1_log_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogClassificationCount) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogClassificationCount) ProtoMessage() {}
+
+func (x *LogClassificationCount) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_log_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogClassificationCount.ProtoReflect.Descriptor instead.
+func (*LogClassificationCount) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *LogClassificationCount) GetClassification() LogEvent_LogClassification {
+	if x != nil {
+		return x.Classification
+	}
+	return LogEvent_LOG_CLASSIFICATION_UNSPECIFIED
+}
+
+func (x *LogClassificationCount) GetCount() int64 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
 type ListLogFacetsRequest struct {
-	state            protoimpl.MessageState       `protogen:"open.v1"`
-	ServerName       string                       `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
-	From             *timestamppb.Timestamp       `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
-	To               *timestamppb.Timestamp       `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
-	Filter           string                       `protobuf:"bytes,4,opt,name=filter,proto3" json:"filter,omitempty"`
-	Classifications  []LogEvent_LogClassification `protobuf:"varint,5,rep,packed,name=classifications,proto3,enum=querysheriff.v1.LogEvent_LogClassification" json:"classifications,omitempty"`
-	Categories       []LogEvent_LogCategory       `protobuf:"varint,6,rep,packed,name=categories,proto3,enum=querysheriff.v1.LogEvent_LogCategory" json:"categories,omitempty"`
-	Databases        []string                     `protobuf:"bytes,7,rep,name=databases,proto3" json:"databases,omitempty"`
-	Usernames        []string                     `protobuf:"bytes,8,rep,name=usernames,proto3" json:"usernames,omitempty"`
-	ApplicationNames []string                     `protobuf:"bytes,9,rep,name=application_names,json=applicationNames,proto3" json:"application_names,omitempty"`
-	BackendTypes     []string                     `protobuf:"bytes,10,rep,name=backend_types,json=backendTypes,proto3" json:"backend_types,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ServerName    string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
+	From          *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	To            *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	Filter        *LogFilter             `protobuf:"bytes,4,opt,name=filter,proto3" json:"filter,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListLogFacetsRequest) Reset() {
@@ -1680,51 +1717,9 @@ func (x *ListLogFacetsRequest) GetTo() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *ListLogFacetsRequest) GetFilter() string {
+func (x *ListLogFacetsRequest) GetFilter() *LogFilter {
 	if x != nil {
 		return x.Filter
-	}
-	return ""
-}
-
-func (x *ListLogFacetsRequest) GetClassifications() []LogEvent_LogClassification {
-	if x != nil {
-		return x.Classifications
-	}
-	return nil
-}
-
-func (x *ListLogFacetsRequest) GetCategories() []LogEvent_LogCategory {
-	if x != nil {
-		return x.Categories
-	}
-	return nil
-}
-
-func (x *ListLogFacetsRequest) GetDatabases() []string {
-	if x != nil {
-		return x.Databases
-	}
-	return nil
-}
-
-func (x *ListLogFacetsRequest) GetUsernames() []string {
-	if x != nil {
-		return x.Usernames
-	}
-	return nil
-}
-
-func (x *ListLogFacetsRequest) GetApplicationNames() []string {
-	if x != nil {
-		return x.ApplicationNames
-	}
-	return nil
-}
-
-func (x *ListLogFacetsRequest) GetBackendTypes() []string {
-	if x != nil {
-		return x.BackendTypes
 	}
 	return nil
 }
@@ -1837,7 +1832,7 @@ type LogFacetValue struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Value         string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
 	Count         int64                  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
-	Category      LogEvent_LogCategory   `protobuf:"varint,3,opt,name=category,proto3,enum=querysheriff.v1.LogEvent_LogCategory" json:"category,omitempty"`
+	Category      LogCategory            `protobuf:"varint,3,opt,name=category,proto3,enum=querysheriff.v1.LogCategory" json:"category,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1886,210 +1881,38 @@ func (x *LogFacetValue) GetCount() int64 {
 	return 0
 }
 
-func (x *LogFacetValue) GetCategory() LogEvent_LogCategory {
+func (x *LogFacetValue) GetCategory() LogCategory {
 	if x != nil {
 		return x.Category
 	}
-	return LogEvent_LOG_CATEGORY_UNSPECIFIED
+	return LogCategory_LOG_CATEGORY_UNSPECIFIED
 }
 
-type LogRecord struct {
-	state           protoimpl.MessageState     `protogen:"open.v1"`
-	Id              uint64                     `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	OccurredAt      *timestamppb.Timestamp     `protobuf:"bytes,2,opt,name=occurred_at,json=occurredAt,proto3" json:"occurred_at,omitempty"`
-	LogLevel        LogEvent_LogLevel          `protobuf:"varint,3,opt,name=log_level,json=logLevel,proto3,enum=querysheriff.v1.LogEvent_LogLevel" json:"log_level,omitempty"`
-	Classification  LogEvent_LogClassification `protobuf:"varint,4,opt,name=classification,proto3,enum=querysheriff.v1.LogEvent_LogClassification" json:"classification,omitempty"`
-	Pid             int32                      `protobuf:"varint,5,opt,name=pid,proto3" json:"pid,omitempty"`
-	DatabaseName    string                     `protobuf:"bytes,6,opt,name=database_name,json=databaseName,proto3" json:"database_name,omitempty"`
-	Username        string                     `protobuf:"bytes,7,opt,name=username,proto3" json:"username,omitempty"`
-	ApplicationName string                     `protobuf:"bytes,8,opt,name=application_name,json=applicationName,proto3" json:"application_name,omitempty"`
-	BackendType     string                     `protobuf:"bytes,9,opt,name=backend_type,json=backendType,proto3" json:"backend_type,omitempty"`
-	Message         string                     `protobuf:"bytes,10,opt,name=message,proto3" json:"message,omitempty"`
-	StateCode       string                     `protobuf:"bytes,11,opt,name=state_code,json=stateCode,proto3" json:"state_code,omitempty"`
-	Detail          string                     `protobuf:"bytes,12,opt,name=detail,proto3" json:"detail,omitempty"`
-	Hint            string                     `protobuf:"bytes,13,opt,name=hint,proto3" json:"hint,omitempty"`
-	Context         string                     `protobuf:"bytes,14,opt,name=context,proto3" json:"context,omitempty"`
-	Statement       string                     `protobuf:"bytes,15,opt,name=statement,proto3" json:"statement,omitempty"`
-	Category        LogEvent_LogCategory       `protobuf:"varint,16,opt,name=category,proto3,enum=querysheriff.v1.LogEvent_LogCategory" json:"category,omitempty"`
-	StatementSample *LogRecordStatementSample  `protobuf:"bytes,17,opt,name=statement_sample,json=statementSample,proto3" json:"statement_sample,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+type LogRecord_StatementSample struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            uint64                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	StatementId   uint64                 `protobuf:"varint,2,opt,name=statement_id,json=statementId,proto3" json:"statement_id,omitempty"`
+	Query         string                 `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
+	DurationMs    float64                `protobuf:"fixed64,4,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	HasPlan       bool                   `protobuf:"varint,5,opt,name=has_plan,json=hasPlan,proto3" json:"has_plan,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *LogRecord) Reset() {
-	*x = LogRecord{}
-	mi := &file_querysheriff_v1_log_proto_msgTypes[18]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *LogRecord) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*LogRecord) ProtoMessage() {}
-
-func (x *LogRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_log_proto_msgTypes[18]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use LogRecord.ProtoReflect.Descriptor instead.
-func (*LogRecord) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{18}
-}
-
-func (x *LogRecord) GetId() uint64 {
-	if x != nil {
-		return x.Id
-	}
-	return 0
-}
-
-func (x *LogRecord) GetOccurredAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.OccurredAt
-	}
-	return nil
-}
-
-func (x *LogRecord) GetLogLevel() LogEvent_LogLevel {
-	if x != nil {
-		return x.LogLevel
-	}
-	return LogEvent_LOG_LEVEL_UNSPECIFIED
-}
-
-func (x *LogRecord) GetClassification() LogEvent_LogClassification {
-	if x != nil {
-		return x.Classification
-	}
-	return LogEvent_LOG_CLASSIFICATION_UNSPECIFIED
-}
-
-func (x *LogRecord) GetPid() int32 {
-	if x != nil {
-		return x.Pid
-	}
-	return 0
-}
-
-func (x *LogRecord) GetDatabaseName() string {
-	if x != nil {
-		return x.DatabaseName
-	}
-	return ""
-}
-
-func (x *LogRecord) GetUsername() string {
-	if x != nil {
-		return x.Username
-	}
-	return ""
-}
-
-func (x *LogRecord) GetApplicationName() string {
-	if x != nil {
-		return x.ApplicationName
-	}
-	return ""
-}
-
-func (x *LogRecord) GetBackendType() string {
-	if x != nil {
-		return x.BackendType
-	}
-	return ""
-}
-
-func (x *LogRecord) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-func (x *LogRecord) GetStateCode() string {
-	if x != nil {
-		return x.StateCode
-	}
-	return ""
-}
-
-func (x *LogRecord) GetDetail() string {
-	if x != nil {
-		return x.Detail
-	}
-	return ""
-}
-
-func (x *LogRecord) GetHint() string {
-	if x != nil {
-		return x.Hint
-	}
-	return ""
-}
-
-func (x *LogRecord) GetContext() string {
-	if x != nil {
-		return x.Context
-	}
-	return ""
-}
-
-func (x *LogRecord) GetStatement() string {
-	if x != nil {
-		return x.Statement
-	}
-	return ""
-}
-
-func (x *LogRecord) GetCategory() LogEvent_LogCategory {
-	if x != nil {
-		return x.Category
-	}
-	return LogEvent_LOG_CATEGORY_UNSPECIFIED
-}
-
-func (x *LogRecord) GetStatementSample() *LogRecordStatementSample {
-	if x != nil {
-		return x.StatementSample
-	}
-	return nil
-}
-
-type LogRecordStatementSample struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Id             uint64                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Query          string                 `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"`
-	DurationMs     float64                `protobuf:"fixed64,3,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
-	HasExplainPlan bool                   `protobuf:"varint,4,opt,name=has_explain_plan,json=hasExplainPlan,proto3" json:"has_explain_plan,omitempty"`
-	StatementId    uint64                 `protobuf:"varint,5,opt,name=statement_id,json=statementId,proto3" json:"statement_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *LogRecordStatementSample) Reset() {
-	*x = LogRecordStatementSample{}
+func (x *LogRecord_StatementSample) Reset() {
+	*x = LogRecord_StatementSample{}
 	mi := &file_querysheriff_v1_log_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *LogRecordStatementSample) String() string {
+func (x *LogRecord_StatementSample) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*LogRecordStatementSample) ProtoMessage() {}
+func (*LogRecord_StatementSample) ProtoMessage() {}
 
-func (x *LogRecordStatementSample) ProtoReflect() protoreflect.Message {
+func (x *LogRecord_StatementSample) ProtoReflect() protoreflect.Message {
 	mi := &file_querysheriff_v1_log_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2101,44 +1924,44 @@ func (x *LogRecordStatementSample) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use LogRecordStatementSample.ProtoReflect.Descriptor instead.
-func (*LogRecordStatementSample) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{19}
+// Deprecated: Use LogRecord_StatementSample.ProtoReflect.Descriptor instead.
+func (*LogRecord_StatementSample) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_log_proto_rawDescGZIP(), []int{7, 0}
 }
 
-func (x *LogRecordStatementSample) GetId() uint64 {
+func (x *LogRecord_StatementSample) GetId() uint64 {
 	if x != nil {
 		return x.Id
 	}
 	return 0
 }
 
-func (x *LogRecordStatementSample) GetQuery() string {
+func (x *LogRecord_StatementSample) GetStatementId() uint64 {
+	if x != nil {
+		return x.StatementId
+	}
+	return 0
+}
+
+func (x *LogRecord_StatementSample) GetQuery() string {
 	if x != nil {
 		return x.Query
 	}
 	return ""
 }
 
-func (x *LogRecordStatementSample) GetDurationMs() float64 {
+func (x *LogRecord_StatementSample) GetDurationMs() float64 {
 	if x != nil {
 		return x.DurationMs
 	}
 	return 0
 }
 
-func (x *LogRecordStatementSample) GetHasExplainPlan() bool {
+func (x *LogRecord_StatementSample) GetHasPlan() bool {
 	if x != nil {
-		return x.HasExplainPlan
+		return x.HasPlan
 	}
 	return false
-}
-
-func (x *LogRecordStatementSample) GetStatementId() uint64 {
-	if x != nil {
-		return x.StatementId
-	}
-	return 0
 }
 
 var File_querysheriff_v1_log_proto protoreflect.FileDescriptor
@@ -2150,7 +1973,7 @@ const file_querysheriff_v1_log_proto_rawDesc = "" +
 	"\fcollected_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vcollectedAt\x128\n" +
 	"\n" +
 	"log_events\x18\x02 \x03(\v2\x19.querysheriff.v1.LogEventR\tlogEvents\"\x14\n" +
-	"\x12ReportLogsResponse\"\x86.\n" +
+	"\x12ReportLogsResponse\"\xcc+\n" +
 	"\bLogEvent\x12;\n" +
 	"\voccurred_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"occurredAt\x12?\n" +
@@ -2281,18 +2104,7 @@ const file_querysheriff_v1_log_proto_rawDesc = "" +
 	"(LOG_CLASSIFICATION_INVALID_BYTE_SEQUENCE\x10_\x12:\n" +
 	"6LOG_CLASSIFICATION_COULD_NOT_SERIALIZE_REPEATABLE_READ\x10`\x127\n" +
 	"3LOG_CLASSIFICATION_COULD_NOT_SERIALIZE_SERIALIZABLE\x10a\x120\n" +
-	",LOG_CLASSIFICATION_INCONSISTENT_RANGE_BOUNDS\x10b\"\xb7\x02\n" +
-	"\vLogCategory\x12\x1c\n" +
-	"\x18LOG_CATEGORY_UNSPECIFIED\x10\x00\x12\x17\n" +
-	"\x13LOG_CATEGORY_SERVER\x10\x01\x12\x1b\n" +
-	"\x17LOG_CATEGORY_CONNECTION\x10\x02\x12\x1f\n" +
-	"\x1bLOG_CATEGORY_WAL_CHECKPOINT\x10\x03\x12\x1b\n" +
-	"\x17LOG_CATEGORY_AUTOVACUUM\x10\x04\x12\x15\n" +
-	"\x11LOG_CATEGORY_LOCK\x10\x05\x12\x1a\n" +
-	"\x16LOG_CATEGORY_STATEMENT\x10\x06\x12\x18\n" +
-	"\x14LOG_CATEGORY_STANDBY\x10\a\x12%\n" +
-	"!LOG_CATEGORY_CONSTRAINT_VIOLATION\x10\b\x12\"\n" +
-	"\x1eLOG_CATEGORY_APPLICATION_ERROR\x10\t\"\xd0\x02\n" +
+	",LOG_CLASSIFICATION_INCONSISTENT_RANGE_BOUNDS\x10b\"\xd0\x02\n" +
 	"\x12LogStatementSample\x12;\n" +
 	"\voccurred_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"occurredAt\x12\x14\n" +
@@ -2306,125 +2118,110 @@ const file_querysheriff_v1_log_proto_rawDesc = "" +
 	"\x04tags\x18\x06 \x03(\v2-.querysheriff.v1.LogStatementSample.TagsEntryR\x04tags\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa2\x05\n" +
-	"\x10QueryLogsRequest\x12\x1f\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x82\x03\n" +
+	"\tLogFilter\x12\x16\n" +
+	"\x06search\x18\x01 \x01(\tR\x06search\x12:\n" +
+	"\x06levels\x18\x02 \x03(\x0e2\".querysheriff.v1.LogEvent.LogLevelR\x06levels\x12U\n" +
+	"\x0fclassifications\x18\x03 \x03(\x0e2+.querysheriff.v1.LogEvent.LogClassificationR\x0fclassifications\x12<\n" +
+	"\n" +
+	"categories\x18\x04 \x03(\x0e2\x1c.querysheriff.v1.LogCategoryR\n" +
+	"categories\x12\x1c\n" +
+	"\tdatabases\x18\x05 \x03(\tR\tdatabases\x12\x1c\n" +
+	"\tusernames\x18\x06 \x03(\tR\tusernames\x12+\n" +
+	"\x11application_names\x18\a \x03(\tR\x10applicationNames\x12#\n" +
+	"\rbackend_types\x18\b \x03(\tR\fbackendTypes\"\x8d\x02\n" +
+	"\x0fListLogsRequest\x12\x1f\n" +
 	"\vserver_name\x18\x01 \x01(\tR\n" +
 	"serverName\x12.\n" +
 	"\x04from\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
-	"\x02to\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\x12\x16\n" +
-	"\x06filter\x18\x04 \x01(\tR\x06filter\x12A\n" +
-	"\n" +
-	"log_levels\x18\x05 \x03(\x0e2\".querysheriff.v1.LogEvent.LogLevelR\tlogLevels\x12U\n" +
-	"\x0fclassifications\x18\x06 \x03(\x0e2+.querysheriff.v1.LogEvent.LogClassificationR\x0fclassifications\x12\x14\n" +
-	"\x05limit\x18\a \x01(\x05R\x05limit\x12E\n" +
-	"\n" +
-	"categories\x18\b \x03(\x0e2%.querysheriff.v1.LogEvent.LogCategoryR\n" +
-	"categories\x12\x1c\n" +
-	"\tdatabases\x18\t \x03(\tR\tdatabases\x12\x1c\n" +
-	"\tusernames\x18\n" +
-	" \x03(\tR\tusernames\x12+\n" +
-	"\x11application_names\x18\v \x03(\tR\x10applicationNames\x12#\n" +
-	"\rbackend_types\x18\f \x03(\tR\fbackendTypes\x12\x16\n" +
-	"\x06offset\x18\r \x01(\x05R\x06offset\x12?\n" +
-	"\vsort_column\x18\x0e \x01(\x0e2\x1e.querysheriff.v1.LogSortColumnR\n" +
-	"sortColumn\x12\x1b\n" +
-	"\tsort_desc\x18\x0f \x01(\bR\bsortDesc\"d\n" +
-	"\x11QueryLogsResponse\x124\n" +
+	"\x02to\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\x122\n" +
+	"\x06filter\x18\x04 \x01(\v2\x1a.querysheriff.v1.LogFilterR\x06filter\x12\x1b\n" +
+	"\tsort_desc\x18\x05 \x01(\bR\bsortDesc\x12\x14\n" +
+	"\x05limit\x18\x06 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06offset\x18\a \x01(\x05R\x06offset\"c\n" +
+	"\x10ListLogsResponse\x124\n" +
 	"\arecords\x18\x01 \x03(\v2\x1a.querysheriff.v1.LogRecordR\arecords\x12\x19\n" +
-	"\bhas_more\x18\x02 \x01(\bR\ahasMore\"\x94\x01\n" +
-	"\x15QueryLogSeriesRequest\x12\x1f\n" +
-	"\vserver_name\x18\x01 \x01(\tR\n" +
-	"serverName\x12.\n" +
-	"\x04from\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
-	"\x02to\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\"U\n" +
-	"\x16QueryLogSeriesResponse\x12;\n" +
-	"\thistogram\x18\x01 \x01(\v2\x1d.querysheriff.v1.LogHistogramR\thistogram\"\xf9\x01\n" +
-	"\fLogHistogram\x12=\n" +
-	"\abuckets\x18\x01 \x03(\v2#.querysheriff.v1.LogHistogramBucketR\abuckets\x12A\n" +
-	"\flevel_totals\x18\x02 \x03(\v2\x1e.querysheriff.v1.LogLevelCountR\vlevelTotals\x12\x1b\n" +
-	"\tbucket_ms\x18\x03 \x01(\x03R\bbucketMs\x12J\n" +
-	"\x0fcategory_totals\x18\x04 \x03(\v2!.querysheriff.v1.LogCategoryCountR\x0ecategoryTotals\"\xce\x01\n" +
-	"\x12LogHistogramBucket\x129\n" +
-	"\n" +
-	"bucket_end\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\tbucketEnd\x126\n" +
-	"\x06counts\x18\x02 \x03(\v2\x1e.querysheriff.v1.LogLevelCountR\x06counts\x12E\n" +
-	"\n" +
-	"categories\x18\x03 \x03(\v2%.querysheriff.v1.LogCategoryBreakdownR\n" +
-	"categories\"\xc2\x01\n" +
-	"\x14LogCategoryBreakdown\x12A\n" +
-	"\bcategory\x18\x01 \x01(\x0e2%.querysheriff.v1.LogEvent.LogCategoryR\bcategory\x12\x14\n" +
-	"\x05count\x18\x02 \x01(\x03R\x05count\x12Q\n" +
-	"\x0fclassifications\x18\x03 \x03(\v2'.querysheriff.v1.LogClassificationCountR\x0fclassifications\"\x83\x01\n" +
-	"\x16LogClassificationCount\x12S\n" +
-	"\x0eclassification\x18\x01 \x01(\x0e2+.querysheriff.v1.LogEvent.LogClassificationR\x0eclassification\x12\x14\n" +
-	"\x05count\x18\x02 \x01(\x03R\x05count\"_\n" +
-	"\rLogLevelCount\x128\n" +
-	"\x05level\x18\x01 \x01(\x0e2\".querysheriff.v1.LogEvent.LogLevelR\x05level\x12\x14\n" +
-	"\x05count\x18\x02 \x01(\x03R\x05count\"k\n" +
-	"\x10LogCategoryCount\x12A\n" +
-	"\bcategory\x18\x01 \x01(\x0e2%.querysheriff.v1.LogEvent.LogCategoryR\bcategory\x12\x14\n" +
-	"\x05count\x18\x02 \x01(\x03R\x05count\"\xd7\x03\n" +
-	"\x14ListLogFacetsRequest\x12\x1f\n" +
-	"\vserver_name\x18\x01 \x01(\tR\n" +
-	"serverName\x12.\n" +
-	"\x04from\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
-	"\x02to\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\x12\x16\n" +
-	"\x06filter\x18\x04 \x01(\tR\x06filter\x12U\n" +
-	"\x0fclassifications\x18\x05 \x03(\x0e2+.querysheriff.v1.LogEvent.LogClassificationR\x0fclassifications\x12E\n" +
-	"\n" +
-	"categories\x18\x06 \x03(\x0e2%.querysheriff.v1.LogEvent.LogCategoryR\n" +
-	"categories\x12\x1c\n" +
-	"\tdatabases\x18\a \x03(\tR\tdatabases\x12\x1c\n" +
-	"\tusernames\x18\b \x03(\tR\tusernames\x12+\n" +
-	"\x11application_names\x18\t \x03(\tR\x10applicationNames\x12#\n" +
-	"\rbackend_types\x18\n" +
-	" \x03(\tR\fbackendTypes\"J\n" +
-	"\x15ListLogFacetsResponse\x121\n" +
-	"\x06facets\x18\x01 \x03(\v2\x19.querysheriff.v1.LogFacetR\x06facets\"\x96\x01\n" +
-	"\bLogFacet\x124\n" +
-	"\x05field\x18\x01 \x01(\x0e2\x1e.querysheriff.v1.LogFacetFieldR\x05field\x126\n" +
-	"\x06values\x18\x02 \x03(\v2\x1e.querysheriff.v1.LogFacetValueR\x06values\x12\x1c\n" +
-	"\ttruncated\x18\x03 \x01(\bR\ttruncated\"~\n" +
-	"\rLogFacetValue\x12\x14\n" +
-	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
-	"\x05count\x18\x02 \x01(\x03R\x05count\x12A\n" +
-	"\bcategory\x18\x03 \x01(\x0e2%.querysheriff.v1.LogEvent.LogCategoryR\bcategory\"\xc5\x05\n" +
+	"\bhas_more\x18\x02 \x01(\bR\ahasMore\"\xd6\x06\n" +
 	"\tLogRecord\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12;\n" +
 	"\voccurred_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"occurredAt\x12?\n" +
 	"\tlog_level\x18\x03 \x01(\x0e2\".querysheriff.v1.LogEvent.LogLevelR\blogLevel\x12S\n" +
-	"\x0eclassification\x18\x04 \x01(\x0e2+.querysheriff.v1.LogEvent.LogClassificationR\x0eclassification\x12\x10\n" +
-	"\x03pid\x18\x05 \x01(\x05R\x03pid\x12#\n" +
-	"\rdatabase_name\x18\x06 \x01(\tR\fdatabaseName\x12\x1a\n" +
-	"\busername\x18\a \x01(\tR\busername\x12)\n" +
-	"\x10application_name\x18\b \x01(\tR\x0fapplicationName\x12!\n" +
-	"\fbackend_type\x18\t \x01(\tR\vbackendType\x12\x18\n" +
-	"\amessage\x18\n" +
-	" \x01(\tR\amessage\x12\x1d\n" +
+	"\x0eclassification\x18\x04 \x01(\x0e2+.querysheriff.v1.LogEvent.LogClassificationR\x0eclassification\x128\n" +
+	"\bcategory\x18\x05 \x01(\x0e2\x1c.querysheriff.v1.LogCategoryR\bcategory\x12\x10\n" +
+	"\x03pid\x18\x06 \x01(\x05R\x03pid\x12#\n" +
+	"\rdatabase_name\x18\a \x01(\tR\fdatabaseName\x12\x1a\n" +
+	"\busername\x18\b \x01(\tR\busername\x12)\n" +
+	"\x10application_name\x18\t \x01(\tR\x0fapplicationName\x12!\n" +
+	"\fbackend_type\x18\n" +
+	" \x01(\tR\vbackendType\x12\x18\n" +
+	"\amessage\x18\v \x01(\tR\amessage\x12\x1d\n" +
 	"\n" +
-	"state_code\x18\v \x01(\tR\tstateCode\x12\x16\n" +
-	"\x06detail\x18\f \x01(\tR\x06detail\x12\x12\n" +
-	"\x04hint\x18\r \x01(\tR\x04hint\x12\x18\n" +
-	"\acontext\x18\x0e \x01(\tR\acontext\x12\x1c\n" +
-	"\tstatement\x18\x0f \x01(\tR\tstatement\x12A\n" +
-	"\bcategory\x18\x10 \x01(\x0e2%.querysheriff.v1.LogEvent.LogCategoryR\bcategory\x12T\n" +
-	"\x10statement_sample\x18\x11 \x01(\v2).querysheriff.v1.LogRecordStatementSampleR\x0fstatementSample\"\xae\x01\n" +
-	"\x18LogRecordStatementSample\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x04R\x02id\x12\x14\n" +
-	"\x05query\x18\x02 \x01(\tR\x05query\x12\x1f\n" +
-	"\vduration_ms\x18\x03 \x01(\x01R\n" +
-	"durationMs\x12(\n" +
-	"\x10has_explain_plan\x18\x04 \x01(\bR\x0ehasExplainPlan\x12!\n" +
-	"\fstatement_id\x18\x05 \x01(\x04R\vstatementId*\xd8\x01\n" +
-	"\rLogSortColumn\x12\x1f\n" +
-	"\x1bLOG_SORT_COLUMN_UNSPECIFIED\x10\x00\x12\x16\n" +
-	"\x12LOG_SORT_COLUMN_AT\x10\x01\x12\x19\n" +
-	"\x15LOG_SORT_COLUMN_LEVEL\x10\x02\x12\x19\n" +
-	"\x15LOG_SORT_COLUMN_EVENT\x10\x03\x12\x1c\n" +
-	"\x18LOG_SORT_COLUMN_CATEGORY\x10\x04\x12\x1c\n" +
-	"\x18LOG_SORT_COLUMN_DATABASE\x10\x05\x12\x1c\n" +
-	"\x18LOG_SORT_COLUMN_USERNAME\x10\x06*\x91\x02\n" +
+	"state_code\x18\f \x01(\tR\tstateCode\x12\x16\n" +
+	"\x06detail\x18\r \x01(\tR\x06detail\x12\x12\n" +
+	"\x04hint\x18\x0e \x01(\tR\x04hint\x12\x18\n" +
+	"\acontext\x18\x0f \x01(\tR\acontext\x12\x1c\n" +
+	"\tstatement\x18\x10 \x01(\tR\tstatement\x12U\n" +
+	"\x10statement_sample\x18\x11 \x01(\v2*.querysheriff.v1.LogRecord.StatementSampleR\x0fstatementSample\x1a\x96\x01\n" +
+	"\x0fStatementSample\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x04R\x02id\x12!\n" +
+	"\fstatement_id\x18\x02 \x01(\x04R\vstatementId\x12\x14\n" +
+	"\x05query\x18\x03 \x01(\tR\x05query\x12\x1f\n" +
+	"\vduration_ms\x18\x04 \x01(\x01R\n" +
+	"durationMs\x12\x19\n" +
+	"\bhas_plan\x18\x05 \x01(\bR\ahasPlan\"\x92\x01\n" +
+	"\x13GetLogSeriesRequest\x12\x1f\n" +
+	"\vserver_name\x18\x01 \x01(\tR\n" +
+	"serverName\x12.\n" +
+	"\x04from\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
+	"\x02to\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\"\xb5\x01\n" +
+	"\x14GetLogSeriesResponse\x12=\n" +
+	"\abuckets\x18\x01 \x03(\v2#.querysheriff.v1.LogHistogramBucketR\abuckets\x12A\n" +
+	"\flevel_totals\x18\x02 \x03(\v2\x1e.querysheriff.v1.LogLevelCountR\vlevelTotals\x12\x1b\n" +
+	"\tbucket_ms\x18\x03 \x01(\x03R\bbucketMs\"\xbb\x01\n" +
+	"\x12LogHistogramBucket\x12*\n" +
+	"\x02at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x126\n" +
+	"\x06levels\x18\x02 \x03(\v2\x1e.querysheriff.v1.LogLevelCountR\x06levels\x12A\n" +
+	"\n" +
+	"categories\x18\x03 \x03(\v2!.querysheriff.v1.LogCategoryCountR\n" +
+	"categories\"_\n" +
+	"\rLogLevelCount\x128\n" +
+	"\x05level\x18\x01 \x01(\x0e2\".querysheriff.v1.LogEvent.LogLevelR\x05level\x12\x14\n" +
+	"\x05count\x18\x02 \x01(\x03R\x05count\"\xb5\x01\n" +
+	"\x10LogCategoryCount\x128\n" +
+	"\bcategory\x18\x01 \x01(\x0e2\x1c.querysheriff.v1.LogCategoryR\bcategory\x12\x14\n" +
+	"\x05count\x18\x02 \x01(\x03R\x05count\x12Q\n" +
+	"\x0fclassifications\x18\x03 \x03(\v2'.querysheriff.v1.LogClassificationCountR\x0fclassifications\"\x83\x01\n" +
+	"\x16LogClassificationCount\x12S\n" +
+	"\x0eclassification\x18\x01 \x01(\x0e2+.querysheriff.v1.LogEvent.LogClassificationR\x0eclassification\x12\x14\n" +
+	"\x05count\x18\x02 \x01(\x03R\x05count\"\xc7\x01\n" +
+	"\x14ListLogFacetsRequest\x12\x1f\n" +
+	"\vserver_name\x18\x01 \x01(\tR\n" +
+	"serverName\x12.\n" +
+	"\x04from\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
+	"\x02to\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\x122\n" +
+	"\x06filter\x18\x04 \x01(\v2\x1a.querysheriff.v1.LogFilterR\x06filter\"J\n" +
+	"\x15ListLogFacetsResponse\x121\n" +
+	"\x06facets\x18\x01 \x03(\v2\x19.querysheriff.v1.LogFacetR\x06facets\"\x96\x01\n" +
+	"\bLogFacet\x124\n" +
+	"\x05field\x18\x01 \x01(\x0e2\x1e.querysheriff.v1.LogFacetFieldR\x05field\x126\n" +
+	"\x06values\x18\x02 \x03(\v2\x1e.querysheriff.v1.LogFacetValueR\x06values\x12\x1c\n" +
+	"\ttruncated\x18\x03 \x01(\bR\ttruncated\"u\n" +
+	"\rLogFacetValue\x12\x14\n" +
+	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
+	"\x05count\x18\x02 \x01(\x03R\x05count\x128\n" +
+	"\bcategory\x18\x03 \x01(\x0e2\x1c.querysheriff.v1.LogCategoryR\bcategory*\xb7\x02\n" +
+	"\vLogCategory\x12\x1c\n" +
+	"\x18LOG_CATEGORY_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13LOG_CATEGORY_SERVER\x10\x01\x12\x1b\n" +
+	"\x17LOG_CATEGORY_CONNECTION\x10\x02\x12\x1f\n" +
+	"\x1bLOG_CATEGORY_WAL_CHECKPOINT\x10\x03\x12\x1b\n" +
+	"\x17LOG_CATEGORY_AUTOVACUUM\x10\x04\x12\x15\n" +
+	"\x11LOG_CATEGORY_LOCK\x10\x05\x12\x1a\n" +
+	"\x16LOG_CATEGORY_STATEMENT\x10\x06\x12\x18\n" +
+	"\x14LOG_CATEGORY_STANDBY\x10\a\x12%\n" +
+	"!LOG_CATEGORY_CONSTRAINT_VIOLATION\x10\b\x12\"\n" +
+	"\x1eLOG_CATEGORY_APPLICATION_ERROR\x10\t*\x91\x02\n" +
 	"\rLogFacetField\x12\x1f\n" +
 	"\x1bLOG_FACET_FIELD_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18LOG_FACET_FIELD_CATEGORY\x10\x01\x12\"\n" +
@@ -2433,13 +2230,13 @@ const file_querysheriff_v1_log_proto_rawDesc = "" +
 	"\x18LOG_FACET_FIELD_DATABASE\x10\x04\x12\x1c\n" +
 	"\x18LOG_FACET_FIELD_USERNAME\x10\x05\x12$\n" +
 	" LOG_FACET_FIELD_APPLICATION_NAME\x10\x06\x12 \n" +
-	"\x1cLOG_FACET_FIELD_BACKEND_TYPE\x10\a2\x82\x03\n" +
+	"\x1cLOG_FACET_FIELD_BACKEND_TYPE\x10\a2\xf9\x02\n" +
 	"\n" +
 	"LogService\x12W\n" +
 	"\n" +
-	"ReportLogs\x12\".querysheriff.v1.ReportLogsRequest\x1a#.querysheriff.v1.ReportLogsResponse\"\x00\x12T\n" +
-	"\tQueryLogs\x12!.querysheriff.v1.QueryLogsRequest\x1a\".querysheriff.v1.QueryLogsResponse\"\x00\x12c\n" +
-	"\x0eQueryLogSeries\x12&.querysheriff.v1.QueryLogSeriesRequest\x1a'.querysheriff.v1.QueryLogSeriesResponse\"\x00\x12`\n" +
+	"ReportLogs\x12\".querysheriff.v1.ReportLogsRequest\x1a#.querysheriff.v1.ReportLogsResponse\"\x00\x12Q\n" +
+	"\bListLogs\x12 .querysheriff.v1.ListLogsRequest\x1a!.querysheriff.v1.ListLogsResponse\"\x00\x12]\n" +
+	"\fGetLogSeries\x12$.querysheriff.v1.GetLogSeriesRequest\x1a%.querysheriff.v1.GetLogSeriesResponse\"\x00\x12`\n" +
 	"\rListLogFacets\x12%.querysheriff.v1.ListLogFacetsRequest\x1a&.querysheriff.v1.ListLogFacetsResponse\"\x00BDZBgithub.com/querysheriff/backend/gen/querysheriff/v1;querysheriffv1b\x06proto3"
 
 var (
@@ -2454,93 +2251,87 @@ func file_querysheriff_v1_log_proto_rawDescGZIP() []byte {
 	return file_querysheriff_v1_log_proto_rawDescData
 }
 
-var file_querysheriff_v1_log_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_querysheriff_v1_log_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_querysheriff_v1_log_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_querysheriff_v1_log_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_querysheriff_v1_log_proto_goTypes = []any{
-	(LogSortColumn)(0),               // 0: querysheriff.v1.LogSortColumn
-	(LogFacetField)(0),               // 1: querysheriff.v1.LogFacetField
-	(LogEvent_LogLevel)(0),           // 2: querysheriff.v1.LogEvent.LogLevel
-	(LogEvent_LogClassification)(0),  // 3: querysheriff.v1.LogEvent.LogClassification
-	(LogEvent_LogCategory)(0),        // 4: querysheriff.v1.LogEvent.LogCategory
-	(*ReportLogsRequest)(nil),        // 5: querysheriff.v1.ReportLogsRequest
-	(*ReportLogsResponse)(nil),       // 6: querysheriff.v1.ReportLogsResponse
-	(*LogEvent)(nil),                 // 7: querysheriff.v1.LogEvent
-	(*LogStatementSample)(nil),       // 8: querysheriff.v1.LogStatementSample
-	(*QueryLogsRequest)(nil),         // 9: querysheriff.v1.QueryLogsRequest
-	(*QueryLogsResponse)(nil),        // 10: querysheriff.v1.QueryLogsResponse
-	(*QueryLogSeriesRequest)(nil),    // 11: querysheriff.v1.QueryLogSeriesRequest
-	(*QueryLogSeriesResponse)(nil),   // 12: querysheriff.v1.QueryLogSeriesResponse
-	(*LogHistogram)(nil),             // 13: querysheriff.v1.LogHistogram
-	(*LogHistogramBucket)(nil),       // 14: querysheriff.v1.LogHistogramBucket
-	(*LogCategoryBreakdown)(nil),     // 15: querysheriff.v1.LogCategoryBreakdown
-	(*LogClassificationCount)(nil),   // 16: querysheriff.v1.LogClassificationCount
-	(*LogLevelCount)(nil),            // 17: querysheriff.v1.LogLevelCount
-	(*LogCategoryCount)(nil),         // 18: querysheriff.v1.LogCategoryCount
-	(*ListLogFacetsRequest)(nil),     // 19: querysheriff.v1.ListLogFacetsRequest
-	(*ListLogFacetsResponse)(nil),    // 20: querysheriff.v1.ListLogFacetsResponse
-	(*LogFacet)(nil),                 // 21: querysheriff.v1.LogFacet
-	(*LogFacetValue)(nil),            // 22: querysheriff.v1.LogFacetValue
-	(*LogRecord)(nil),                // 23: querysheriff.v1.LogRecord
-	(*LogRecordStatementSample)(nil), // 24: querysheriff.v1.LogRecordStatementSample
-	nil,                              // 25: querysheriff.v1.LogStatementSample.TagsEntry
-	(*timestamppb.Timestamp)(nil),    // 26: google.protobuf.Timestamp
+	(LogCategory)(0),                  // 0: querysheriff.v1.LogCategory
+	(LogFacetField)(0),                // 1: querysheriff.v1.LogFacetField
+	(LogEvent_LogLevel)(0),            // 2: querysheriff.v1.LogEvent.LogLevel
+	(LogEvent_LogClassification)(0),   // 3: querysheriff.v1.LogEvent.LogClassification
+	(*ReportLogsRequest)(nil),         // 4: querysheriff.v1.ReportLogsRequest
+	(*ReportLogsResponse)(nil),        // 5: querysheriff.v1.ReportLogsResponse
+	(*LogEvent)(nil),                  // 6: querysheriff.v1.LogEvent
+	(*LogStatementSample)(nil),        // 7: querysheriff.v1.LogStatementSample
+	(*LogFilter)(nil),                 // 8: querysheriff.v1.LogFilter
+	(*ListLogsRequest)(nil),           // 9: querysheriff.v1.ListLogsRequest
+	(*ListLogsResponse)(nil),          // 10: querysheriff.v1.ListLogsResponse
+	(*LogRecord)(nil),                 // 11: querysheriff.v1.LogRecord
+	(*GetLogSeriesRequest)(nil),       // 12: querysheriff.v1.GetLogSeriesRequest
+	(*GetLogSeriesResponse)(nil),      // 13: querysheriff.v1.GetLogSeriesResponse
+	(*LogHistogramBucket)(nil),        // 14: querysheriff.v1.LogHistogramBucket
+	(*LogLevelCount)(nil),             // 15: querysheriff.v1.LogLevelCount
+	(*LogCategoryCount)(nil),          // 16: querysheriff.v1.LogCategoryCount
+	(*LogClassificationCount)(nil),    // 17: querysheriff.v1.LogClassificationCount
+	(*ListLogFacetsRequest)(nil),      // 18: querysheriff.v1.ListLogFacetsRequest
+	(*ListLogFacetsResponse)(nil),     // 19: querysheriff.v1.ListLogFacetsResponse
+	(*LogFacet)(nil),                  // 20: querysheriff.v1.LogFacet
+	(*LogFacetValue)(nil),             // 21: querysheriff.v1.LogFacetValue
+	nil,                               // 22: querysheriff.v1.LogStatementSample.TagsEntry
+	(*LogRecord_StatementSample)(nil), // 23: querysheriff.v1.LogRecord.StatementSample
+	(*timestamppb.Timestamp)(nil),     // 24: google.protobuf.Timestamp
 }
 var file_querysheriff_v1_log_proto_depIdxs = []int32{
-	26, // 0: querysheriff.v1.ReportLogsRequest.collected_at:type_name -> google.protobuf.Timestamp
-	7,  // 1: querysheriff.v1.ReportLogsRequest.log_events:type_name -> querysheriff.v1.LogEvent
-	26, // 2: querysheriff.v1.LogEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	24, // 0: querysheriff.v1.ReportLogsRequest.collected_at:type_name -> google.protobuf.Timestamp
+	6,  // 1: querysheriff.v1.ReportLogsRequest.log_events:type_name -> querysheriff.v1.LogEvent
+	24, // 2: querysheriff.v1.LogEvent.occurred_at:type_name -> google.protobuf.Timestamp
 	2,  // 3: querysheriff.v1.LogEvent.log_level:type_name -> querysheriff.v1.LogEvent.LogLevel
 	3,  // 4: querysheriff.v1.LogEvent.classification:type_name -> querysheriff.v1.LogEvent.LogClassification
-	8,  // 5: querysheriff.v1.LogEvent.statement_sample:type_name -> querysheriff.v1.LogStatementSample
-	26, // 6: querysheriff.v1.LogStatementSample.occurred_at:type_name -> google.protobuf.Timestamp
-	25, // 7: querysheriff.v1.LogStatementSample.tags:type_name -> querysheriff.v1.LogStatementSample.TagsEntry
-	26, // 8: querysheriff.v1.QueryLogsRequest.from:type_name -> google.protobuf.Timestamp
-	26, // 9: querysheriff.v1.QueryLogsRequest.to:type_name -> google.protobuf.Timestamp
-	2,  // 10: querysheriff.v1.QueryLogsRequest.log_levels:type_name -> querysheriff.v1.LogEvent.LogLevel
-	3,  // 11: querysheriff.v1.QueryLogsRequest.classifications:type_name -> querysheriff.v1.LogEvent.LogClassification
-	4,  // 12: querysheriff.v1.QueryLogsRequest.categories:type_name -> querysheriff.v1.LogEvent.LogCategory
-	0,  // 13: querysheriff.v1.QueryLogsRequest.sort_column:type_name -> querysheriff.v1.LogSortColumn
-	23, // 14: querysheriff.v1.QueryLogsResponse.records:type_name -> querysheriff.v1.LogRecord
-	26, // 15: querysheriff.v1.QueryLogSeriesRequest.from:type_name -> google.protobuf.Timestamp
-	26, // 16: querysheriff.v1.QueryLogSeriesRequest.to:type_name -> google.protobuf.Timestamp
-	13, // 17: querysheriff.v1.QueryLogSeriesResponse.histogram:type_name -> querysheriff.v1.LogHistogram
-	14, // 18: querysheriff.v1.LogHistogram.buckets:type_name -> querysheriff.v1.LogHistogramBucket
-	17, // 19: querysheriff.v1.LogHistogram.level_totals:type_name -> querysheriff.v1.LogLevelCount
-	18, // 20: querysheriff.v1.LogHistogram.category_totals:type_name -> querysheriff.v1.LogCategoryCount
-	26, // 21: querysheriff.v1.LogHistogramBucket.bucket_end:type_name -> google.protobuf.Timestamp
-	17, // 22: querysheriff.v1.LogHistogramBucket.counts:type_name -> querysheriff.v1.LogLevelCount
-	15, // 23: querysheriff.v1.LogHistogramBucket.categories:type_name -> querysheriff.v1.LogCategoryBreakdown
-	4,  // 24: querysheriff.v1.LogCategoryBreakdown.category:type_name -> querysheriff.v1.LogEvent.LogCategory
-	16, // 25: querysheriff.v1.LogCategoryBreakdown.classifications:type_name -> querysheriff.v1.LogClassificationCount
-	3,  // 26: querysheriff.v1.LogClassificationCount.classification:type_name -> querysheriff.v1.LogEvent.LogClassification
+	7,  // 5: querysheriff.v1.LogEvent.statement_sample:type_name -> querysheriff.v1.LogStatementSample
+	24, // 6: querysheriff.v1.LogStatementSample.occurred_at:type_name -> google.protobuf.Timestamp
+	22, // 7: querysheriff.v1.LogStatementSample.tags:type_name -> querysheriff.v1.LogStatementSample.TagsEntry
+	2,  // 8: querysheriff.v1.LogFilter.levels:type_name -> querysheriff.v1.LogEvent.LogLevel
+	3,  // 9: querysheriff.v1.LogFilter.classifications:type_name -> querysheriff.v1.LogEvent.LogClassification
+	0,  // 10: querysheriff.v1.LogFilter.categories:type_name -> querysheriff.v1.LogCategory
+	24, // 11: querysheriff.v1.ListLogsRequest.from:type_name -> google.protobuf.Timestamp
+	24, // 12: querysheriff.v1.ListLogsRequest.to:type_name -> google.protobuf.Timestamp
+	8,  // 13: querysheriff.v1.ListLogsRequest.filter:type_name -> querysheriff.v1.LogFilter
+	11, // 14: querysheriff.v1.ListLogsResponse.records:type_name -> querysheriff.v1.LogRecord
+	24, // 15: querysheriff.v1.LogRecord.occurred_at:type_name -> google.protobuf.Timestamp
+	2,  // 16: querysheriff.v1.LogRecord.log_level:type_name -> querysheriff.v1.LogEvent.LogLevel
+	3,  // 17: querysheriff.v1.LogRecord.classification:type_name -> querysheriff.v1.LogEvent.LogClassification
+	0,  // 18: querysheriff.v1.LogRecord.category:type_name -> querysheriff.v1.LogCategory
+	23, // 19: querysheriff.v1.LogRecord.statement_sample:type_name -> querysheriff.v1.LogRecord.StatementSample
+	24, // 20: querysheriff.v1.GetLogSeriesRequest.from:type_name -> google.protobuf.Timestamp
+	24, // 21: querysheriff.v1.GetLogSeriesRequest.to:type_name -> google.protobuf.Timestamp
+	14, // 22: querysheriff.v1.GetLogSeriesResponse.buckets:type_name -> querysheriff.v1.LogHistogramBucket
+	15, // 23: querysheriff.v1.GetLogSeriesResponse.level_totals:type_name -> querysheriff.v1.LogLevelCount
+	24, // 24: querysheriff.v1.LogHistogramBucket.at:type_name -> google.protobuf.Timestamp
+	15, // 25: querysheriff.v1.LogHistogramBucket.levels:type_name -> querysheriff.v1.LogLevelCount
+	16, // 26: querysheriff.v1.LogHistogramBucket.categories:type_name -> querysheriff.v1.LogCategoryCount
 	2,  // 27: querysheriff.v1.LogLevelCount.level:type_name -> querysheriff.v1.LogEvent.LogLevel
-	4,  // 28: querysheriff.v1.LogCategoryCount.category:type_name -> querysheriff.v1.LogEvent.LogCategory
-	26, // 29: querysheriff.v1.ListLogFacetsRequest.from:type_name -> google.protobuf.Timestamp
-	26, // 30: querysheriff.v1.ListLogFacetsRequest.to:type_name -> google.protobuf.Timestamp
-	3,  // 31: querysheriff.v1.ListLogFacetsRequest.classifications:type_name -> querysheriff.v1.LogEvent.LogClassification
-	4,  // 32: querysheriff.v1.ListLogFacetsRequest.categories:type_name -> querysheriff.v1.LogEvent.LogCategory
-	21, // 33: querysheriff.v1.ListLogFacetsResponse.facets:type_name -> querysheriff.v1.LogFacet
-	1,  // 34: querysheriff.v1.LogFacet.field:type_name -> querysheriff.v1.LogFacetField
-	22, // 35: querysheriff.v1.LogFacet.values:type_name -> querysheriff.v1.LogFacetValue
-	4,  // 36: querysheriff.v1.LogFacetValue.category:type_name -> querysheriff.v1.LogEvent.LogCategory
-	26, // 37: querysheriff.v1.LogRecord.occurred_at:type_name -> google.protobuf.Timestamp
-	2,  // 38: querysheriff.v1.LogRecord.log_level:type_name -> querysheriff.v1.LogEvent.LogLevel
-	3,  // 39: querysheriff.v1.LogRecord.classification:type_name -> querysheriff.v1.LogEvent.LogClassification
-	4,  // 40: querysheriff.v1.LogRecord.category:type_name -> querysheriff.v1.LogEvent.LogCategory
-	24, // 41: querysheriff.v1.LogRecord.statement_sample:type_name -> querysheriff.v1.LogRecordStatementSample
-	5,  // 42: querysheriff.v1.LogService.ReportLogs:input_type -> querysheriff.v1.ReportLogsRequest
-	9,  // 43: querysheriff.v1.LogService.QueryLogs:input_type -> querysheriff.v1.QueryLogsRequest
-	11, // 44: querysheriff.v1.LogService.QueryLogSeries:input_type -> querysheriff.v1.QueryLogSeriesRequest
-	19, // 45: querysheriff.v1.LogService.ListLogFacets:input_type -> querysheriff.v1.ListLogFacetsRequest
-	6,  // 46: querysheriff.v1.LogService.ReportLogs:output_type -> querysheriff.v1.ReportLogsResponse
-	10, // 47: querysheriff.v1.LogService.QueryLogs:output_type -> querysheriff.v1.QueryLogsResponse
-	12, // 48: querysheriff.v1.LogService.QueryLogSeries:output_type -> querysheriff.v1.QueryLogSeriesResponse
-	20, // 49: querysheriff.v1.LogService.ListLogFacets:output_type -> querysheriff.v1.ListLogFacetsResponse
-	46, // [46:50] is the sub-list for method output_type
-	42, // [42:46] is the sub-list for method input_type
-	42, // [42:42] is the sub-list for extension type_name
-	42, // [42:42] is the sub-list for extension extendee
-	0,  // [0:42] is the sub-list for field type_name
+	0,  // 28: querysheriff.v1.LogCategoryCount.category:type_name -> querysheriff.v1.LogCategory
+	17, // 29: querysheriff.v1.LogCategoryCount.classifications:type_name -> querysheriff.v1.LogClassificationCount
+	3,  // 30: querysheriff.v1.LogClassificationCount.classification:type_name -> querysheriff.v1.LogEvent.LogClassification
+	24, // 31: querysheriff.v1.ListLogFacetsRequest.from:type_name -> google.protobuf.Timestamp
+	24, // 32: querysheriff.v1.ListLogFacetsRequest.to:type_name -> google.protobuf.Timestamp
+	8,  // 33: querysheriff.v1.ListLogFacetsRequest.filter:type_name -> querysheriff.v1.LogFilter
+	20, // 34: querysheriff.v1.ListLogFacetsResponse.facets:type_name -> querysheriff.v1.LogFacet
+	1,  // 35: querysheriff.v1.LogFacet.field:type_name -> querysheriff.v1.LogFacetField
+	21, // 36: querysheriff.v1.LogFacet.values:type_name -> querysheriff.v1.LogFacetValue
+	0,  // 37: querysheriff.v1.LogFacetValue.category:type_name -> querysheriff.v1.LogCategory
+	4,  // 38: querysheriff.v1.LogService.ReportLogs:input_type -> querysheriff.v1.ReportLogsRequest
+	9,  // 39: querysheriff.v1.LogService.ListLogs:input_type -> querysheriff.v1.ListLogsRequest
+	12, // 40: querysheriff.v1.LogService.GetLogSeries:input_type -> querysheriff.v1.GetLogSeriesRequest
+	18, // 41: querysheriff.v1.LogService.ListLogFacets:input_type -> querysheriff.v1.ListLogFacetsRequest
+	5,  // 42: querysheriff.v1.LogService.ReportLogs:output_type -> querysheriff.v1.ReportLogsResponse
+	10, // 43: querysheriff.v1.LogService.ListLogs:output_type -> querysheriff.v1.ListLogsResponse
+	13, // 44: querysheriff.v1.LogService.GetLogSeries:output_type -> querysheriff.v1.GetLogSeriesResponse
+	19, // 45: querysheriff.v1.LogService.ListLogFacets:output_type -> querysheriff.v1.ListLogFacetsResponse
+	42, // [42:46] is the sub-list for method output_type
+	38, // [38:42] is the sub-list for method input_type
+	38, // [38:38] is the sub-list for extension type_name
+	38, // [38:38] is the sub-list for extension extendee
+	0,  // [0:38] is the sub-list for field type_name
 }
 
 func init() { file_querysheriff_v1_log_proto_init() }
@@ -2553,8 +2344,8 @@ func file_querysheriff_v1_log_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_querysheriff_v1_log_proto_rawDesc), len(file_querysheriff_v1_log_proto_rawDesc)),
-			NumEnums:      5,
-			NumMessages:   21,
+			NumEnums:      4,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

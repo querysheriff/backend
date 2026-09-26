@@ -33,18 +33,22 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// AlertServiceQueryAlertsProcedure is the fully-qualified name of the AlertService's QueryAlerts
-	// RPC.
-	AlertServiceQueryAlertsProcedure = "/querysheriff.v1.AlertService/QueryAlerts"
-	// AlertServiceUpdateAlertSettingsProcedure is the fully-qualified name of the AlertService's
-	// UpdateAlertSettings RPC.
-	AlertServiceUpdateAlertSettingsProcedure = "/querysheriff.v1.AlertService/UpdateAlertSettings"
+	// AlertServiceListAlertSettingsProcedure is the fully-qualified name of the AlertService's
+	// ListAlertSettings RPC.
+	AlertServiceListAlertSettingsProcedure = "/querysheriff.v1.AlertService/ListAlertSettings"
+	// AlertServiceUpdateAlertWebhookProcedure is the fully-qualified name of the AlertService's
+	// UpdateAlertWebhook RPC.
+	AlertServiceUpdateAlertWebhookProcedure = "/querysheriff.v1.AlertService/UpdateAlertWebhook"
+	// AlertServiceUpdateAlertSettingProcedure is the fully-qualified name of the AlertService's
+	// UpdateAlertSetting RPC.
+	AlertServiceUpdateAlertSettingProcedure = "/querysheriff.v1.AlertService/UpdateAlertSetting"
 )
 
 // AlertServiceClient is a client for the querysheriff.v1.AlertService service.
 type AlertServiceClient interface {
-	QueryAlerts(context.Context, *connect.Request[v1.QueryAlertsRequest]) (*connect.Response[v1.QueryAlertsResponse], error)
-	UpdateAlertSettings(context.Context, *connect.Request[v1.UpdateAlertSettingsRequest]) (*connect.Response[v1.UpdateAlertSettingsResponse], error)
+	ListAlertSettings(context.Context, *connect.Request[v1.ListAlertSettingsRequest]) (*connect.Response[v1.ListAlertSettingsResponse], error)
+	UpdateAlertWebhook(context.Context, *connect.Request[v1.UpdateAlertWebhookRequest]) (*connect.Response[v1.UpdateAlertWebhookResponse], error)
+	UpdateAlertSetting(context.Context, *connect.Request[v1.UpdateAlertSettingRequest]) (*connect.Response[v1.UpdateAlertSettingResponse], error)
 }
 
 // NewAlertServiceClient constructs a client for the querysheriff.v1.AlertService service. By
@@ -58,16 +62,22 @@ func NewAlertServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 	baseURL = strings.TrimRight(baseURL, "/")
 	alertServiceMethods := v1.File_querysheriff_v1_alert_proto.Services().ByName("AlertService").Methods()
 	return &alertServiceClient{
-		queryAlerts: connect.NewClient[v1.QueryAlertsRequest, v1.QueryAlertsResponse](
+		listAlertSettings: connect.NewClient[v1.ListAlertSettingsRequest, v1.ListAlertSettingsResponse](
 			httpClient,
-			baseURL+AlertServiceQueryAlertsProcedure,
-			connect.WithSchema(alertServiceMethods.ByName("QueryAlerts")),
+			baseURL+AlertServiceListAlertSettingsProcedure,
+			connect.WithSchema(alertServiceMethods.ByName("ListAlertSettings")),
 			connect.WithClientOptions(opts...),
 		),
-		updateAlertSettings: connect.NewClient[v1.UpdateAlertSettingsRequest, v1.UpdateAlertSettingsResponse](
+		updateAlertWebhook: connect.NewClient[v1.UpdateAlertWebhookRequest, v1.UpdateAlertWebhookResponse](
 			httpClient,
-			baseURL+AlertServiceUpdateAlertSettingsProcedure,
-			connect.WithSchema(alertServiceMethods.ByName("UpdateAlertSettings")),
+			baseURL+AlertServiceUpdateAlertWebhookProcedure,
+			connect.WithSchema(alertServiceMethods.ByName("UpdateAlertWebhook")),
+			connect.WithClientOptions(opts...),
+		),
+		updateAlertSetting: connect.NewClient[v1.UpdateAlertSettingRequest, v1.UpdateAlertSettingResponse](
+			httpClient,
+			baseURL+AlertServiceUpdateAlertSettingProcedure,
+			connect.WithSchema(alertServiceMethods.ByName("UpdateAlertSetting")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -75,24 +85,31 @@ func NewAlertServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 
 // alertServiceClient implements AlertServiceClient.
 type alertServiceClient struct {
-	queryAlerts         *connect.Client[v1.QueryAlertsRequest, v1.QueryAlertsResponse]
-	updateAlertSettings *connect.Client[v1.UpdateAlertSettingsRequest, v1.UpdateAlertSettingsResponse]
+	listAlertSettings  *connect.Client[v1.ListAlertSettingsRequest, v1.ListAlertSettingsResponse]
+	updateAlertWebhook *connect.Client[v1.UpdateAlertWebhookRequest, v1.UpdateAlertWebhookResponse]
+	updateAlertSetting *connect.Client[v1.UpdateAlertSettingRequest, v1.UpdateAlertSettingResponse]
 }
 
-// QueryAlerts calls querysheriff.v1.AlertService.QueryAlerts.
-func (c *alertServiceClient) QueryAlerts(ctx context.Context, req *connect.Request[v1.QueryAlertsRequest]) (*connect.Response[v1.QueryAlertsResponse], error) {
-	return c.queryAlerts.CallUnary(ctx, req)
+// ListAlertSettings calls querysheriff.v1.AlertService.ListAlertSettings.
+func (c *alertServiceClient) ListAlertSettings(ctx context.Context, req *connect.Request[v1.ListAlertSettingsRequest]) (*connect.Response[v1.ListAlertSettingsResponse], error) {
+	return c.listAlertSettings.CallUnary(ctx, req)
 }
 
-// UpdateAlertSettings calls querysheriff.v1.AlertService.UpdateAlertSettings.
-func (c *alertServiceClient) UpdateAlertSettings(ctx context.Context, req *connect.Request[v1.UpdateAlertSettingsRequest]) (*connect.Response[v1.UpdateAlertSettingsResponse], error) {
-	return c.updateAlertSettings.CallUnary(ctx, req)
+// UpdateAlertWebhook calls querysheriff.v1.AlertService.UpdateAlertWebhook.
+func (c *alertServiceClient) UpdateAlertWebhook(ctx context.Context, req *connect.Request[v1.UpdateAlertWebhookRequest]) (*connect.Response[v1.UpdateAlertWebhookResponse], error) {
+	return c.updateAlertWebhook.CallUnary(ctx, req)
+}
+
+// UpdateAlertSetting calls querysheriff.v1.AlertService.UpdateAlertSetting.
+func (c *alertServiceClient) UpdateAlertSetting(ctx context.Context, req *connect.Request[v1.UpdateAlertSettingRequest]) (*connect.Response[v1.UpdateAlertSettingResponse], error) {
+	return c.updateAlertSetting.CallUnary(ctx, req)
 }
 
 // AlertServiceHandler is an implementation of the querysheriff.v1.AlertService service.
 type AlertServiceHandler interface {
-	QueryAlerts(context.Context, *connect.Request[v1.QueryAlertsRequest]) (*connect.Response[v1.QueryAlertsResponse], error)
-	UpdateAlertSettings(context.Context, *connect.Request[v1.UpdateAlertSettingsRequest]) (*connect.Response[v1.UpdateAlertSettingsResponse], error)
+	ListAlertSettings(context.Context, *connect.Request[v1.ListAlertSettingsRequest]) (*connect.Response[v1.ListAlertSettingsResponse], error)
+	UpdateAlertWebhook(context.Context, *connect.Request[v1.UpdateAlertWebhookRequest]) (*connect.Response[v1.UpdateAlertWebhookResponse], error)
+	UpdateAlertSetting(context.Context, *connect.Request[v1.UpdateAlertSettingRequest]) (*connect.Response[v1.UpdateAlertSettingResponse], error)
 }
 
 // NewAlertServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -102,24 +119,32 @@ type AlertServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewAlertServiceHandler(svc AlertServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	alertServiceMethods := v1.File_querysheriff_v1_alert_proto.Services().ByName("AlertService").Methods()
-	alertServiceQueryAlertsHandler := connect.NewUnaryHandler(
-		AlertServiceQueryAlertsProcedure,
-		svc.QueryAlerts,
-		connect.WithSchema(alertServiceMethods.ByName("QueryAlerts")),
+	alertServiceListAlertSettingsHandler := connect.NewUnaryHandler(
+		AlertServiceListAlertSettingsProcedure,
+		svc.ListAlertSettings,
+		connect.WithSchema(alertServiceMethods.ByName("ListAlertSettings")),
 		connect.WithHandlerOptions(opts...),
 	)
-	alertServiceUpdateAlertSettingsHandler := connect.NewUnaryHandler(
-		AlertServiceUpdateAlertSettingsProcedure,
-		svc.UpdateAlertSettings,
-		connect.WithSchema(alertServiceMethods.ByName("UpdateAlertSettings")),
+	alertServiceUpdateAlertWebhookHandler := connect.NewUnaryHandler(
+		AlertServiceUpdateAlertWebhookProcedure,
+		svc.UpdateAlertWebhook,
+		connect.WithSchema(alertServiceMethods.ByName("UpdateAlertWebhook")),
+		connect.WithHandlerOptions(opts...),
+	)
+	alertServiceUpdateAlertSettingHandler := connect.NewUnaryHandler(
+		AlertServiceUpdateAlertSettingProcedure,
+		svc.UpdateAlertSetting,
+		connect.WithSchema(alertServiceMethods.ByName("UpdateAlertSetting")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/querysheriff.v1.AlertService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case AlertServiceQueryAlertsProcedure:
-			alertServiceQueryAlertsHandler.ServeHTTP(w, r)
-		case AlertServiceUpdateAlertSettingsProcedure:
-			alertServiceUpdateAlertSettingsHandler.ServeHTTP(w, r)
+		case AlertServiceListAlertSettingsProcedure:
+			alertServiceListAlertSettingsHandler.ServeHTTP(w, r)
+		case AlertServiceUpdateAlertWebhookProcedure:
+			alertServiceUpdateAlertWebhookHandler.ServeHTTP(w, r)
+		case AlertServiceUpdateAlertSettingProcedure:
+			alertServiceUpdateAlertSettingHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -129,10 +154,14 @@ func NewAlertServiceHandler(svc AlertServiceHandler, opts ...connect.HandlerOpti
 // UnimplementedAlertServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedAlertServiceHandler struct{}
 
-func (UnimplementedAlertServiceHandler) QueryAlerts(context.Context, *connect.Request[v1.QueryAlertsRequest]) (*connect.Response[v1.QueryAlertsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.AlertService.QueryAlerts is not implemented"))
+func (UnimplementedAlertServiceHandler) ListAlertSettings(context.Context, *connect.Request[v1.ListAlertSettingsRequest]) (*connect.Response[v1.ListAlertSettingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.AlertService.ListAlertSettings is not implemented"))
 }
 
-func (UnimplementedAlertServiceHandler) UpdateAlertSettings(context.Context, *connect.Request[v1.UpdateAlertSettingsRequest]) (*connect.Response[v1.UpdateAlertSettingsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.AlertService.UpdateAlertSettings is not implemented"))
+func (UnimplementedAlertServiceHandler) UpdateAlertWebhook(context.Context, *connect.Request[v1.UpdateAlertWebhookRequest]) (*connect.Response[v1.UpdateAlertWebhookResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.AlertService.UpdateAlertWebhook is not implemented"))
+}
+
+func (UnimplementedAlertServiceHandler) UpdateAlertSetting(context.Context, *connect.Request[v1.UpdateAlertSettingRequest]) (*connect.Response[v1.UpdateAlertSettingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.AlertService.UpdateAlertSetting is not implemented"))
 }

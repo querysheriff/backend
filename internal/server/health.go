@@ -38,7 +38,7 @@ func (s *HealthServer) ReportHealth(
 	err = s.queries.UpsertCollectorHealth(ctx, db.UpsertCollectorHealthParams{
 		ServerName:  serverName,
 		CollectedAt: pgtype.Timestamptz{Time: msg.GetCollectedAt().AsTime(), Valid: true},
-		Databases:   msg.GetDatabases(),
+		Databases:   orEmptyStrings(msg.GetDatabases()),
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -47,31 +47,30 @@ func (s *HealthServer) ReportHealth(
 	return connect.NewResponse(&querysheriffv1.ReportHealthResponse{}), nil
 }
 
-// QueryServers returns monitored servers visible to the current user.
+// ListServers returns the servers that reported in the last 24 hours and the caller may view.
 // Example: allowed=["prod"] -> only prod server is returned.
-func (s *HealthServer) QueryServers(
+func (s *HealthServer) ListServers(
 	ctx context.Context,
-	_ *connect.Request[querysheriffv1.QueryServersRequest],
-) (*connect.Response[querysheriffv1.QueryServersResponse], error) {
+	_ *connect.Request[querysheriffv1.ListServersRequest],
+) (*connect.Response[querysheriffv1.ListServersResponse], error) {
 	principal, err := requirePrincipal(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	servers, err := listAndDecode(ctx, func(ctx context.Context) ([]db.CollectorHealth, error) {
-		return s.queries.ListMonitoredServers(ctx, principal.AllowedServerFilter())
-	}, decodeMonitoredServer)
+	rows, err := s.queries.ListMonitoredServers(ctx, principal.AllowedServerFilter())
 	if err != nil {
-		return nil, err
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	return connect.NewResponse(&querysheriffv1.QueryServersResponse{Servers: servers}), nil
-}
+	servers := make([]*querysheriffv1.Server, len(rows))
+	for i, row := range rows {
+		servers[i] = &querysheriffv1.Server{
+			ServerName: row.ServerName,
+			Databases:  row.Databases,
+			LastSeenAt: timestamptzProto(row.CollectedAt),
+		}
+	}
 
-func decodeMonitoredServer(row db.CollectorHealth) (*querysheriffv1.MonitoredServer, error) {
-	return &querysheriffv1.MonitoredServer{
-		ServerName:  row.ServerName,
-		CollectedAt: timestamptzProto(row.CollectedAt),
-		Databases:   row.Databases,
-	}, nil
+	return connect.NewResponse(&querysheriffv1.ListServersResponse{Servers: servers}), nil
 }

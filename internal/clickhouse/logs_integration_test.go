@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/querysheriff/backend/internal/clickhouse"
-	"github.com/querysheriff/backend/internal/logtaxonomy"
 	"github.com/querysheriff/backend/internal/testdb"
 )
 
@@ -102,7 +101,6 @@ func TestListLogEventsAppliesEveryFilter(t *testing.T) {
 	}
 
 	base := clickhouse.LogFilter{ServerName: serverName, From: now.Add(-time.Hour), To: now}
-	order := clickhouse.LogSortOrder{Key: "at", Desc: true, SeverityOf: logtaxonomy.SeverityRanks()}
 
 	cases := []struct {
 		name   string
@@ -139,7 +137,7 @@ func TestListLogEventsAppliesEveryFilter(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := stats.ListLogEvents(ctx, c.filter(base), order, 50, 0)
+			got, err := stats.ListLogEvents(ctx, c.filter(base), true, 50, 0)
 			if err != nil {
 				t.Fatalf("ListLogEvents: %v", err)
 			}
@@ -172,8 +170,7 @@ func TestListLogEventsSortsAndPages(t *testing.T) {
 
 	filter := clickhouse.LogFilter{ServerName: serverName, From: now.Add(-time.Hour), To: now}
 
-	newestFirst, err := stats.ListLogEvents(ctx, filter,
-		clickhouse.LogSortOrder{Key: "at", Desc: true, SeverityOf: logtaxonomy.SeverityRanks()}, 50, 0)
+	newestFirst, err := stats.ListLogEvents(ctx, filter, true, 50, 0)
 	if err != nil {
 		t.Fatalf("ListLogEvents (at desc): %v", err)
 	}
@@ -182,26 +179,16 @@ func TestListLogEventsSortsAndPages(t *testing.T) {
 		t.Fatalf("sorted by time desc gave %q first, want newest", newestFirst[0].Message)
 	}
 
-	bySeverity, err := stats.ListLogEvents(ctx, filter,
-		clickhouse.LogSortOrder{Key: "level", Desc: true, SeverityOf: logtaxonomy.SeverityRanks()}, 50, 0)
+	oldestFirst, err := stats.ListLogEvents(ctx, filter, false, 50, 0)
 	if err != nil {
-		t.Fatalf("ListLogEvents (level desc): %v", err)
+		t.Fatalf("ListLogEvents (at asc): %v", err)
 	}
 
-	want := []int32{7, 5, 6}
-	for i, level := range want {
-		if bySeverity[i].LogLevel != level {
-			t.Errorf(
-				"severity order[%d] = level %d, want %d (FATAL, ERROR, LOG - LOG is the least severe despite its higher enum value)",
-				i,
-				bySeverity[i].LogLevel,
-				level,
-			)
-		}
+	if len(oldestFirst) != 3 || oldestFirst[2].Message != "newest" {
+		t.Fatalf("sorted by time asc gave %+v, want newest last", oldestFirst)
 	}
 
-	page, err := stats.ListLogEvents(ctx, filter,
-		clickhouse.LogSortOrder{Key: "at", Desc: true, SeverityOf: logtaxonomy.SeverityRanks()}, 1, 1)
+	page, err := stats.ListLogEvents(ctx, filter, true, 1, 1)
 	if err != nil {
 		t.Fatalf("ListLogEvents (paged): %v", err)
 	}

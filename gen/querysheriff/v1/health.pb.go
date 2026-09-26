@@ -110,26 +110,26 @@ func (*ReportHealthResponse) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_health_proto_rawDescGZIP(), []int{1}
 }
 
-type QueryServersRequest struct {
+type ListServersRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *QueryServersRequest) Reset() {
-	*x = QueryServersRequest{}
+func (x *ListServersRequest) Reset() {
+	*x = ListServersRequest{}
 	mi := &file_querysheriff_v1_health_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *QueryServersRequest) String() string {
+func (x *ListServersRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*QueryServersRequest) ProtoMessage() {}
+func (*ListServersRequest) ProtoMessage() {}
 
-func (x *QueryServersRequest) ProtoReflect() protoreflect.Message {
+func (x *ListServersRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_querysheriff_v1_health_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -141,32 +141,32 @@ func (x *QueryServersRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryServersRequest.ProtoReflect.Descriptor instead.
-func (*QueryServersRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListServersRequest.ProtoReflect.Descriptor instead.
+func (*ListServersRequest) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_health_proto_rawDescGZIP(), []int{2}
 }
 
-type QueryServersResponse struct {
+type ListServersResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Servers       []*MonitoredServer     `protobuf:"bytes,1,rep,name=servers,proto3" json:"servers,omitempty"`
+	Servers       []*Server              `protobuf:"bytes,1,rep,name=servers,proto3" json:"servers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *QueryServersResponse) Reset() {
-	*x = QueryServersResponse{}
+func (x *ListServersResponse) Reset() {
+	*x = ListServersResponse{}
 	mi := &file_querysheriff_v1_health_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *QueryServersResponse) String() string {
+func (x *ListServersResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*QueryServersResponse) ProtoMessage() {}
+func (*ListServersResponse) ProtoMessage() {}
 
-func (x *QueryServersResponse) ProtoReflect() protoreflect.Message {
+func (x *ListServersResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_querysheriff_v1_health_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -178,41 +178,41 @@ func (x *QueryServersResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryServersResponse.ProtoReflect.Descriptor instead.
-func (*QueryServersResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListServersResponse.ProtoReflect.Descriptor instead.
+func (*ListServersResponse) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_health_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *QueryServersResponse) GetServers() []*MonitoredServer {
+func (x *ListServersResponse) GetServers() []*Server {
 	if x != nil {
 		return x.Servers
 	}
 	return nil
 }
 
-type MonitoredServer struct {
+type Server struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ServerName    string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
-	CollectedAt   *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=collected_at,json=collectedAt,proto3" json:"collected_at,omitempty"`
-	Databases     []string               `protobuf:"bytes,3,rep,name=databases,proto3" json:"databases,omitempty"`
+	Databases     []string               `protobuf:"bytes,2,rep,name=databases,proto3" json:"databases,omitempty"`
+	LastSeenAt    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *MonitoredServer) Reset() {
-	*x = MonitoredServer{}
+func (x *Server) Reset() {
+	*x = Server{}
 	mi := &file_querysheriff_v1_health_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *MonitoredServer) String() string {
+func (x *Server) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*MonitoredServer) ProtoMessage() {}
+func (*Server) ProtoMessage() {}
 
-func (x *MonitoredServer) ProtoReflect() protoreflect.Message {
+func (x *Server) ProtoReflect() protoreflect.Message {
 	mi := &file_querysheriff_v1_health_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -224,28 +224,28 @@ func (x *MonitoredServer) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MonitoredServer.ProtoReflect.Descriptor instead.
-func (*MonitoredServer) Descriptor() ([]byte, []int) {
+// Deprecated: Use Server.ProtoReflect.Descriptor instead.
+func (*Server) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_health_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *MonitoredServer) GetServerName() string {
+func (x *Server) GetServerName() string {
 	if x != nil {
 		return x.ServerName
 	}
 	return ""
 }
 
-func (x *MonitoredServer) GetCollectedAt() *timestamppb.Timestamp {
+func (x *Server) GetDatabases() []string {
 	if x != nil {
-		return x.CollectedAt
+		return x.Databases
 	}
 	return nil
 }
 
-func (x *MonitoredServer) GetDatabases() []string {
+func (x *Server) GetLastSeenAt() *timestamppb.Timestamp {
 	if x != nil {
-		return x.Databases
+		return x.LastSeenAt
 	}
 	return nil
 }
@@ -258,18 +258,19 @@ const file_querysheriff_v1_health_proto_rawDesc = "" +
 	"\x13ReportHealthRequest\x12=\n" +
 	"\fcollected_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vcollectedAt\x12\x1c\n" +
 	"\tdatabases\x18\x02 \x03(\tR\tdatabases\"\x16\n" +
-	"\x14ReportHealthResponse\"\x15\n" +
-	"\x13QueryServersRequest\"R\n" +
-	"\x14QueryServersResponse\x12:\n" +
-	"\aservers\x18\x01 \x03(\v2 .querysheriff.v1.MonitoredServerR\aservers\"\x8f\x01\n" +
-	"\x0fMonitoredServer\x12\x1f\n" +
+	"\x14ReportHealthResponse\"\x14\n" +
+	"\x12ListServersRequest\"H\n" +
+	"\x13ListServersResponse\x121\n" +
+	"\aservers\x18\x01 \x03(\v2\x17.querysheriff.v1.ServerR\aservers\"\x85\x01\n" +
+	"\x06Server\x12\x1f\n" +
 	"\vserver_name\x18\x01 \x01(\tR\n" +
-	"serverName\x12=\n" +
-	"\fcollected_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vcollectedAt\x12\x1c\n" +
-	"\tdatabases\x18\x03 \x03(\tR\tdatabases2\xcd\x01\n" +
+	"serverName\x12\x1c\n" +
+	"\tdatabases\x18\x02 \x03(\tR\tdatabases\x12<\n" +
+	"\flast_seen_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"lastSeenAt2\xca\x01\n" +
 	"\rHealthService\x12]\n" +
-	"\fReportHealth\x12$.querysheriff.v1.ReportHealthRequest\x1a%.querysheriff.v1.ReportHealthResponse\"\x00\x12]\n" +
-	"\fQueryServers\x12$.querysheriff.v1.QueryServersRequest\x1a%.querysheriff.v1.QueryServersResponse\"\x00BDZBgithub.com/querysheriff/backend/gen/querysheriff/v1;querysheriffv1b\x06proto3"
+	"\fReportHealth\x12$.querysheriff.v1.ReportHealthRequest\x1a%.querysheriff.v1.ReportHealthResponse\"\x00\x12Z\n" +
+	"\vListServers\x12#.querysheriff.v1.ListServersRequest\x1a$.querysheriff.v1.ListServersResponse\"\x00BDZBgithub.com/querysheriff/backend/gen/querysheriff/v1;querysheriffv1b\x06proto3"
 
 var (
 	file_querysheriff_v1_health_proto_rawDescOnce sync.Once
@@ -287,19 +288,19 @@ var file_querysheriff_v1_health_proto_msgTypes = make([]protoimpl.MessageInfo, 5
 var file_querysheriff_v1_health_proto_goTypes = []any{
 	(*ReportHealthRequest)(nil),   // 0: querysheriff.v1.ReportHealthRequest
 	(*ReportHealthResponse)(nil),  // 1: querysheriff.v1.ReportHealthResponse
-	(*QueryServersRequest)(nil),   // 2: querysheriff.v1.QueryServersRequest
-	(*QueryServersResponse)(nil),  // 3: querysheriff.v1.QueryServersResponse
-	(*MonitoredServer)(nil),       // 4: querysheriff.v1.MonitoredServer
+	(*ListServersRequest)(nil),    // 2: querysheriff.v1.ListServersRequest
+	(*ListServersResponse)(nil),   // 3: querysheriff.v1.ListServersResponse
+	(*Server)(nil),                // 4: querysheriff.v1.Server
 	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
 }
 var file_querysheriff_v1_health_proto_depIdxs = []int32{
 	5, // 0: querysheriff.v1.ReportHealthRequest.collected_at:type_name -> google.protobuf.Timestamp
-	4, // 1: querysheriff.v1.QueryServersResponse.servers:type_name -> querysheriff.v1.MonitoredServer
-	5, // 2: querysheriff.v1.MonitoredServer.collected_at:type_name -> google.protobuf.Timestamp
+	4, // 1: querysheriff.v1.ListServersResponse.servers:type_name -> querysheriff.v1.Server
+	5, // 2: querysheriff.v1.Server.last_seen_at:type_name -> google.protobuf.Timestamp
 	0, // 3: querysheriff.v1.HealthService.ReportHealth:input_type -> querysheriff.v1.ReportHealthRequest
-	2, // 4: querysheriff.v1.HealthService.QueryServers:input_type -> querysheriff.v1.QueryServersRequest
+	2, // 4: querysheriff.v1.HealthService.ListServers:input_type -> querysheriff.v1.ListServersRequest
 	1, // 5: querysheriff.v1.HealthService.ReportHealth:output_type -> querysheriff.v1.ReportHealthResponse
-	3, // 6: querysheriff.v1.HealthService.QueryServers:output_type -> querysheriff.v1.QueryServersResponse
+	3, // 6: querysheriff.v1.HealthService.ListServers:output_type -> querysheriff.v1.ListServersResponse
 	5, // [5:7] is the sub-list for method output_type
 	3, // [3:5] is the sub-list for method input_type
 	3, // [3:3] is the sub-list for extension type_name

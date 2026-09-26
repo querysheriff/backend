@@ -65,7 +65,7 @@ func TestLogEventFacetsRouteEveryDimension(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	srv := server.NewLogServer(nil, stats, nil)
+	srv := server.NewLogServer(stats, nil)
 
 	resp, err := srv.ListLogFacets(viewer(ctx), connect.NewRequest(&querysheriffv1.ListLogFacetsRequest{
 		ServerName: serverName,
@@ -98,7 +98,7 @@ func TestLogEventFacetsRouteEveryDimension(t *testing.T) {
 	deadlock := strconv.Itoa(int(querysheriffv1.LogEvent_LOG_CLASSIFICATION_LOCK_DEADLOCK_DETECTED))
 	assertFacetCount(t, facets, querysheriffv1.LogFacetField_LOG_FACET_FIELD_CLASSIFICATION, deadlock, 2)
 
-	lock := strconv.Itoa(int(querysheriffv1.LogEvent_LOG_CATEGORY_LOCK))
+	lock := strconv.Itoa(int(querysheriffv1.LogCategory_LOG_CATEGORY_LOCK))
 	assertFacetCount(t, facets, querysheriffv1.LogFacetField_LOG_FACET_FIELD_CATEGORY, lock, 2)
 
 	level := strconv.Itoa(int(querysheriffv1.LogEvent_LOG_LEVEL_ERROR))
@@ -112,7 +112,7 @@ func TestLogEventFacetsRouteEveryDimension(t *testing.T) {
 	assertFacetCount(t, facets, querysheriffv1.LogFacetField_LOG_FACET_FIELD_DATABASE, "", 1)
 	assertFacetCount(t, facets, querysheriffv1.LogFacetField_LOG_FACET_FIELD_USERNAME, "", 1)
 
-	standby := strconv.Itoa(int(querysheriffv1.LogEvent_LOG_CATEGORY_STANDBY))
+	standby := strconv.Itoa(int(querysheriffv1.LogCategory_LOG_CATEGORY_STANDBY))
 	if _, ok := facets[querysheriffv1.LogFacetField_LOG_FACET_FIELD_CATEGORY][standby]; !ok {
 		t.Error("CATEGORY facet should list every family, including ones with no events")
 	}
@@ -143,16 +143,16 @@ func TestListLogStatementSamplesHydratesSlowQueryRows(t *testing.T) {
 		t.Fatalf("seed event: %v", err)
 	}
 
-	srv := server.NewLogServer(nil, stats, nil)
+	srv := server.NewLogServer(stats, nil)
 
-	resp, err := srv.QueryLogs(viewer(ctx), connect.NewRequest(&querysheriffv1.QueryLogsRequest{
+	resp, err := srv.ListLogs(viewer(ctx), connect.NewRequest(&querysheriffv1.ListLogsRequest{
 		ServerName: serverName,
 		From:       timestamppb.New(occurred.Add(-time.Hour)),
 		To:         timestamppb.New(occurred.Add(time.Hour)),
 		Limit:      10,
 	}))
 	if err != nil {
-		t.Fatalf("QueryLogs: %v", err)
+		t.Fatalf("ListLogs: %v", err)
 	}
 
 	records := resp.Msg.GetRecords()
@@ -175,7 +175,7 @@ func TestListLogStatementSamplesHydratesSlowQueryRows(t *testing.T) {
 		t.Errorf("sample duration = %v, want 2000", sample.GetDurationMs())
 	}
 
-	if !sample.GetHasExplainPlan() {
+	if !sample.GetHasPlan() {
 		t.Error("a sample with explain_plan_json must report a plan so the row can link to it")
 	}
 
@@ -183,7 +183,7 @@ func TestListLogStatementSamplesHydratesSlowQueryRows(t *testing.T) {
 		t.Errorf("hint = %q, want it preserved alongside the sample", record.GetHint())
 	}
 
-	if record.GetCategory() != querysheriffv1.LogEvent_LOG_CATEGORY_STATEMENT {
+	if record.GetCategory() != querysheriffv1.LogCategory_LOG_CATEGORY_STATEMENT {
 		t.Errorf("category = %s, want STATEMENT", record.GetCategory())
 	}
 }

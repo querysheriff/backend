@@ -5,8 +5,9 @@ package querysheriff.v1;
 option go_package = "github.com/querysheriff/backend/gen/querysheriff/v1;querysheriffv1";
 
 service AlertService {
-  rpc QueryAlerts(QueryAlertsRequest) returns (QueryAlertsResponse) {}
-  rpc UpdateAlertSettings(UpdateAlertSettingsRequest) returns (UpdateAlertSettingsResponse) {}
+  rpc ListAlertSettings(ListAlertSettingsRequest) returns (ListAlertSettingsResponse) {}
+  rpc UpdateAlertWebhook(UpdateAlertWebhookRequest) returns (UpdateAlertWebhookResponse) {}
+  rpc UpdateAlertSetting(UpdateAlertSettingRequest) returns (UpdateAlertSettingResponse) {}
 }
 
 enum AlertLevel {
@@ -16,9 +17,9 @@ enum AlertLevel {
   ALERT_LEVEL_CRITICAL = 3;
 }
 
-message QueryAlertsRequest {}
+message ListAlertSettingsRequest {}
 
-message QueryAlertsResponse {
+message ListAlertSettingsResponse {
   repeated ServerAlertSettings servers = 1;
 }
 
@@ -36,15 +37,17 @@ message AlertSetting {
   int64 fires_last_week = 5;
 }
 
-message UpdateAlertSettingsRequest {
+message UpdateAlertWebhookRequest {
   string server_name = 1;
   string slack_webhook_url = 2;
-  repeated AlertToggle toggles = 3;
 }
 
-message AlertToggle {
-  string key = 1;
-  bool enabled = 2;
+message UpdateAlertWebhookResponse {}
+
+message UpdateAlertSettingRequest {
+  string server_name = 1;
+  string key = 2;
+  bool enabled = 3;
 }
 
-message UpdateAlertSettingsResponse {}
+message UpdateAlertSettingResponse {}

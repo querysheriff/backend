@@ -55,7 +55,7 @@ func newAuthFixture(t *testing.T) authFixture {
 	mux.Handle(adminPath, adminHandler)
 
 	authPath, authHandler := querysheriffv1connect.NewAuthServiceHandler(
-		server.NewAuthServer(pool, false), interceptors)
+		server.NewAuthServer(queries, false), interceptors)
 	mux.Handle(authPath, authHandler)
 
 	srv := httptest.NewServer(mux)
@@ -180,10 +180,10 @@ func (f authFixture) listUsers(header func(http.Header)) error {
 func (f authFixture) currentUser(header func(http.Header)) error {
 	client := querysheriffv1connect.NewAuthServiceClient(http.DefaultClient, f.url)
 
-	req := connect.NewRequest(&querysheriffv1.CurrentUserRequest{})
+	req := connect.NewRequest(&querysheriffv1.GetCurrentUserRequest{})
 	header(req.Header())
 
-	_, err := client.CurrentUser(context.Background(), req)
+	_, err := client.GetCurrentUser(context.Background(), req)
 
 	return err
 }
@@ -233,79 +233,128 @@ func cookie(value string) func(http.Header) {
 	return func(h http.Header) { h.Set("Cookie", value) }
 }
 
-func TestCollectorProceduresRequireACollectorToken(t *testing.T) {
+func TestEveryProcedureKindDemandsItsOwnCredentials(t *testing.T) {
 	t.Parallel()
 
 	f := newAuthFixture(t)
 
 	cases := []struct {
 		name   string
+		call   func(func(http.Header)) error
 		header func(http.Header)
 		want   connect.Code
 	}{
-		{"a valid collector token", bearer(f.collectorToken), codeOK},
-		{"no credentials at all", noHeader, connect.CodeUnauthenticated},
-		{"an unknown token", bearer("qsc_not-a-real-token"), connect.CodeUnauthenticated},
-		{"an empty bearer", bearer(""), connect.CodeUnauthenticated},
-		{"a super admin session cookie", cookie(f.adminCookie), connect.CodeUnauthenticated},
+		{"ReportHealth with a collector token", f.reportHealth, bearer(f.collectorToken), codeOK},
+		{"ReportHealth without credentials", f.reportHealth, noHeader, connect.CodeUnauthenticated},
+		{"ReportHealth with an unknown token", f.reportHealth, bearer("qsc_nope"), connect.CodeUnauthenticated},
+		{"ReportHealth with an empty bearer", f.reportHealth, bearer(""), connect.CodeUnauthenticated},
+		{"ReportHealth with an admin session", f.reportHealth, cookie(f.adminCookie), connect.CodeUnauthenticated},
+		{"CurrentUser with a user session", f.currentUser, cookie(f.viewerCookie), codeOK},
+		{"CurrentUser with an admin session", f.currentUser, cookie(f.adminCookie), codeOK},
+		{"CurrentUser without credentials", f.currentUser, noHeader, connect.CodeUnauthenticated},
+		{"CurrentUser with a collector token", f.currentUser, bearer(f.collectorToken), connect.CodeUnauthenticated},
+		{"ListUsers with an admin session", f.listUsers, cookie(f.adminCookie), codeOK},
+		{"ListUsers with a user session", f.listUsers, cookie(f.viewerCookie), connect.CodePermissionDenied},
+		{"ListUsers without credentials", f.listUsers, noHeader, connect.CodeUnauthenticated},
+		{
+			"ListUsers with an unknown session", f.listUsers, cookie("querysheriff_session=qss_nope"),
+			connect.CodeUnauthenticated,
+		},
+		{"ListUsers with a collector token", f.listUsers, bearer(f.collectorToken), connect.CodeUnauthenticated},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 
-			assertCode(t, "ReportHealth with "+c.name, f.reportHealth(c.header), c.want)
+			assertCode(t, c.name, c.call(c.header), c.want)
 		})
 	}
 }
 
-func TestUserProceduresAcceptAnyLoggedInUser(t *testing.T) {
+func TestPasswordChangeEndsTheUsersSessions(t *testing.T) {
 	t.Parallel()
 
 	f := newAuthFixture(t)
+	ctx := context.Background()
+	admin := querysheriffv1connect.NewAdminServiceClient(http.DefaultClient, f.url)
 
-	cases := []struct {
-		name   string
-		header func(http.Header)
-		want   connect.Code
-	}{
-		{"a plain user session", cookie(f.viewerCookie), codeOK},
-		{"a super admin session", cookie(f.adminCookie), codeOK},
-		{"no credentials at all", noHeader, connect.CodeUnauthenticated},
-		{"a collector token", bearer(f.collectorToken), connect.CodeUnauthenticated},
+	listReq := connect.NewRequest(&querysheriffv1.ListUsersRequest{})
+	cookie(f.adminCookie)(listReq.Header())
+
+	users, err := admin.ListUsers(ctx, listReq)
+	if err != nil {
+		t.Fatalf("ListUsers: %v", err)
 	}
 
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
+	var viewer *querysheriffv1.User
 
-			assertCode(t, "CurrentUser with "+c.name, f.currentUser(c.header), c.want)
+	for _, user := range users.Msg.GetUsers() {
+		if user.GetEmail() == f.viewerEmail {
+			viewer = user
+		}
+	}
+
+	if viewer == nil {
+		t.Fatalf("viewer %s not listed", f.viewerEmail)
+	}
+
+	update := func(password string) {
+		req := connect.NewRequest(&querysheriffv1.UpdateUserRequest{
+			Id: viewer.GetId(), Name: viewer.GetName(), Email: viewer.GetEmail(), Password: password,
 		})
+		cookie(f.adminCookie)(req.Header())
+
+		if _, updateErr := admin.UpdateUser(ctx, req); updateErr != nil {
+			t.Fatalf("UpdateUser: %v", updateErr)
+		}
 	}
+
+	update("")
+	assertCode(t, "CurrentUser after a profile-only update", f.currentUser(cookie(f.viewerCookie)), codeOK)
+
+	update("a-brand-new-passphrase")
+	assertCode(t, "CurrentUser after a password change",
+		f.currentUser(cookie(f.viewerCookie)), connect.CodeUnauthenticated)
 }
 
-func TestAdminProceduresRequireASuperAdminSession(t *testing.T) {
-	t.Parallel()
-
+//nolint:paralleltest // Changes the shared super admin's password; parallel tests would lose their admin sessions.
+func TestChangingYourOwnPasswordKeepsYourSession(t *testing.T) {
 	f := newAuthFixture(t)
+	otherBrowser := newAuthFixture(t).adminCookie
+	ctx := context.Background()
+	admin := querysheriffv1connect.NewAdminServiceClient(http.DefaultClient, f.url)
 
-	cases := []struct {
-		name   string
-		header func(http.Header)
-		want   connect.Code
-	}{
-		{"a super admin session", cookie(f.adminCookie), codeOK},
-		{"a plain user session", cookie(f.viewerCookie), connect.CodePermissionDenied},
-		{"no credentials at all", noHeader, connect.CodeUnauthenticated},
-		{"an unknown session", cookie("querysheriff_session=qss_nope"), connect.CodeUnauthenticated},
-		{"a collector token", bearer(f.collectorToken), connect.CodeUnauthenticated},
+	listReq := connect.NewRequest(&querysheriffv1.ListUsersRequest{})
+	cookie(f.adminCookie)(listReq.Header())
+
+	users, err := admin.ListUsers(ctx, listReq)
+	if err != nil {
+		t.Fatalf("ListUsers: %v", err)
 	}
 
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
+	var self *querysheriffv1.User
 
-			assertCode(t, "ListUsers with "+c.name, f.listUsers(c.header), c.want)
-		})
+	for _, user := range users.Msg.GetUsers() {
+		if user.GetIsSuperAdmin() {
+			self = user
+		}
 	}
+
+	if self == nil {
+		t.Fatal("no super admin listed")
+	}
+
+	req := connect.NewRequest(&querysheriffv1.UpdateUserRequest{
+		Id: self.GetId(), Name: self.GetName(), Email: self.GetEmail(), Password: seededPassword,
+	})
+	cookie(f.adminCookie)(req.Header())
+
+	if _, err = admin.UpdateUser(ctx, req); err != nil {
+		t.Fatalf("UpdateUser: %v", err)
+	}
+
+	assertCode(t, "CurrentUser in the session that changed the password", f.currentUser(cookie(f.adminCookie)), codeOK)
+	assertCode(t, "CurrentUser in another session of the same user",
+		f.currentUser(cookie(otherBrowser)), connect.CodeUnauthenticated)
 }

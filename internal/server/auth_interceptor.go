@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	sessionCookieName  = "querysheriff_session"
 	bearerPrefix       = "Bearer "
 	adminServicePrefix = "/querysheriff.v1.AdminService/"
 )
@@ -102,25 +101,7 @@ func authenticateUser(ctx context.Context, queries *db.Queries, header http.Head
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	return &auth.Principal{
-		UserID:         row.ID,
-		Name:           row.Name,
-		Email:          row.Email,
-		IsSuperAdmin:   row.IsSuperAdmin,
-		CreatedAt:      row.CreatedAt.Time,
-		AllowedServers: row.AllowedServers,
-	}, nil
-}
-
-func sessionTokenFromHeader(header http.Header) string {
-	request := http.Request{Header: header}
-
-	cookie, err := request.Cookie(sessionCookieName)
-	if err != nil {
-		return ""
-	}
-
-	return cookie.Value
+	return principalFromUser(row), nil
 }
 
 func requirePrincipal(ctx context.Context) (*auth.Principal, error) {

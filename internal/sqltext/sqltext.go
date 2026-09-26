@@ -13,6 +13,7 @@ import (
 const (
 	previewLimit       = 100
 	samplePreviewLimit = 120
+	alertPreviewLimit  = 80
 )
 
 type Result struct {
@@ -133,6 +134,12 @@ func concretizeNaive(query string, params []string) string {
 	return b.String()
 }
 
+// AlertPreview collapses whitespace and truncates a query for an alert message.
+// Example: "SELECT  *\nFROM x" -> "SELECT * FROM x".
+func AlertPreview(query string) string {
+	return capLen(collapse(query), alertPreviewLimit)
+}
+
 // SamplePreview cleans comments, inserts parameters, and truncates to 120 characters.
 // Example: "SELECT * FROM users WHERE id=$1 -- x", ["42"] -> "SELECT * FROM users WHERE id=42".
 func SamplePreview(query string, params []string) string {
@@ -161,7 +168,7 @@ func previewText(clean string, summary *pg.SummaryResult, err error) string {
 }
 
 func classify(sql string, summary *pg.SummaryResult, err error) querysheriffv1.QueryKind {
-	if err != nil || isUtility(sql) || isConfigCall(sql) {
+	if err != nil || isUtility(sql) || isConfigCall(summary) {
 		return querysheriffv1.QueryKind_QUERY_KIND_OTHERS
 	}
 
@@ -178,8 +185,10 @@ func classify(sql string, summary *pg.SummaryResult, err error) querysheriffv1.Q
 	return querysheriffv1.QueryKind_QUERY_KIND_OTHERS
 }
 
-func isConfigCall(sql string) bool {
-	return strings.Contains(strings.ToLower(sql), "set_config")
+func isConfigCall(summary *pg.SummaryResult) bool {
+	return slices.ContainsFunc(summary.GetFunctions(), func(f *pg.SummaryResult_Function) bool {
+		return f.GetFunctionName() == "set_config"
+	})
 }
 
 func isUtility(sql string) bool {

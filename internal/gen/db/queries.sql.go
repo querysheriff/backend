@@ -115,7 +115,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (name, email, password_hash, is_super_admin, allowed_servers)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, email, is_super_admin, created_at, allowed_servers
+RETURNING id, name, email, password_hash, is_super_admin, allowed_servers, created_at
 `
 
 type CreateUserParams struct {
@@ -126,16 +126,7 @@ type CreateUserParams struct {
 	AllowedServers []string
 }
 
-type CreateUserRow struct {
-	ID             int64
-	Name           string
-	Email          string
-	IsSuperAdmin   bool
-	CreatedAt      pgtype.Timestamptz
-	AllowedServers []string
-}
-
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
 	row := q.db.QueryRow(ctx, createUser,
 		arg.Name,
 		arg.Email,
@@ -143,14 +134,15 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 		arg.IsSuperAdmin,
 		arg.AllowedServers,
 	)
-	var i CreateUserRow
+	var i User
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Email,
+		&i.PasswordHash,
 		&i.IsSuperAdmin,
-		&i.CreatedAt,
 		&i.AllowedServers,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -185,6 +177,15 @@ func (q *Queries) DeleteCollectorToken(ctx context.Context, id int64) (string, e
 	return server_name, err
 }
 
+const deleteExpiredSessions = `-- name: DeleteExpiredSessions :exec
+DELETE FROM user_sessions WHERE expires_at <= now()
+`
+
+func (q *Queries) DeleteExpiredSessions(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteExpiredSessions)
+	return err
+}
+
 const deleteSession = `-- name: DeleteSession :exec
 DELETE FROM user_sessions WHERE token_hash = $1
 `
@@ -203,33 +204,6 @@ func (q *Queries) DeleteUser(ctx context.Context, id int64) error {
 	return err
 }
 
-const getAlertEnabled = `-- name: GetAlertEnabled :one
-SELECT enabled FROM alert_toggles WHERE server_name = $1 AND alert_key = $2
-`
-
-type GetAlertEnabledParams struct {
-	ServerName string
-	AlertKey   string
-}
-
-func (q *Queries) GetAlertEnabled(ctx context.Context, arg GetAlertEnabledParams) (bool, error) {
-	row := q.db.QueryRow(ctx, getAlertEnabled, arg.ServerName, arg.AlertKey)
-	var enabled bool
-	err := row.Scan(&enabled)
-	return enabled, err
-}
-
-const getAlertWebhook = `-- name: GetAlertWebhook :one
-SELECT slack_webhook_url FROM alert_settings WHERE server_name = $1
-`
-
-func (q *Queries) GetAlertWebhook(ctx context.Context, serverName string) (string, error) {
-	row := q.db.QueryRow(ctx, getAlertWebhook, serverName)
-	var slack_webhook_url string
-	err := row.Scan(&slack_webhook_url)
-	return slack_webhook_url, err
-}
-
 const getCollectorServerByHash = `-- name: GetCollectorServerByHash :one
 SELECT server_name FROM collector_tokens WHERE token_hash = $1
 `
@@ -241,94 +215,82 @@ func (q *Queries) GetCollectorServerByHash(ctx context.Context, tokenHash string
 	return server_name, err
 }
 
-const getSessionUser = `-- name: GetSessionUser :one
-SELECT u.id, u.name, u.email, u.is_super_admin, u.created_at, u.allowed_servers
-FROM user_sessions s
-JOIN users u ON u.id = s.user_id
-WHERE s.token_hash = $1 AND s.expires_at > now()
+const getEnabledAlertWebhook = `-- name: GetEnabledAlertWebhook :one
+SELECT s.slack_webhook_url
+FROM alert_settings s
+LEFT JOIN alert_toggles t
+  ON t.server_name = s.server_name AND t.alert_key = $1
+WHERE s.server_name = $2
+  AND s.slack_webhook_url <> ''
+  AND coalesce(t.enabled, true)
 `
 
-type GetSessionUserRow struct {
-	ID             int64
-	Name           string
-	Email          string
-	IsSuperAdmin   bool
-	CreatedAt      pgtype.Timestamptz
-	AllowedServers []string
+type GetEnabledAlertWebhookParams struct {
+	AlertKey   string
+	ServerName string
 }
 
-func (q *Queries) GetSessionUser(ctx context.Context, tokenHash string) (GetSessionUserRow, error) {
+func (q *Queries) GetEnabledAlertWebhook(ctx context.Context, arg GetEnabledAlertWebhookParams) (string, error) {
+	row := q.db.QueryRow(ctx, getEnabledAlertWebhook, arg.AlertKey, arg.ServerName)
+	var slack_webhook_url string
+	err := row.Scan(&slack_webhook_url)
+	return slack_webhook_url, err
+}
+
+const getSessionUser = `-- name: GetSessionUser :one
+SELECT id, name, email, password_hash, is_super_admin, allowed_servers, created_at FROM users
+WHERE id = (SELECT user_id FROM user_sessions WHERE token_hash = $1 AND expires_at > now())
+`
+
+func (q *Queries) GetSessionUser(ctx context.Context, tokenHash string) (User, error) {
 	row := q.db.QueryRow(ctx, getSessionUser, tokenHash)
-	var i GetSessionUserRow
+	var i User
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Email,
+		&i.PasswordHash,
 		&i.IsSuperAdmin,
-		&i.CreatedAt,
 		&i.AllowedServers,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, name, email, password_hash, is_super_admin, created_at, allowed_servers
-FROM users
-WHERE email = $1
+SELECT id, name, email, password_hash, is_super_admin, allowed_servers, created_at FROM users WHERE email = $1
 `
 
-type GetUserByEmailRow struct {
-	ID             int64
-	Name           string
-	Email          string
-	PasswordHash   string
-	IsSuperAdmin   bool
-	CreatedAt      pgtype.Timestamptz
-	AllowedServers []string
-}
-
-func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
 	row := q.db.QueryRow(ctx, getUserByEmail, email)
-	var i GetUserByEmailRow
+	var i User
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Email,
 		&i.PasswordHash,
 		&i.IsSuperAdmin,
-		&i.CreatedAt,
 		&i.AllowedServers,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, name, email, password_hash, is_super_admin, created_at, allowed_servers
-FROM users
-WHERE id = $1
+SELECT id, name, email, password_hash, is_super_admin, allowed_servers, created_at FROM users WHERE id = $1
 `
 
-type GetUserByIDRow struct {
-	ID             int64
-	Name           string
-	Email          string
-	PasswordHash   string
-	IsSuperAdmin   bool
-	CreatedAt      pgtype.Timestamptz
-	AllowedServers []string
-}
-
-func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, error) {
+func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
 	row := q.db.QueryRow(ctx, getUserByID, id)
-	var i GetUserByIDRow
+	var i User
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Email,
 		&i.PasswordHash,
 		&i.IsSuperAdmin,
-		&i.CreatedAt,
 		&i.AllowedServers,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -502,36 +464,26 @@ func (q *Queries) ListStaleServers(ctx context.Context, staleAfter pgtype.Interv
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, name, email, is_super_admin, created_at, allowed_servers
-FROM users
-ORDER BY created_at, id
+SELECT id, name, email, password_hash, is_super_admin, allowed_servers, created_at FROM users ORDER BY created_at, id
 `
 
-type ListUsersRow struct {
-	ID             int64
-	Name           string
-	Email          string
-	IsSuperAdmin   bool
-	CreatedAt      pgtype.Timestamptz
-	AllowedServers []string
-}
-
-func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
+func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 	rows, err := q.db.Query(ctx, listUsers)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListUsersRow
+	var items []User
 	for rows.Next() {
-		var i ListUsersRow
+		var i User
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
 			&i.Email,
+			&i.PasswordHash,
 			&i.IsSuperAdmin,
-			&i.CreatedAt,
 			&i.AllowedServers,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -549,6 +501,30 @@ DELETE FROM alert_fires WHERE fired_at < now() - $1::interval
 
 func (q *Queries) PruneAlertFires(ctx context.Context, historyWindow pgtype.Interval) error {
 	_, err := q.db.Exec(ctx, pruneAlertFires, historyWindow)
+	return err
+}
+
+const releaseAlertClaim = `-- name: ReleaseAlertClaim :exec
+WITH released_fire AS (
+    DELETE FROM alert_fires
+    WHERE alert_fires.server_name = $1
+      AND alert_fires.alert_key = $2
+      AND alert_fires.fired_at = $3
+)
+DELETE FROM alert_notifications
+WHERE alert_notifications.server_name = $1
+  AND alert_notifications.alert_key = $2
+  AND alert_notifications.last_fired_at = $3
+`
+
+type ReleaseAlertClaimParams struct {
+	ServerName string
+	AlertKey   string
+	FiredAt    pgtype.Timestamptz
+}
+
+func (q *Queries) ReleaseAlertClaim(ctx context.Context, arg ReleaseAlertClaimParams) error {
+	_, err := q.db.Exec(ctx, releaseAlertClaim, arg.ServerName, arg.AlertKey, arg.FiredAt)
 	return err
 }
 
@@ -592,50 +568,68 @@ func (q *Queries) TryClaimAlertNotification(ctx context.Context, arg TryClaimAle
 }
 
 const updateUser = `-- name: UpdateUser :one
+WITH revoked AS (
+    DELETE FROM user_sessions
+    WHERE user_id = $5
+      AND token_hash <> $6
+      AND $3::text IS NOT NULL
+)
 UPDATE users
 SET name = $1,
     email = $2,
     password_hash = coalesce($3::text, password_hash),
     allowed_servers = $4
 WHERE id = $5
-RETURNING id, name, email, is_super_admin, created_at, allowed_servers
+RETURNING id, name, email, password_hash, is_super_admin, allowed_servers, created_at
 `
 
 type UpdateUserParams struct {
-	Name           string
-	Email          string
-	PasswordHash   pgtype.Text
-	AllowedServers []string
-	ID             int64
+	Name              string
+	Email             string
+	PasswordHash      pgtype.Text
+	AllowedServers    []string
+	ID                int64
+	CallerSessionHash string
 }
 
-type UpdateUserRow struct {
-	ID             int64
-	Name           string
-	Email          string
-	IsSuperAdmin   bool
-	CreatedAt      pgtype.Timestamptz
-	AllowedServers []string
-}
-
-func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (UpdateUserRow, error) {
+// A new password ends every session opened with the old one, except the caller's own.
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
 	row := q.db.QueryRow(ctx, updateUser,
 		arg.Name,
 		arg.Email,
 		arg.PasswordHash,
 		arg.AllowedServers,
 		arg.ID,
+		arg.CallerSessionHash,
 	)
-	var i UpdateUserRow
+	var i User
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Email,
+		&i.PasswordHash,
 		&i.IsSuperAdmin,
-		&i.CreatedAt,
 		&i.AllowedServers,
+		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const upsertAlertToggle = `-- name: UpsertAlertToggle :exec
+INSERT INTO alert_toggles (server_name, alert_key, enabled)
+VALUES ($1, $2, $3)
+ON CONFLICT (server_name, alert_key) DO UPDATE SET enabled = EXCLUDED.enabled
+`
+
+type UpsertAlertToggleParams struct {
+	ServerName string
+	AlertKey   string
+	Enabled    bool
+}
+
+func (q *Queries) UpsertAlertToggle(ctx context.Context, arg UpsertAlertToggleParams) error {
+	_, err := q.db.Exec(ctx, upsertAlertToggle, arg.ServerName, arg.AlertKey, arg.Enabled)
+	return err
 }
 
 const upsertAlertWebhook = `-- name: UpsertAlertWebhook :exec

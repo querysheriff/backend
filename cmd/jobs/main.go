@@ -5,21 +5,16 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
-	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 
 	"github.com/querysheriff/backend/internal/alerts"
 	chstats "github.com/querysheriff/backend/internal/clickhouse"
 	"github.com/querysheriff/backend/internal/config"
 	"github.com/querysheriff/backend/internal/gen/db"
+	"github.com/querysheriff/backend/internal/postgres"
 )
-
-const connectTimeout = 10 * time.Second
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
@@ -38,12 +33,12 @@ func run(logger *slog.Logger) error {
 
 	_ = godotenv.Load()
 
-	cfg, err := config.LoadJobs()
+	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
 
-	pool, err := connectPool(ctx, cfg.DatabaseURL)
+	pool, err := postgres.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return err
 	}
@@ -60,49 +55,12 @@ func run(logger *slog.Logger) error {
 	queries := db.New(pool)
 	notifier := alerts.NewNotifier(queries, logger)
 
-	jobs := []func(context.Context){
-		func(c context.Context) { alerts.RunScheduler(c, queries, stats, notifier, cfg.DashboardURL, logger) },
-	}
-
 	logger.InfoContext(ctx, "querysheriff jobs started")
 
-	var wg sync.WaitGroup
-	wg.Add(len(jobs))
+	alerts.RunScheduler(ctx, queries, stats, notifier, cfg.DashboardURL, logger)
+	notifier.Wait()
 
-	for _, job := range jobs {
-		go func() {
-			defer wg.Done()
-			job(ctx)
-		}()
-	}
-
-	wg.Wait()
 	logger.InfoContext(ctx, "querysheriff jobs stopped")
 
 	return nil
-}
-
-func connectPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
-	poolCfg, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		return nil, err
-	}
-
-	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeCacheDescribe
-
-	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
-	if err != nil {
-		return nil, err
-	}
-
-	pingCtx, cancel := context.WithTimeout(ctx, connectTimeout)
-	defer cancel()
-
-	if pingErr := pool.Ping(pingCtx); pingErr != nil {
-		pool.Close()
-
-		return nil, pingErr
-	}
-
-	return pool, nil
 }

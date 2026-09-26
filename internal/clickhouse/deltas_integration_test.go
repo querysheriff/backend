@@ -10,7 +10,7 @@ import (
 	"github.com/querysheriff/backend/internal/clickhouse"
 )
 
-func TestListSlowStatementsAppliesThresholds(t *testing.T) {
+func TestTopStatementsAppliesThresholds(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -20,12 +20,12 @@ func TestListSlowStatementsAppliesThresholds(t *testing.T) {
 	f.seedStatement(t, 2, 1, []int64{20, 20}, 5)            // fast
 	f.seedStatement(t, 3, 1, []int64{1}, 1500)              // slow but rare
 
-	rows, err := f.client.ListSlowStatements(ctx, clickhouse.SlowStatementsParams{
+	rows, err := f.client.TopStatements(ctx, clickhouse.TopStatementsParams{
 		ServerName: f.server, From: f.base.Add(-time.Minute),
 		MinCalls: 10, MinAvgMs: 1000, MaxRows: 10,
 	})
 	if err != nil {
-		t.Fatalf("ListSlowStatements: %v", err)
+		t.Fatalf("TopStatements: %v", err)
 	}
 
 	if len(rows) != 1 {
@@ -59,9 +59,12 @@ func TestWeeklyReportPartsReadBack(t *testing.T) {
 		t.Errorf("CallsBetween = %d, want 30", calls)
 	}
 
-	top, err := f.client.TopStatementsByExecTime(ctx, f.server, from, 5)
+	top, err := f.client.TopStatements(
+		ctx,
+		clickhouse.TopStatementsParams{ServerName: f.server, From: from, MaxRows: 5},
+	)
 	if err != nil {
-		t.Fatalf("TopStatementsByExecTime: %v", err)
+		t.Fatalf("TopStatements: %v", err)
 	}
 
 	if len(top) != 1 || top[0].Calls != 30 {

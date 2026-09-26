@@ -39,33 +39,24 @@ const (
 	// StatementServiceReportStatementTextsProcedure is the fully-qualified name of the
 	// StatementService's ReportStatementTexts RPC.
 	StatementServiceReportStatementTextsProcedure = "/querysheriff.v1.StatementService/ReportStatementTexts"
-	// StatementServiceQueryStatementsProcedure is the fully-qualified name of the StatementService's
-	// QueryStatements RPC.
-	StatementServiceQueryStatementsProcedure = "/querysheriff.v1.StatementService/QueryStatements"
-	// StatementServiceQueryStatementCallsSeriesProcedure is the fully-qualified name of the
-	// StatementService's QueryStatementCallsSeries RPC.
-	StatementServiceQueryStatementCallsSeriesProcedure = "/querysheriff.v1.StatementService/QueryStatementCallsSeries"
-	// StatementServiceQueryStatementPercentileSeriesProcedure is the fully-qualified name of the
-	// StatementService's QueryStatementPercentileSeries RPC.
-	StatementServiceQueryStatementPercentileSeriesProcedure = "/querysheriff.v1.StatementService/QueryStatementPercentileSeries"
-	// StatementServiceQueryStatementTimingSeriesProcedure is the fully-qualified name of the
-	// StatementService's QueryStatementTimingSeries RPC.
-	StatementServiceQueryStatementTimingSeriesProcedure = "/querysheriff.v1.StatementService/QueryStatementTimingSeries"
-	// StatementServiceQueryStatementDetailProcedure is the fully-qualified name of the
-	// StatementService's QueryStatementDetail RPC.
-	StatementServiceQueryStatementDetailProcedure = "/querysheriff.v1.StatementService/QueryStatementDetail"
-	// StatementServiceQueryStatementSamplesProcedure is the fully-qualified name of the
-	// StatementService's QueryStatementSamples RPC.
-	StatementServiceQueryStatementSamplesProcedure = "/querysheriff.v1.StatementService/QueryStatementSamples"
-	// StatementServiceGetStatementSamplePlanProcedure is the fully-qualified name of the
-	// StatementService's GetStatementSamplePlan RPC.
-	StatementServiceGetStatementSamplePlanProcedure = "/querysheriff.v1.StatementService/GetStatementSamplePlan"
-	// StatementServiceGetStatementSampleTextProcedure is the fully-qualified name of the
-	// StatementService's GetStatementSampleText RPC.
-	StatementServiceGetStatementSampleTextProcedure = "/querysheriff.v1.StatementService/GetStatementSampleText"
-	// StatementServiceGetStatementTextProcedure is the fully-qualified name of the StatementService's
-	// GetStatementText RPC.
-	StatementServiceGetStatementTextProcedure = "/querysheriff.v1.StatementService/GetStatementText"
+	// StatementServiceListStatementsProcedure is the fully-qualified name of the StatementService's
+	// ListStatements RPC.
+	StatementServiceListStatementsProcedure = "/querysheriff.v1.StatementService/ListStatements"
+	// StatementServiceGetStatementProcedure is the fully-qualified name of the StatementService's
+	// GetStatement RPC.
+	StatementServiceGetStatementProcedure = "/querysheriff.v1.StatementService/GetStatement"
+	// StatementServiceGetStatementSeriesProcedure is the fully-qualified name of the StatementService's
+	// GetStatementSeries RPC.
+	StatementServiceGetStatementSeriesProcedure = "/querysheriff.v1.StatementService/GetStatementSeries"
+	// StatementServiceGetLatencySeriesProcedure is the fully-qualified name of the StatementService's
+	// GetLatencySeries RPC.
+	StatementServiceGetLatencySeriesProcedure = "/querysheriff.v1.StatementService/GetLatencySeries"
+	// StatementServiceListStatementSamplesProcedure is the fully-qualified name of the
+	// StatementService's ListStatementSamples RPC.
+	StatementServiceListStatementSamplesProcedure = "/querysheriff.v1.StatementService/ListStatementSamples"
+	// StatementServiceGetStatementSampleProcedure is the fully-qualified name of the StatementService's
+	// GetStatementSample RPC.
+	StatementServiceGetStatementSampleProcedure = "/querysheriff.v1.StatementService/GetStatementSample"
 	// StatementServiceListTagKeysProcedure is the fully-qualified name of the StatementService's
 	// ListTagKeys RPC.
 	StatementServiceListTagKeysProcedure = "/querysheriff.v1.StatementService/ListTagKeys"
@@ -78,15 +69,12 @@ const (
 type StatementServiceClient interface {
 	ReportStatements(context.Context, *connect.Request[v1.ReportStatementsRequest]) (*connect.Response[v1.ReportStatementsResponse], error)
 	ReportStatementTexts(context.Context, *connect.Request[v1.ReportStatementTextsRequest]) (*connect.Response[v1.ReportStatementTextsResponse], error)
-	QueryStatements(context.Context, *connect.Request[v1.QueryStatementsRequest]) (*connect.Response[v1.QueryStatementsResponse], error)
-	QueryStatementCallsSeries(context.Context, *connect.Request[v1.QueryStatementCallsSeriesRequest]) (*connect.Response[v1.QueryStatementCallsSeriesResponse], error)
-	QueryStatementPercentileSeries(context.Context, *connect.Request[v1.QueryStatementPercentileSeriesRequest]) (*connect.Response[v1.QueryStatementPercentileSeriesResponse], error)
-	QueryStatementTimingSeries(context.Context, *connect.Request[v1.QueryStatementTimingSeriesRequest]) (*connect.Response[v1.QueryStatementTimingSeriesResponse], error)
-	QueryStatementDetail(context.Context, *connect.Request[v1.QueryStatementDetailRequest]) (*connect.Response[v1.QueryStatementDetailResponse], error)
-	QueryStatementSamples(context.Context, *connect.Request[v1.QueryStatementSamplesRequest]) (*connect.Response[v1.QueryStatementSamplesResponse], error)
-	GetStatementSamplePlan(context.Context, *connect.Request[v1.GetStatementSamplePlanRequest]) (*connect.Response[v1.GetStatementSamplePlanResponse], error)
-	GetStatementSampleText(context.Context, *connect.Request[v1.GetStatementSampleTextRequest]) (*connect.Response[v1.GetStatementSampleTextResponse], error)
-	GetStatementText(context.Context, *connect.Request[v1.GetStatementTextRequest]) (*connect.Response[v1.GetStatementTextResponse], error)
+	ListStatements(context.Context, *connect.Request[v1.ListStatementsRequest]) (*connect.Response[v1.ListStatementsResponse], error)
+	GetStatement(context.Context, *connect.Request[v1.GetStatementRequest]) (*connect.Response[v1.GetStatementResponse], error)
+	GetStatementSeries(context.Context, *connect.Request[v1.GetStatementSeriesRequest]) (*connect.Response[v1.GetStatementSeriesResponse], error)
+	GetLatencySeries(context.Context, *connect.Request[v1.GetLatencySeriesRequest]) (*connect.Response[v1.GetLatencySeriesResponse], error)
+	ListStatementSamples(context.Context, *connect.Request[v1.ListStatementSamplesRequest]) (*connect.Response[v1.ListStatementSamplesResponse], error)
+	GetStatementSample(context.Context, *connect.Request[v1.GetStatementSampleRequest]) (*connect.Response[v1.GetStatementSampleResponse], error)
 	ListTagKeys(context.Context, *connect.Request[v1.ListTagKeysRequest]) (*connect.Response[v1.ListTagKeysResponse], error)
 	ListTagValues(context.Context, *connect.Request[v1.ListTagValuesRequest]) (*connect.Response[v1.ListTagValuesResponse], error)
 }
@@ -114,58 +102,40 @@ func NewStatementServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(statementServiceMethods.ByName("ReportStatementTexts")),
 			connect.WithClientOptions(opts...),
 		),
-		queryStatements: connect.NewClient[v1.QueryStatementsRequest, v1.QueryStatementsResponse](
+		listStatements: connect.NewClient[v1.ListStatementsRequest, v1.ListStatementsResponse](
 			httpClient,
-			baseURL+StatementServiceQueryStatementsProcedure,
-			connect.WithSchema(statementServiceMethods.ByName("QueryStatements")),
+			baseURL+StatementServiceListStatementsProcedure,
+			connect.WithSchema(statementServiceMethods.ByName("ListStatements")),
 			connect.WithClientOptions(opts...),
 		),
-		queryStatementCallsSeries: connect.NewClient[v1.QueryStatementCallsSeriesRequest, v1.QueryStatementCallsSeriesResponse](
+		getStatement: connect.NewClient[v1.GetStatementRequest, v1.GetStatementResponse](
 			httpClient,
-			baseURL+StatementServiceQueryStatementCallsSeriesProcedure,
-			connect.WithSchema(statementServiceMethods.ByName("QueryStatementCallsSeries")),
+			baseURL+StatementServiceGetStatementProcedure,
+			connect.WithSchema(statementServiceMethods.ByName("GetStatement")),
 			connect.WithClientOptions(opts...),
 		),
-		queryStatementPercentileSeries: connect.NewClient[v1.QueryStatementPercentileSeriesRequest, v1.QueryStatementPercentileSeriesResponse](
+		getStatementSeries: connect.NewClient[v1.GetStatementSeriesRequest, v1.GetStatementSeriesResponse](
 			httpClient,
-			baseURL+StatementServiceQueryStatementPercentileSeriesProcedure,
-			connect.WithSchema(statementServiceMethods.ByName("QueryStatementPercentileSeries")),
+			baseURL+StatementServiceGetStatementSeriesProcedure,
+			connect.WithSchema(statementServiceMethods.ByName("GetStatementSeries")),
 			connect.WithClientOptions(opts...),
 		),
-		queryStatementTimingSeries: connect.NewClient[v1.QueryStatementTimingSeriesRequest, v1.QueryStatementTimingSeriesResponse](
+		getLatencySeries: connect.NewClient[v1.GetLatencySeriesRequest, v1.GetLatencySeriesResponse](
 			httpClient,
-			baseURL+StatementServiceQueryStatementTimingSeriesProcedure,
-			connect.WithSchema(statementServiceMethods.ByName("QueryStatementTimingSeries")),
+			baseURL+StatementServiceGetLatencySeriesProcedure,
+			connect.WithSchema(statementServiceMethods.ByName("GetLatencySeries")),
 			connect.WithClientOptions(opts...),
 		),
-		queryStatementDetail: connect.NewClient[v1.QueryStatementDetailRequest, v1.QueryStatementDetailResponse](
+		listStatementSamples: connect.NewClient[v1.ListStatementSamplesRequest, v1.ListStatementSamplesResponse](
 			httpClient,
-			baseURL+StatementServiceQueryStatementDetailProcedure,
-			connect.WithSchema(statementServiceMethods.ByName("QueryStatementDetail")),
+			baseURL+StatementServiceListStatementSamplesProcedure,
+			connect.WithSchema(statementServiceMethods.ByName("ListStatementSamples")),
 			connect.WithClientOptions(opts...),
 		),
-		queryStatementSamples: connect.NewClient[v1.QueryStatementSamplesRequest, v1.QueryStatementSamplesResponse](
+		getStatementSample: connect.NewClient[v1.GetStatementSampleRequest, v1.GetStatementSampleResponse](
 			httpClient,
-			baseURL+StatementServiceQueryStatementSamplesProcedure,
-			connect.WithSchema(statementServiceMethods.ByName("QueryStatementSamples")),
-			connect.WithClientOptions(opts...),
-		),
-		getStatementSamplePlan: connect.NewClient[v1.GetStatementSamplePlanRequest, v1.GetStatementSamplePlanResponse](
-			httpClient,
-			baseURL+StatementServiceGetStatementSamplePlanProcedure,
-			connect.WithSchema(statementServiceMethods.ByName("GetStatementSamplePlan")),
-			connect.WithClientOptions(opts...),
-		),
-		getStatementSampleText: connect.NewClient[v1.GetStatementSampleTextRequest, v1.GetStatementSampleTextResponse](
-			httpClient,
-			baseURL+StatementServiceGetStatementSampleTextProcedure,
-			connect.WithSchema(statementServiceMethods.ByName("GetStatementSampleText")),
-			connect.WithClientOptions(opts...),
-		),
-		getStatementText: connect.NewClient[v1.GetStatementTextRequest, v1.GetStatementTextResponse](
-			httpClient,
-			baseURL+StatementServiceGetStatementTextProcedure,
-			connect.WithSchema(statementServiceMethods.ByName("GetStatementText")),
+			baseURL+StatementServiceGetStatementSampleProcedure,
+			connect.WithSchema(statementServiceMethods.ByName("GetStatementSample")),
 			connect.WithClientOptions(opts...),
 		),
 		listTagKeys: connect.NewClient[v1.ListTagKeysRequest, v1.ListTagKeysResponse](
@@ -185,19 +155,16 @@ func NewStatementServiceClient(httpClient connect.HTTPClient, baseURL string, op
 
 // statementServiceClient implements StatementServiceClient.
 type statementServiceClient struct {
-	reportStatements               *connect.Client[v1.ReportStatementsRequest, v1.ReportStatementsResponse]
-	reportStatementTexts           *connect.Client[v1.ReportStatementTextsRequest, v1.ReportStatementTextsResponse]
-	queryStatements                *connect.Client[v1.QueryStatementsRequest, v1.QueryStatementsResponse]
-	queryStatementCallsSeries      *connect.Client[v1.QueryStatementCallsSeriesRequest, v1.QueryStatementCallsSeriesResponse]
-	queryStatementPercentileSeries *connect.Client[v1.QueryStatementPercentileSeriesRequest, v1.QueryStatementPercentileSeriesResponse]
-	queryStatementTimingSeries     *connect.Client[v1.QueryStatementTimingSeriesRequest, v1.QueryStatementTimingSeriesResponse]
-	queryStatementDetail           *connect.Client[v1.QueryStatementDetailRequest, v1.QueryStatementDetailResponse]
-	queryStatementSamples          *connect.Client[v1.QueryStatementSamplesRequest, v1.QueryStatementSamplesResponse]
-	getStatementSamplePlan         *connect.Client[v1.GetStatementSamplePlanRequest, v1.GetStatementSamplePlanResponse]
-	getStatementSampleText         *connect.Client[v1.GetStatementSampleTextRequest, v1.GetStatementSampleTextResponse]
-	getStatementText               *connect.Client[v1.GetStatementTextRequest, v1.GetStatementTextResponse]
-	listTagKeys                    *connect.Client[v1.ListTagKeysRequest, v1.ListTagKeysResponse]
-	listTagValues                  *connect.Client[v1.ListTagValuesRequest, v1.ListTagValuesResponse]
+	reportStatements     *connect.Client[v1.ReportStatementsRequest, v1.ReportStatementsResponse]
+	reportStatementTexts *connect.Client[v1.ReportStatementTextsRequest, v1.ReportStatementTextsResponse]
+	listStatements       *connect.Client[v1.ListStatementsRequest, v1.ListStatementsResponse]
+	getStatement         *connect.Client[v1.GetStatementRequest, v1.GetStatementResponse]
+	getStatementSeries   *connect.Client[v1.GetStatementSeriesRequest, v1.GetStatementSeriesResponse]
+	getLatencySeries     *connect.Client[v1.GetLatencySeriesRequest, v1.GetLatencySeriesResponse]
+	listStatementSamples *connect.Client[v1.ListStatementSamplesRequest, v1.ListStatementSamplesResponse]
+	getStatementSample   *connect.Client[v1.GetStatementSampleRequest, v1.GetStatementSampleResponse]
+	listTagKeys          *connect.Client[v1.ListTagKeysRequest, v1.ListTagKeysResponse]
+	listTagValues        *connect.Client[v1.ListTagValuesRequest, v1.ListTagValuesResponse]
 }
 
 // ReportStatements calls querysheriff.v1.StatementService.ReportStatements.
@@ -210,50 +177,34 @@ func (c *statementServiceClient) ReportStatementTexts(ctx context.Context, req *
 	return c.reportStatementTexts.CallUnary(ctx, req)
 }
 
-// QueryStatements calls querysheriff.v1.StatementService.QueryStatements.
-func (c *statementServiceClient) QueryStatements(ctx context.Context, req *connect.Request[v1.QueryStatementsRequest]) (*connect.Response[v1.QueryStatementsResponse], error) {
-	return c.queryStatements.CallUnary(ctx, req)
+// ListStatements calls querysheriff.v1.StatementService.ListStatements.
+func (c *statementServiceClient) ListStatements(ctx context.Context, req *connect.Request[v1.ListStatementsRequest]) (*connect.Response[v1.ListStatementsResponse], error) {
+	return c.listStatements.CallUnary(ctx, req)
 }
 
-// QueryStatementCallsSeries calls querysheriff.v1.StatementService.QueryStatementCallsSeries.
-func (c *statementServiceClient) QueryStatementCallsSeries(ctx context.Context, req *connect.Request[v1.QueryStatementCallsSeriesRequest]) (*connect.Response[v1.QueryStatementCallsSeriesResponse], error) {
-	return c.queryStatementCallsSeries.CallUnary(ctx, req)
+// GetStatement calls querysheriff.v1.StatementService.GetStatement.
+func (c *statementServiceClient) GetStatement(ctx context.Context, req *connect.Request[v1.GetStatementRequest]) (*connect.Response[v1.GetStatementResponse], error) {
+	return c.getStatement.CallUnary(ctx, req)
 }
 
-// QueryStatementPercentileSeries calls
-// querysheriff.v1.StatementService.QueryStatementPercentileSeries.
-func (c *statementServiceClient) QueryStatementPercentileSeries(ctx context.Context, req *connect.Request[v1.QueryStatementPercentileSeriesRequest]) (*connect.Response[v1.QueryStatementPercentileSeriesResponse], error) {
-	return c.queryStatementPercentileSeries.CallUnary(ctx, req)
+// GetStatementSeries calls querysheriff.v1.StatementService.GetStatementSeries.
+func (c *statementServiceClient) GetStatementSeries(ctx context.Context, req *connect.Request[v1.GetStatementSeriesRequest]) (*connect.Response[v1.GetStatementSeriesResponse], error) {
+	return c.getStatementSeries.CallUnary(ctx, req)
 }
 
-// QueryStatementTimingSeries calls querysheriff.v1.StatementService.QueryStatementTimingSeries.
-func (c *statementServiceClient) QueryStatementTimingSeries(ctx context.Context, req *connect.Request[v1.QueryStatementTimingSeriesRequest]) (*connect.Response[v1.QueryStatementTimingSeriesResponse], error) {
-	return c.queryStatementTimingSeries.CallUnary(ctx, req)
+// GetLatencySeries calls querysheriff.v1.StatementService.GetLatencySeries.
+func (c *statementServiceClient) GetLatencySeries(ctx context.Context, req *connect.Request[v1.GetLatencySeriesRequest]) (*connect.Response[v1.GetLatencySeriesResponse], error) {
+	return c.getLatencySeries.CallUnary(ctx, req)
 }
 
-// QueryStatementDetail calls querysheriff.v1.StatementService.QueryStatementDetail.
-func (c *statementServiceClient) QueryStatementDetail(ctx context.Context, req *connect.Request[v1.QueryStatementDetailRequest]) (*connect.Response[v1.QueryStatementDetailResponse], error) {
-	return c.queryStatementDetail.CallUnary(ctx, req)
+// ListStatementSamples calls querysheriff.v1.StatementService.ListStatementSamples.
+func (c *statementServiceClient) ListStatementSamples(ctx context.Context, req *connect.Request[v1.ListStatementSamplesRequest]) (*connect.Response[v1.ListStatementSamplesResponse], error) {
+	return c.listStatementSamples.CallUnary(ctx, req)
 }
 
-// QueryStatementSamples calls querysheriff.v1.StatementService.QueryStatementSamples.
-func (c *statementServiceClient) QueryStatementSamples(ctx context.Context, req *connect.Request[v1.QueryStatementSamplesRequest]) (*connect.Response[v1.QueryStatementSamplesResponse], error) {
-	return c.queryStatementSamples.CallUnary(ctx, req)
-}
-
-// GetStatementSamplePlan calls querysheriff.v1.StatementService.GetStatementSamplePlan.
-func (c *statementServiceClient) GetStatementSamplePlan(ctx context.Context, req *connect.Request[v1.GetStatementSamplePlanRequest]) (*connect.Response[v1.GetStatementSamplePlanResponse], error) {
-	return c.getStatementSamplePlan.CallUnary(ctx, req)
-}
-
-// GetStatementSampleText calls querysheriff.v1.StatementService.GetStatementSampleText.
-func (c *statementServiceClient) GetStatementSampleText(ctx context.Context, req *connect.Request[v1.GetStatementSampleTextRequest]) (*connect.Response[v1.GetStatementSampleTextResponse], error) {
-	return c.getStatementSampleText.CallUnary(ctx, req)
-}
-
-// GetStatementText calls querysheriff.v1.StatementService.GetStatementText.
-func (c *statementServiceClient) GetStatementText(ctx context.Context, req *connect.Request[v1.GetStatementTextRequest]) (*connect.Response[v1.GetStatementTextResponse], error) {
-	return c.getStatementText.CallUnary(ctx, req)
+// GetStatementSample calls querysheriff.v1.StatementService.GetStatementSample.
+func (c *statementServiceClient) GetStatementSample(ctx context.Context, req *connect.Request[v1.GetStatementSampleRequest]) (*connect.Response[v1.GetStatementSampleResponse], error) {
+	return c.getStatementSample.CallUnary(ctx, req)
 }
 
 // ListTagKeys calls querysheriff.v1.StatementService.ListTagKeys.
@@ -270,15 +221,12 @@ func (c *statementServiceClient) ListTagValues(ctx context.Context, req *connect
 type StatementServiceHandler interface {
 	ReportStatements(context.Context, *connect.Request[v1.ReportStatementsRequest]) (*connect.Response[v1.ReportStatementsResponse], error)
 	ReportStatementTexts(context.Context, *connect.Request[v1.ReportStatementTextsRequest]) (*connect.Response[v1.ReportStatementTextsResponse], error)
-	QueryStatements(context.Context, *connect.Request[v1.QueryStatementsRequest]) (*connect.Response[v1.QueryStatementsResponse], error)
-	QueryStatementCallsSeries(context.Context, *connect.Request[v1.QueryStatementCallsSeriesRequest]) (*connect.Response[v1.QueryStatementCallsSeriesResponse], error)
-	QueryStatementPercentileSeries(context.Context, *connect.Request[v1.QueryStatementPercentileSeriesRequest]) (*connect.Response[v1.QueryStatementPercentileSeriesResponse], error)
-	QueryStatementTimingSeries(context.Context, *connect.Request[v1.QueryStatementTimingSeriesRequest]) (*connect.Response[v1.QueryStatementTimingSeriesResponse], error)
-	QueryStatementDetail(context.Context, *connect.Request[v1.QueryStatementDetailRequest]) (*connect.Response[v1.QueryStatementDetailResponse], error)
-	QueryStatementSamples(context.Context, *connect.Request[v1.QueryStatementSamplesRequest]) (*connect.Response[v1.QueryStatementSamplesResponse], error)
-	GetStatementSamplePlan(context.Context, *connect.Request[v1.GetStatementSamplePlanRequest]) (*connect.Response[v1.GetStatementSamplePlanResponse], error)
-	GetStatementSampleText(context.Context, *connect.Request[v1.GetStatementSampleTextRequest]) (*connect.Response[v1.GetStatementSampleTextResponse], error)
-	GetStatementText(context.Context, *connect.Request[v1.GetStatementTextRequest]) (*connect.Response[v1.GetStatementTextResponse], error)
+	ListStatements(context.Context, *connect.Request[v1.ListStatementsRequest]) (*connect.Response[v1.ListStatementsResponse], error)
+	GetStatement(context.Context, *connect.Request[v1.GetStatementRequest]) (*connect.Response[v1.GetStatementResponse], error)
+	GetStatementSeries(context.Context, *connect.Request[v1.GetStatementSeriesRequest]) (*connect.Response[v1.GetStatementSeriesResponse], error)
+	GetLatencySeries(context.Context, *connect.Request[v1.GetLatencySeriesRequest]) (*connect.Response[v1.GetLatencySeriesResponse], error)
+	ListStatementSamples(context.Context, *connect.Request[v1.ListStatementSamplesRequest]) (*connect.Response[v1.ListStatementSamplesResponse], error)
+	GetStatementSample(context.Context, *connect.Request[v1.GetStatementSampleRequest]) (*connect.Response[v1.GetStatementSampleResponse], error)
 	ListTagKeys(context.Context, *connect.Request[v1.ListTagKeysRequest]) (*connect.Response[v1.ListTagKeysResponse], error)
 	ListTagValues(context.Context, *connect.Request[v1.ListTagValuesRequest]) (*connect.Response[v1.ListTagValuesResponse], error)
 }
@@ -302,58 +250,40 @@ func NewStatementServiceHandler(svc StatementServiceHandler, opts ...connect.Han
 		connect.WithSchema(statementServiceMethods.ByName("ReportStatementTexts")),
 		connect.WithHandlerOptions(opts...),
 	)
-	statementServiceQueryStatementsHandler := connect.NewUnaryHandler(
-		StatementServiceQueryStatementsProcedure,
-		svc.QueryStatements,
-		connect.WithSchema(statementServiceMethods.ByName("QueryStatements")),
+	statementServiceListStatementsHandler := connect.NewUnaryHandler(
+		StatementServiceListStatementsProcedure,
+		svc.ListStatements,
+		connect.WithSchema(statementServiceMethods.ByName("ListStatements")),
 		connect.WithHandlerOptions(opts...),
 	)
-	statementServiceQueryStatementCallsSeriesHandler := connect.NewUnaryHandler(
-		StatementServiceQueryStatementCallsSeriesProcedure,
-		svc.QueryStatementCallsSeries,
-		connect.WithSchema(statementServiceMethods.ByName("QueryStatementCallsSeries")),
+	statementServiceGetStatementHandler := connect.NewUnaryHandler(
+		StatementServiceGetStatementProcedure,
+		svc.GetStatement,
+		connect.WithSchema(statementServiceMethods.ByName("GetStatement")),
 		connect.WithHandlerOptions(opts...),
 	)
-	statementServiceQueryStatementPercentileSeriesHandler := connect.NewUnaryHandler(
-		StatementServiceQueryStatementPercentileSeriesProcedure,
-		svc.QueryStatementPercentileSeries,
-		connect.WithSchema(statementServiceMethods.ByName("QueryStatementPercentileSeries")),
+	statementServiceGetStatementSeriesHandler := connect.NewUnaryHandler(
+		StatementServiceGetStatementSeriesProcedure,
+		svc.GetStatementSeries,
+		connect.WithSchema(statementServiceMethods.ByName("GetStatementSeries")),
 		connect.WithHandlerOptions(opts...),
 	)
-	statementServiceQueryStatementTimingSeriesHandler := connect.NewUnaryHandler(
-		StatementServiceQueryStatementTimingSeriesProcedure,
-		svc.QueryStatementTimingSeries,
-		connect.WithSchema(statementServiceMethods.ByName("QueryStatementTimingSeries")),
+	statementServiceGetLatencySeriesHandler := connect.NewUnaryHandler(
+		StatementServiceGetLatencySeriesProcedure,
+		svc.GetLatencySeries,
+		connect.WithSchema(statementServiceMethods.ByName("GetLatencySeries")),
 		connect.WithHandlerOptions(opts...),
 	)
-	statementServiceQueryStatementDetailHandler := connect.NewUnaryHandler(
-		StatementServiceQueryStatementDetailProcedure,
-		svc.QueryStatementDetail,
-		connect.WithSchema(statementServiceMethods.ByName("QueryStatementDetail")),
+	statementServiceListStatementSamplesHandler := connect.NewUnaryHandler(
+		StatementServiceListStatementSamplesProcedure,
+		svc.ListStatementSamples,
+		connect.WithSchema(statementServiceMethods.ByName("ListStatementSamples")),
 		connect.WithHandlerOptions(opts...),
 	)
-	statementServiceQueryStatementSamplesHandler := connect.NewUnaryHandler(
-		StatementServiceQueryStatementSamplesProcedure,
-		svc.QueryStatementSamples,
-		connect.WithSchema(statementServiceMethods.ByName("QueryStatementSamples")),
-		connect.WithHandlerOptions(opts...),
-	)
-	statementServiceGetStatementSamplePlanHandler := connect.NewUnaryHandler(
-		StatementServiceGetStatementSamplePlanProcedure,
-		svc.GetStatementSamplePlan,
-		connect.WithSchema(statementServiceMethods.ByName("GetStatementSamplePlan")),
-		connect.WithHandlerOptions(opts...),
-	)
-	statementServiceGetStatementSampleTextHandler := connect.NewUnaryHandler(
-		StatementServiceGetStatementSampleTextProcedure,
-		svc.GetStatementSampleText,
-		connect.WithSchema(statementServiceMethods.ByName("GetStatementSampleText")),
-		connect.WithHandlerOptions(opts...),
-	)
-	statementServiceGetStatementTextHandler := connect.NewUnaryHandler(
-		StatementServiceGetStatementTextProcedure,
-		svc.GetStatementText,
-		connect.WithSchema(statementServiceMethods.ByName("GetStatementText")),
+	statementServiceGetStatementSampleHandler := connect.NewUnaryHandler(
+		StatementServiceGetStatementSampleProcedure,
+		svc.GetStatementSample,
+		connect.WithSchema(statementServiceMethods.ByName("GetStatementSample")),
 		connect.WithHandlerOptions(opts...),
 	)
 	statementServiceListTagKeysHandler := connect.NewUnaryHandler(
@@ -374,24 +304,18 @@ func NewStatementServiceHandler(svc StatementServiceHandler, opts ...connect.Han
 			statementServiceReportStatementsHandler.ServeHTTP(w, r)
 		case StatementServiceReportStatementTextsProcedure:
 			statementServiceReportStatementTextsHandler.ServeHTTP(w, r)
-		case StatementServiceQueryStatementsProcedure:
-			statementServiceQueryStatementsHandler.ServeHTTP(w, r)
-		case StatementServiceQueryStatementCallsSeriesProcedure:
-			statementServiceQueryStatementCallsSeriesHandler.ServeHTTP(w, r)
-		case StatementServiceQueryStatementPercentileSeriesProcedure:
-			statementServiceQueryStatementPercentileSeriesHandler.ServeHTTP(w, r)
-		case StatementServiceQueryStatementTimingSeriesProcedure:
-			statementServiceQueryStatementTimingSeriesHandler.ServeHTTP(w, r)
-		case StatementServiceQueryStatementDetailProcedure:
-			statementServiceQueryStatementDetailHandler.ServeHTTP(w, r)
-		case StatementServiceQueryStatementSamplesProcedure:
-			statementServiceQueryStatementSamplesHandler.ServeHTTP(w, r)
-		case StatementServiceGetStatementSamplePlanProcedure:
-			statementServiceGetStatementSamplePlanHandler.ServeHTTP(w, r)
-		case StatementServiceGetStatementSampleTextProcedure:
-			statementServiceGetStatementSampleTextHandler.ServeHTTP(w, r)
-		case StatementServiceGetStatementTextProcedure:
-			statementServiceGetStatementTextHandler.ServeHTTP(w, r)
+		case StatementServiceListStatementsProcedure:
+			statementServiceListStatementsHandler.ServeHTTP(w, r)
+		case StatementServiceGetStatementProcedure:
+			statementServiceGetStatementHandler.ServeHTTP(w, r)
+		case StatementServiceGetStatementSeriesProcedure:
+			statementServiceGetStatementSeriesHandler.ServeHTTP(w, r)
+		case StatementServiceGetLatencySeriesProcedure:
+			statementServiceGetLatencySeriesHandler.ServeHTTP(w, r)
+		case StatementServiceListStatementSamplesProcedure:
+			statementServiceListStatementSamplesHandler.ServeHTTP(w, r)
+		case StatementServiceGetStatementSampleProcedure:
+			statementServiceGetStatementSampleHandler.ServeHTTP(w, r)
 		case StatementServiceListTagKeysProcedure:
 			statementServiceListTagKeysHandler.ServeHTTP(w, r)
 		case StatementServiceListTagValuesProcedure:
@@ -413,40 +337,28 @@ func (UnimplementedStatementServiceHandler) ReportStatementTexts(context.Context
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.StatementService.ReportStatementTexts is not implemented"))
 }
 
-func (UnimplementedStatementServiceHandler) QueryStatements(context.Context, *connect.Request[v1.QueryStatementsRequest]) (*connect.Response[v1.QueryStatementsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.StatementService.QueryStatements is not implemented"))
+func (UnimplementedStatementServiceHandler) ListStatements(context.Context, *connect.Request[v1.ListStatementsRequest]) (*connect.Response[v1.ListStatementsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.StatementService.ListStatements is not implemented"))
 }
 
-func (UnimplementedStatementServiceHandler) QueryStatementCallsSeries(context.Context, *connect.Request[v1.QueryStatementCallsSeriesRequest]) (*connect.Response[v1.QueryStatementCallsSeriesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.StatementService.QueryStatementCallsSeries is not implemented"))
+func (UnimplementedStatementServiceHandler) GetStatement(context.Context, *connect.Request[v1.GetStatementRequest]) (*connect.Response[v1.GetStatementResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.StatementService.GetStatement is not implemented"))
 }
 
-func (UnimplementedStatementServiceHandler) QueryStatementPercentileSeries(context.Context, *connect.Request[v1.QueryStatementPercentileSeriesRequest]) (*connect.Response[v1.QueryStatementPercentileSeriesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.StatementService.QueryStatementPercentileSeries is not implemented"))
+func (UnimplementedStatementServiceHandler) GetStatementSeries(context.Context, *connect.Request[v1.GetStatementSeriesRequest]) (*connect.Response[v1.GetStatementSeriesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.StatementService.GetStatementSeries is not implemented"))
 }
 
-func (UnimplementedStatementServiceHandler) QueryStatementTimingSeries(context.Context, *connect.Request[v1.QueryStatementTimingSeriesRequest]) (*connect.Response[v1.QueryStatementTimingSeriesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.StatementService.QueryStatementTimingSeries is not implemented"))
+func (UnimplementedStatementServiceHandler) GetLatencySeries(context.Context, *connect.Request[v1.GetLatencySeriesRequest]) (*connect.Response[v1.GetLatencySeriesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.StatementService.GetLatencySeries is not implemented"))
 }
 
-func (UnimplementedStatementServiceHandler) QueryStatementDetail(context.Context, *connect.Request[v1.QueryStatementDetailRequest]) (*connect.Response[v1.QueryStatementDetailResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.StatementService.QueryStatementDetail is not implemented"))
+func (UnimplementedStatementServiceHandler) ListStatementSamples(context.Context, *connect.Request[v1.ListStatementSamplesRequest]) (*connect.Response[v1.ListStatementSamplesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.StatementService.ListStatementSamples is not implemented"))
 }
 
-func (UnimplementedStatementServiceHandler) QueryStatementSamples(context.Context, *connect.Request[v1.QueryStatementSamplesRequest]) (*connect.Response[v1.QueryStatementSamplesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.StatementService.QueryStatementSamples is not implemented"))
-}
-
-func (UnimplementedStatementServiceHandler) GetStatementSamplePlan(context.Context, *connect.Request[v1.GetStatementSamplePlanRequest]) (*connect.Response[v1.GetStatementSamplePlanResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.StatementService.GetStatementSamplePlan is not implemented"))
-}
-
-func (UnimplementedStatementServiceHandler) GetStatementSampleText(context.Context, *connect.Request[v1.GetStatementSampleTextRequest]) (*connect.Response[v1.GetStatementSampleTextResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.StatementService.GetStatementSampleText is not implemented"))
-}
-
-func (UnimplementedStatementServiceHandler) GetStatementText(context.Context, *connect.Request[v1.GetStatementTextRequest]) (*connect.Response[v1.GetStatementTextResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.StatementService.GetStatementText is not implemented"))
+func (UnimplementedStatementServiceHandler) GetStatementSample(context.Context, *connect.Request[v1.GetStatementSampleRequest]) (*connect.Response[v1.GetStatementSampleResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.StatementService.GetStatementSample is not implemented"))
 }
 
 func (UnimplementedStatementServiceHandler) ListTagKeys(context.Context, *connect.Request[v1.ListTagKeysRequest]) (*connect.Response[v1.ListTagKeysResponse], error) {

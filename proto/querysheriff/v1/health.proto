@@ -8,7 +8,8 @@ option go_package = "github.com/querysheriff/backend/gen/querysheriff/v1;querysh
 
 service HealthService {
   rpc ReportHealth(ReportHealthRequest) returns (ReportHealthResponse) {}
-  rpc QueryServers(QueryServersRequest) returns (QueryServersResponse) {}
+
+  rpc ListServers(ListServersRequest) returns (ListServersResponse) {}
 }
 
 message ReportHealthRequest {
@@ -18,14 +19,14 @@ message ReportHealthRequest {
 
 message ReportHealthResponse {}
 
-message QueryServersRequest {}
+message ListServersRequest {}
 
-message QueryServersResponse {
-  repeated MonitoredServer servers = 1;
+message ListServersResponse {
+  repeated Server servers = 1;
 }
 
-message MonitoredServer {
+message Server {
   string server_name = 1;
-  google.protobuf.Timestamp collected_at = 2;
-  repeated string databases = 3;
+  repeated string databases = 2;
+  google.protobuf.Timestamp last_seen_at = 3;
 }

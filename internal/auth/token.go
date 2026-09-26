@@ -13,8 +13,7 @@ const (
 	CollectorTokenPrefix = "qsc_"
 	SessionTokenPrefix   = "qss_"
 	tokenRandomBytes     = 20
-	base62Base           = 62
-	base62Alphabet       = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	base62               = 62
 )
 
 // GenerateToken creates a cryptographically random Base62 token with a prefix.
@@ -25,7 +24,7 @@ func GenerateToken(prefix string) (string, error) {
 		return "", err
 	}
 
-	return prefix + base62Encode(buf), nil
+	return prefix + new(big.Int).SetBytes(buf).Text(base62), nil
 }
 
 // HashToken returns a SHA-256 hex hash of a token.
@@ -47,31 +46,11 @@ func HashPassword(password string) (string, error) {
 	return string(hash), nil
 }
 
+// DecoyHash is checked, result ignored, when no user has the email, so login timing can't reveal which emails exist.
+const DecoyHash = "$2a$10$Ixy6iivTEt1hI3TJ5BcgQea7AXUHH9Ia5ytDe6Ejv80KluA0MOFam"
+
 // CheckPassword reports whether a password matches a bcrypt hash.
 // Example: CheckPassword(hash, "secret") -> true.
 func CheckPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
-}
-
-func base62Encode(buf []byte) string {
-	n := new(big.Int).SetBytes(buf)
-	if n.Sign() == 0 {
-		return base62Alphabet[:1]
-	}
-
-	base := big.NewInt(base62Base)
-	zero := new(big.Int)
-	mod := new(big.Int)
-
-	var out []byte
-	for n.Cmp(zero) > 0 {
-		n.DivMod(n, base, mod)
-		out = append(out, base62Alphabet[mod.Int64()])
-	}
-
-	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
-		out[i], out[j] = out[j], out[i]
-	}
-
-	return string(out)
 }

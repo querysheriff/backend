@@ -3,26 +3,23 @@ package server
 import (
 	"context"
 	"errors"
-	"log/slog"
-	"time"
+	"strings"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 	"github.com/querysheriff/backend/internal/clickhouse"
-	"github.com/querysheriff/backend/internal/gen/db"
 	"github.com/querysheriff/backend/internal/sqltext"
+	"github.com/querysheriff/backend/internal/tagfilter"
 )
 
 type StatementServer struct {
-	queries *db.Queries
-	stats   *clickhouse.Client
-	logger  *slog.Logger
+	stats *clickhouse.Client
 }
 
-func NewStatementServer(queries *db.Queries, stats *clickhouse.Client, logger *slog.Logger) *StatementServer {
-	return &StatementServer{queries: queries, stats: stats, logger: logger}
+func NewStatementServer(stats *clickhouse.Client) *StatementServer {
+	return &StatementServer{stats: stats}
 }
 
 // ReportStatements stores statement metric deltas and returns statements missing query text.
@@ -60,43 +57,12 @@ func (s *StatementServer) ReportStatements(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	var missing []clickhouse.StatementIdentity
-
-	for i, delta := range deltas {
-		if !known[statementIDs[i]] {
-			missing = append(missing, clickhouse.StatementIdentity{
-				UserName:     delta.GetUserName(),
-				DatabaseName: delta.GetDatabaseName(),
-				QueryID:      delta.GetQueryId(),
-			})
-		}
-	}
-
-	if err = s.storeDeltas(ctx, serverName, collectedAt, deltas, statementIDs, missing); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-
-	return connect.NewResponse(&querysheriffv1.ReportStatementsResponse{
-		UnknownStatements: unknownStatementsProto(missing),
-	}), nil
-}
-
-func (s *StatementServer) storeDeltas(
-	ctx context.Context,
-	serverName string,
-	collectedAt time.Time,
-	deltas []*querysheriffv1.StatementDelta,
-	statementIDs []uint64,
-	missing []clickhouse.StatementIdentity,
-) error {
-	unseen := make(map[statementIdentity]bool, len(missing))
-	for _, row := range missing {
-		unseen[statementIdentity{row.UserName, row.DatabaseName, row.QueryID}] = true
-	}
-
 	rows := make([]clickhouse.StatementDelta, len(deltas))
 
-	var mirrored []clickhouse.Statement
+	var (
+		unknown  []*querysheriffv1.StatementIdentity
+		mirrored []clickhouse.Statement
+	)
 
 	for i, delta := range deltas {
 		rows[i] = clickhouse.StatementDelta{
@@ -110,42 +76,33 @@ func (s *StatementServer) storeDeltas(
 			TotalIoTime:   delta.GetTotalIoTime(),
 		}
 
-		identity := statementIdentity{delta.GetUserName(), delta.GetDatabaseName(), delta.GetQueryId()}
-		if unseen[identity] {
-			mirrored = append(mirrored, clickhouse.Statement{
-				ID:           statementIDs[i],
-				ServerName:   serverName,
-				DatabaseName: delta.GetDatabaseName(),
-				UserName:     delta.GetUserName(),
-				QueryID:      delta.GetQueryId(),
-			})
+		if known[statementIDs[i]] {
+			continue
 		}
+
+		unknown = append(unknown, &querysheriffv1.StatementIdentity{
+			UserName:     delta.GetUserName(),
+			DatabaseName: delta.GetDatabaseName(),
+			QueryId:      delta.GetQueryId(),
+		})
+		mirrored = append(mirrored, clickhouse.Statement{
+			ID:           statementIDs[i],
+			ServerName:   serverName,
+			DatabaseName: delta.GetDatabaseName(),
+			UserName:     delta.GetUserName(),
+			QueryID:      delta.GetQueryId(),
+		})
 	}
 
-	if err := s.stats.UpsertStatements(ctx, mirrored); err != nil {
-		return err
+	if err = s.stats.UpsertStatements(ctx, mirrored); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	return s.stats.InsertStatementDeltas(ctx, rows)
-}
-
-type statementIdentity struct {
-	userName     string
-	databaseName string
-	queryID      int64
-}
-
-func unknownStatementsProto(rows []clickhouse.StatementIdentity) []*querysheriffv1.StatementIdentity {
-	out := make([]*querysheriffv1.StatementIdentity, len(rows))
-	for i, row := range rows {
-		out[i] = &querysheriffv1.StatementIdentity{
-			UserName:     row.UserName,
-			DatabaseName: row.DatabaseName,
-			QueryId:      row.QueryID,
-		}
+	if err = s.stats.InsertStatementDeltas(ctx, rows); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	return out
+	return connect.NewResponse(&querysheriffv1.ReportStatementsResponse{UnknownStatements: unknown}), nil
 }
 
 // ReportStatementTexts stores normalized full/short query text and query kind.
@@ -188,224 +145,231 @@ func (s *StatementServer) ReportStatementTexts(
 	return connect.NewResponse(&querysheriffv1.ReportStatementTextsResponse{}), nil
 }
 
-// QueryStatements returns filtered, sorted, paginated statement statistics.
+// ListStatements returns filtered, sorted, paginated statement statistics.
 // Example: server=prod, db=app, limit=50 -> up to 50 matching statements.
-func (s *StatementServer) QueryStatements(
+func (s *StatementServer) ListStatements(
 	ctx context.Context,
-	req *connect.Request[querysheriffv1.QueryStatementsRequest],
-) (*connect.Response[querysheriffv1.QueryStatementsResponse], error) {
+	req *connect.Request[querysheriffv1.ListStatementsRequest],
+) (*connect.Response[querysheriffv1.ListStatementsResponse], error) {
 	msg := req.Msg
 
-	if err := s.authorizeStatementQuery(
+	if err := authorizeDatabaseQuery(
 		ctx, msg.GetServerName(), msg.GetDatabaseName(), msg.GetFrom(), msg.GetTo()); err != nil {
 		return nil, err
 	}
 
-	serverName := textFilter(msg.GetServerName())
-	databaseName := textFilter(msg.GetDatabaseName())
-
-	filter, err := s.resolveStatementFilter(
-		ctx, msg.GetQueryText(), msg.GetTagFilters(), serverName, databaseName,
-	)
+	tagFilters, err := tagFiltersFromProto(msg.GetTagFilters())
 	if err != nil {
 		return nil, err
 	}
 
-	statements, hasMore, err := s.listStatements(ctx, msg, serverName, databaseName, filter)
-	if err != nil {
-		return nil, err
+	var statementIDs []uint64 // nil matches every statement
+
+	if text := strings.TrimSpace(msg.GetSearch()); text != "" {
+		statementIDs, err = s.stats.StatementIDsByText(ctx, msg.GetServerName(), msg.GetDatabaseName(), text)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
 	}
 
-	return connect.NewResponse(&querysheriffv1.QueryStatementsResponse{
+	limit := resolveLimit(msg.GetLimit())
+
+	rows, err := s.stats.ListStatementStats(ctx, clickhouse.ListStatementStatsParams{
+		From:         msg.GetFrom().AsTime(),
+		To:           msg.GetTo().AsTime(),
+		ServerName:   msg.GetServerName(),
+		DatabaseName: msg.GetDatabaseName(),
+		StatementIDs: statementIDs,
+		TagFilters:   tagFilters,
+		Kinds:        enumValues(msg.GetKinds()),
+		SortKey:      statementSortKey(msg.GetSortColumn()),
+		SortDesc:     msg.GetSortDesc(),
+		OffsetRows:   resolveOffset(msg.GetOffset()),
+		RowLimit:     limit + 1,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	rows, hasMore := trimPage(rows, limit)
+
+	statements := make([]*querysheriffv1.StatementStat, len(rows))
+	for i, row := range rows {
+		statements[i] = &querysheriffv1.StatementStat{
+			Id:       row.ID,
+			Preview:  row.Preview,
+			UserName: row.UserName,
+			Tags:     row.Tags,
+			Calls:    row.Calls,
+			Rows:     row.Rows,
+			AvgMs:    avgExecTime(row.TotalExecTime, row.Calls),
+			PctTime:  row.PctOfTotal,
+			PctIo:    row.PctIo,
+		}
+	}
+
+	return connect.NewResponse(&querysheriffv1.ListStatementsResponse{
 		Statements: statements,
 		HasMore:    hasMore,
 	}), nil
 }
 
-// QueryStatementDetail returns query text, scope, and tags for one statement.
+// GetStatement returns one statement's full query text, scope, and tags.
 // Example: id=42 -> {Query:"SELECT ...", ServerName:"prod", DatabaseName:"app", Tags:{...}}.
-func (s *StatementServer) QueryStatementDetail(
+func (s *StatementServer) GetStatement(
 	ctx context.Context,
-	req *connect.Request[querysheriffv1.QueryStatementDetailRequest],
-) (*connect.Response[querysheriffv1.QueryStatementDetailResponse], error) {
-	msg := req.Msg
-
-	id := msg.GetId()
-	if id == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
-	}
-
-	if err := s.authorizeStatementID(ctx, id); err != nil {
+	req *connect.Request[querysheriffv1.GetStatementRequest],
+) (*connect.Response[querysheriffv1.GetStatementResponse], error) {
+	detail, err := s.authorizedStatement(ctx, req.Msg.GetId())
+	if err != nil {
 		return nil, err
 	}
 
-	from, to := msg.GetFrom(), msg.GetTo()
-	if err := requireRange(from, to); err != nil {
-		return nil, err
-	}
-
-	detail, err := s.stats.StatementDetail(ctx, id)
-	if err != nil {
-		return nil, statementLookupError(id, err)
-	}
-
-	tagsByID, err := s.stats.StatementTags(ctx, []uint64{id})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-
-	tags := tagsByID[id]
-	if tags == nil {
-		tags = map[string]string{}
-	}
-
-	return connect.NewResponse(&querysheriffv1.QueryStatementDetailResponse{
+	return connect.NewResponse(&querysheriffv1.GetStatementResponse{
 		Query:        detail.Query,
 		ServerName:   detail.ServerName,
 		DatabaseName: detail.DatabaseName,
-		Tags:         tags,
+		Tags:         detail.Tags,
 	}), nil
 }
 
-// QueryStatementSamples returns filtered, sorted, paginated samples for one statement.
-// Example: id=42, limit=50 -> up to 50 execution samples.
-func (s *StatementServer) QueryStatementSamples(
+// ListStatementSamples returns filtered, sorted, paginated samples for one statement.
+// Example: statement 42, limit=50 -> up to 50 execution samples.
+func (s *StatementServer) ListStatementSamples(
 	ctx context.Context,
-	req *connect.Request[querysheriffv1.QueryStatementSamplesRequest],
-) (*connect.Response[querysheriffv1.QueryStatementSamplesResponse], error) {
+	req *connect.Request[querysheriffv1.ListStatementSamplesRequest],
+) (*connect.Response[querysheriffv1.ListStatementSamplesResponse], error) {
 	msg := req.Msg
 
-	id := msg.GetId()
-	if id == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
-	}
-
-	if err := s.authorizeStatementID(ctx, id); err != nil {
-		return nil, err
-	}
-
 	from, to := msg.GetFrom(), msg.GetTo()
-	if err := requireRange(from, to); err != nil {
+	if err := authorizeDatabaseQuery(ctx, msg.GetServerName(), msg.GetDatabaseName(), from, to); err != nil {
 		return nil, err
 	}
 
 	limit := resolveLimit(msg.GetLimit())
 
 	rows, err := s.stats.ListStatementSamples(ctx, clickhouse.ListSamplesParams{
-		StatementID: id,
-		From:        from.AsTime(),
-		To:          to.AsTime(),
-		SortKey:     sampleSortKey(msg.GetSortColumn()),
-		SortDesc:    msg.GetSortDesc(),
-		RowLimit:    limit + 1,
-		OffsetRows:  resolveOffset(msg.GetOffset()),
+		ServerName:   msg.GetServerName(),
+		DatabaseName: msg.GetDatabaseName(),
+		StatementID:  msg.GetStatementId(),
+		From:         from.AsTime(),
+		To:           to.AsTime(),
+		SortKey:      statementSampleSortKey(msg.GetSortColumn()),
+		SortDesc:     msg.GetSortDesc(),
+		RowLimit:     limit + 1,
+		OffsetRows:   resolveOffset(msg.GetOffset()),
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	hasMore := len(rows) > int(limit)
-	if hasMore {
-		rows = rows[:limit]
-	}
+	rows, hasMore := trimPage(rows, limit)
 
 	samples := make([]*querysheriffv1.StatementSample, len(rows))
 	for i, row := range rows {
 		samples[i] = statementSampleProto(row)
 	}
 
-	return connect.NewResponse(&querysheriffv1.QueryStatementSamplesResponse{
+	return connect.NewResponse(&querysheriffv1.ListStatementSamplesResponse{
 		Samples: samples,
 		HasMore: hasMore,
 	}), nil
 }
 
 func statementSampleProto(row clickhouse.Sample) *querysheriffv1.StatementSample {
-	sample := &querysheriffv1.StatementSample{
+	return &querysheriffv1.StatementSample{
 		Id:         row.ID,
-		Query:      sqltext.SamplePreview(row.Query, row.Parameters),
+		OccurredAt: timestamppb.New(row.OccurredAt),
+		Preview:    sqltext.SamplePreview(row.Query, row.Parameters),
 		Tags:       row.Tags,
-		HasPlan:    row.ExplainPlanJSON != "",
+		HasPlan:    row.HasPlan,
 		DurationMs: row.DurationMs,
 	}
-
-	if !row.OccurredAt.IsZero() {
-		sample.OccurredAt = timestamppb.New(row.OccurredAt)
-	}
-
-	return sample
 }
 
-// GetStatementSamplePlan returns a sample's concretized query and explain plan.
+// GetStatementSample returns a sample's query with parameters substituted, and its explain plan.
 // Example: "WHERE id=$1", ["42"] -> Query="WHERE id=42", PlanJson="{...}".
-func (s *StatementServer) GetStatementSamplePlan(
+func (s *StatementServer) GetStatementSample(
 	ctx context.Context,
-	req *connect.Request[querysheriffv1.GetStatementSamplePlanRequest],
-) (*connect.Response[querysheriffv1.GetStatementSamplePlanResponse], error) {
-	sampleID := req.Msg.GetSampleId()
-	if sampleID == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("sample_id is required"))
-	}
-
-	if err := s.authorizeSampleID(ctx, sampleID); err != nil {
+	req *connect.Request[querysheriffv1.GetStatementSampleRequest],
+) (*connect.Response[querysheriffv1.GetStatementSampleResponse], error) {
+	sample, err := s.authorizedSample(ctx, req.Msg.GetId())
+	if err != nil {
 		return nil, err
 	}
 
-	query, parameters, plan, err := s.stats.SampleText(ctx, sampleID)
-	if err != nil {
-		return nil, sampleLookupError(sampleID, err)
-	}
-
-	return connect.NewResponse(&querysheriffv1.GetStatementSamplePlanResponse{
-		Query:    sqltext.Concretize(query, parameters),
-		PlanJson: plan,
+	return connect.NewResponse(&querysheriffv1.GetStatementSampleResponse{
+		Query:    sqltext.Concretize(sample.Query, sample.Parameters),
+		PlanJson: sample.ExplainPlanJSON,
 	}), nil
 }
 
-// GetStatementSampleText returns a sample's query with parameters substituted.
-// Example: "WHERE id=$1", ["42"] -> "WHERE id=42".
-func (s *StatementServer) GetStatementSampleText(
-	ctx context.Context,
-	req *connect.Request[querysheriffv1.GetStatementSampleTextRequest],
-) (*connect.Response[querysheriffv1.GetStatementSampleTextResponse], error) {
-	sampleID := req.Msg.GetSampleId()
-	if sampleID == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("sample_id is required"))
+func tagFiltersFromProto(filters []*querysheriffv1.TagFilter) ([]tagfilter.Filter, error) {
+	if len(filters) == 0 {
+		return nil, nil
 	}
 
-	if err := s.authorizeSampleID(ctx, sampleID); err != nil {
-		return nil, err
+	parsed := make([]tagfilter.Filter, len(filters))
+
+	for i, tf := range filters {
+		op, err := tagFilterOp(tf.GetOp())
+		if err != nil {
+			return nil, err
+		}
+
+		parsed[i] = tagfilter.Filter{Key: tf.GetKey(), Op: op, Values: tf.GetValues()}
 	}
 
-	query, parameters, _, err := s.stats.SampleText(ctx, sampleID)
-	if err != nil {
-		return nil, sampleLookupError(sampleID, err)
+	if err := tagfilter.Validate(parsed); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	return connect.NewResponse(&querysheriffv1.GetStatementSampleTextResponse{
-		Query: sqltext.Concretize(query, parameters),
-	}), nil
+	return parsed, nil
 }
 
-// GetStatementText returns the full query text for one statement.
-// Example: id=42 -> "SELECT * FROM users".
-func (s *StatementServer) GetStatementText(
-	ctx context.Context,
-	req *connect.Request[querysheriffv1.GetStatementTextRequest],
-) (*connect.Response[querysheriffv1.GetStatementTextResponse], error) {
-	id := req.Msg.GetId()
-	if id == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
+func tagFilterOp(op querysheriffv1.TagFilterOperator) (tagfilter.Op, error) {
+	switch op {
+	case querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_EXISTS:
+		return tagfilter.OpExists, nil
+	case querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_EQUAL:
+		return tagfilter.OpEqual, nil
+	case querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_NOT_EQUAL:
+		return tagfilter.OpNotEqual, nil
+	case querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_UNSPECIFIED:
+		return 0, connect.NewError(connect.CodeInvalidArgument, errors.New("tag filter op is required"))
 	}
 
-	if err := s.authorizeStatementID(ctx, id); err != nil {
-		return nil, err
+	return 0, connect.NewError(connect.CodeInvalidArgument, errors.New("unknown tag filter op"))
+}
+
+const sortKeyPctTime = "pct_time"
+
+func statementSortKey(col querysheriffv1.StatementSortColumn) string {
+	switch col {
+	case querysheriffv1.StatementSortColumn_STATEMENT_SORT_COLUMN_AVG:
+		return "avg"
+	case querysheriffv1.StatementSortColumn_STATEMENT_SORT_COLUMN_CALLS:
+		return "calls"
+	case querysheriffv1.StatementSortColumn_STATEMENT_SORT_COLUMN_ROWS_PER_CALL:
+		return "rows_per_call"
+	case querysheriffv1.StatementSortColumn_STATEMENT_SORT_COLUMN_PCT_IO:
+		return "pct_io"
+	case querysheriffv1.StatementSortColumn_STATEMENT_SORT_COLUMN_PCT_TIME,
+		querysheriffv1.StatementSortColumn_STATEMENT_SORT_COLUMN_UNSPECIFIED:
+		return sortKeyPctTime
 	}
 
-	query, err := s.stats.StatementText(ctx, id)
-	if err != nil {
-		return nil, statementLookupError(id, err)
+	return sortKeyPctTime
+}
+
+func statementSampleSortKey(col querysheriffv1.SampleSortColumn) string {
+	switch col {
+	case querysheriffv1.SampleSortColumn_SAMPLE_SORT_COLUMN_DURATION:
+		return "duration"
+	case querysheriffv1.SampleSortColumn_SAMPLE_SORT_COLUMN_AT,
+		querysheriffv1.SampleSortColumn_SAMPLE_SORT_COLUMN_UNSPECIFIED:
+		return "at"
 	}
 
-	return connect.NewResponse(&querysheriffv1.GetStatementTextResponse{Query: query}), nil
+	return "at"
 }

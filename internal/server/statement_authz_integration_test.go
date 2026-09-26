@@ -46,41 +46,35 @@ func TestStatementIDsRejectForeignServer(t *testing.T) {
 		UserID: 1, Email: "outsider@dev.dev", AllowedServers: []string{"some-other-server"},
 	})
 
-	srv := server.NewStatementServer(nil, stats, nil)
+	srv := server.NewStatementServer(stats)
 	from, to := timestamppb.New(occurred.Add(-time.Hour)), timestamppb.New(occurred.Add(time.Hour))
 
 	calls := map[string]func() error{
-		"GetStatementText": func() error {
-			_, callErr := srv.GetStatementText(outsider,
-				connect.NewRequest(&querysheriffv1.GetStatementTextRequest{Id: statementID}))
+		"GetStatement": func() error {
+			_, callErr := srv.GetStatement(outsider,
+				connect.NewRequest(&querysheriffv1.GetStatementRequest{Id: statementID}))
 
 			return callErr
 		},
-		"QueryStatementDetail": func() error {
-			_, callErr := srv.QueryStatementDetail(outsider,
-				connect.NewRequest(&querysheriffv1.QueryStatementDetailRequest{
-					Id: statementID, From: from, To: to,
+		"ListStatementSamples": func() error {
+			_, callErr := srv.ListStatementSamples(outsider,
+				connect.NewRequest(&querysheriffv1.ListStatementSamplesRequest{
+					ServerName: authzServer, DatabaseName: "db", StatementId: statementID, From: from, To: to,
 				}))
 
 			return callErr
 		},
-		"QueryStatementSamples": func() error {
-			_, callErr := srv.QueryStatementSamples(outsider,
-				connect.NewRequest(&querysheriffv1.QueryStatementSamplesRequest{
-					Id: statementID, From: from, To: to,
+		"GetStatementSample": func() error {
+			_, callErr := srv.GetStatementSample(outsider,
+				connect.NewRequest(&querysheriffv1.GetStatementSampleRequest{Id: sampleID}))
+
+			return callErr
+		},
+		"GetStatementSeries": func() error {
+			_, callErr := srv.GetStatementSeries(outsider,
+				connect.NewRequest(&querysheriffv1.GetStatementSeriesRequest{
+					ServerName: authzServer, DatabaseName: "db", StatementId: statementID, From: from, To: to,
 				}))
-
-			return callErr
-		},
-		"GetStatementSampleText": func() error {
-			_, callErr := srv.GetStatementSampleText(outsider,
-				connect.NewRequest(&querysheriffv1.GetStatementSampleTextRequest{SampleId: sampleID}))
-
-			return callErr
-		},
-		"GetStatementSamplePlan": func() error {
-			_, callErr := srv.GetStatementSamplePlan(outsider,
-				connect.NewRequest(&querysheriffv1.GetStatementSamplePlanRequest{SampleId: sampleID}))
 
 			return callErr
 		},

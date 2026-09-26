@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -11,25 +10,16 @@ import (
 	"github.com/querysheriff/backend/internal/clickhouse"
 )
 
-// QueryLockWaits returns filtered, sorted, paginated lock waits with waiting/blocking details.
+// ListLockWaits returns filtered, sorted, paginated lock waits with waiting/blocking details.
 // Example: server=prod, limit=50 -> up to 50 lock waits with both involved queries.
-func (s *ActivityServer) QueryLockWaits(
+func (s *ActivityServer) ListLockWaits(
 	ctx context.Context,
-	req *connect.Request[querysheriffv1.QueryLockWaitsRequest],
-) (*connect.Response[querysheriffv1.QueryLockWaitsResponse], error) {
+	req *connect.Request[querysheriffv1.ListLockWaitsRequest],
+) (*connect.Response[querysheriffv1.ListLockWaitsResponse], error) {
 	msg := req.Msg
 
-	principal, err := requirePrincipal(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if name := msg.GetServerName(); name != "" && !principal.CanViewServer(name) {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("access to that server is not allowed"))
-	}
-
 	from, to := msg.GetFrom(), msg.GetTo()
-	if err = requireRange(from, to); err != nil {
+	if err := authorizeDatabaseQuery(ctx, msg.GetServerName(), msg.GetDatabaseName(), from, to); err != nil {
 		return nil, err
 	}
 
@@ -46,13 +36,10 @@ func (s *ActivityServer) QueryLockWaits(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	hasMore := len(rows) > int(limit)
-	if hasMore {
-		rows = rows[:limit]
-	}
+	rows, hasMore := trimPage(rows, limit)
 
-	return connect.NewResponse(&querysheriffv1.QueryLockWaitsResponse{
-		Waits:   buildLockWaits(rows),
+	return connect.NewResponse(&querysheriffv1.ListLockWaitsResponse{
+		Waits:   lockWaitsProto(rows),
 		HasMore: hasMore,
 	}), nil
 }
@@ -69,7 +56,7 @@ func lockWaitSortKey(col querysheriffv1.LockWaitSortColumn) string {
 	return "waited"
 }
 
-func buildLockWaits(rows []clickhouse.LockWait) []*querysheriffv1.LockWait {
+func lockWaitsProto(rows []clickhouse.LockWait) []*querysheriffv1.LockWait {
 	waits := make([]*querysheriffv1.LockWait, len(rows))
 	for i, row := range rows {
 		waits[i] = &querysheriffv1.LockWait{
@@ -85,29 +72,29 @@ func buildLockWaits(rows []clickhouse.LockWait) []*querysheriffv1.LockWait {
 				Query:           row.BlockingQuery,
 				QueryTags:       row.BlockingTags,
 			},
-			StartedWaiting: timestamppb.New(row.WaitStart),
-			LastSeen:       timestamppb.New(row.LastSeen),
-			LockMode:       row.LockMode,
+			LockMode:   row.LockMode,
+			StartedAt:  timestamppb.New(row.WaitStart),
+			LastSeenAt: timestamppb.New(row.LastSeen),
 		}
 	}
 
 	return waits
 }
 
-// QueryLockWaitSeries returns total lock-wait time per time bucket.
+// GetLockWaitSeries returns total lock-wait time per time bucket.
 // Example: 1m buckets -> [{12:01, 20s}, {12:02, 5s}, ...].
-func (s *ActivityServer) QueryLockWaitSeries(
+func (s *ActivityServer) GetLockWaitSeries(
 	ctx context.Context,
-	req *connect.Request[querysheriffv1.QueryLockWaitSeriesRequest],
-) (*connect.Response[querysheriffv1.QueryLockWaitSeriesResponse], error) {
+	req *connect.Request[querysheriffv1.GetLockWaitSeriesRequest],
+) (*connect.Response[querysheriffv1.GetLockWaitSeriesResponse], error) {
 	msg := req.Msg
 
-	scope, err := s.resolveSeriesScope(ctx, msg.GetServerName(), msg.GetDatabaseName(), msg.GetFrom(), msg.GetTo())
+	scope, bounds, err := activitySeries(ctx, msg.GetServerName(), msg.GetDatabaseName(), msg.GetFrom(), msg.GetTo())
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := s.stats.LockWaitSeries(ctx, scope.transactionScope(), scope.bounds.Bucket, scope.bounds.Anchor)
+	rows, err := s.stats.LockWaitSeries(ctx, scope, bounds.Bucket)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -117,14 +104,14 @@ func (s *ActivityServer) QueryLockWaitSeries(
 		waited[r.BucketEnd.UnixNano()] = r.WaitSeconds
 	}
 
-	ends := scope.bounds.Ends()
-	series := make([]*querysheriffv1.LockWaitPoint, len(ends))
+	ends := bounds.Ends()
+	series := make([]*querysheriffv1.MetricPoint, len(ends))
 	for i, end := range ends {
-		series[i] = &querysheriffv1.LockWaitPoint{At: timestamppb.New(end), WaitSeconds: waited[end.UnixNano()]}
+		series[i] = metricPointProto(end, waited[end.UnixNano()])
 	}
 
-	return connect.NewResponse(&querysheriffv1.QueryLockWaitSeriesResponse{
-		Series:   series,
-		BucketMs: scope.bounds.Bucket.Milliseconds(),
+	return connect.NewResponse(&querysheriffv1.GetLockWaitSeriesResponse{
+		WaitSeconds: series,
+		BucketMs:    bounds.Bucket.Milliseconds(),
 	}), nil
 }

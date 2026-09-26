@@ -92,12 +92,7 @@ func TestListTransactionEventsRebuildsRuns(t *testing.T) {
 		t.Fatalf("ListTransactions: %v", err)
 	}
 
-	ids := make([]uint64, len(txs))
-	for i, tx := range txs {
-		ids[i] = tx.ID
-	}
-
-	events, err := client.ListTransactionEvents(ctx, scope, ids)
+	events, err := client.ListTransactionEvents(ctx, scope, txs)
 	if err != nil {
 		t.Fatalf("ListTransactionEvents: %v", err)
 	}
@@ -123,30 +118,6 @@ func TestListTransactionEventsRebuildsRuns(t *testing.T) {
 	}
 }
 
-func TestListLockWaitsResolvesBlockingSide(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	client, scope, _ := txFixture(t, "tx-db-test-locks")
-
-	waits, err := client.ListLockWaits(ctx, scope, "age", true, 50, 0)
-	if err != nil {
-		t.Fatalf("ListLockWaits: %v", err)
-	}
-
-	if len(waits) != 1 {
-		t.Fatalf("got %d lock waits, want 1", len(waits))
-	}
-
-	if waits[0].WaitingPid != 10 || waits[0].BlockedByPid != 20 {
-		t.Errorf("waiting/blocked pids = %d/%d, want 10/20", waits[0].WaitingPid, waits[0].BlockedByPid)
-	}
-
-	if waits[0].BlockingQuery != "UPDATE t SET x=1" {
-		t.Errorf("blocking query = %q, want the blocker's UPDATE", waits[0].BlockingQuery)
-	}
-}
-
 func TestDuplicateObservationsDoNotChangeReads(t *testing.T) {
 	t.Parallel()
 
@@ -158,12 +129,7 @@ func TestDuplicateObservationsDoNotChangeReads(t *testing.T) {
 		t.Fatalf("ListTransactions: %v", err)
 	}
 
-	ids := make([]uint64, len(before))
-	for i, tx := range before {
-		ids[i] = tx.ID
-	}
-
-	eventsBefore, err := client.ListTransactionEvents(ctx, scope, ids)
+	eventsBefore, err := client.ListTransactionEvents(ctx, scope, before)
 	if err != nil {
 		t.Fatalf("ListTransactionEvents: %v", err)
 	}
@@ -177,7 +143,7 @@ func TestDuplicateObservationsDoNotChangeReads(t *testing.T) {
 		t.Fatalf("ListTransactions after: %v", err)
 	}
 
-	eventsAfter, err := client.ListTransactionEvents(ctx, scope, ids)
+	eventsAfter, err := client.ListTransactionEvents(ctx, scope, before)
 	if err != nil {
 		t.Fatalf("ListTransactionEvents after: %v", err)
 	}

@@ -73,26 +73,26 @@ func (AlertLevel) EnumDescriptor() ([]byte, []int) {
 	return file_querysheriff_v1_alert_proto_rawDescGZIP(), []int{0}
 }
 
-type QueryAlertsRequest struct {
+type ListAlertSettingsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *QueryAlertsRequest) Reset() {
-	*x = QueryAlertsRequest{}
+func (x *ListAlertSettingsRequest) Reset() {
+	*x = ListAlertSettingsRequest{}
 	mi := &file_querysheriff_v1_alert_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *QueryAlertsRequest) String() string {
+func (x *ListAlertSettingsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*QueryAlertsRequest) ProtoMessage() {}
+func (*ListAlertSettingsRequest) ProtoMessage() {}
 
-func (x *QueryAlertsRequest) ProtoReflect() protoreflect.Message {
+func (x *ListAlertSettingsRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_querysheriff_v1_alert_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -104,32 +104,32 @@ func (x *QueryAlertsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryAlertsRequest.ProtoReflect.Descriptor instead.
-func (*QueryAlertsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListAlertSettingsRequest.ProtoReflect.Descriptor instead.
+func (*ListAlertSettingsRequest) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_alert_proto_rawDescGZIP(), []int{0}
 }
 
-type QueryAlertsResponse struct {
+type ListAlertSettingsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Servers       []*ServerAlertSettings `protobuf:"bytes,1,rep,name=servers,proto3" json:"servers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *QueryAlertsResponse) Reset() {
-	*x = QueryAlertsResponse{}
+func (x *ListAlertSettingsResponse) Reset() {
+	*x = ListAlertSettingsResponse{}
 	mi := &file_querysheriff_v1_alert_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *QueryAlertsResponse) String() string {
+func (x *ListAlertSettingsResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*QueryAlertsResponse) ProtoMessage() {}
+func (*ListAlertSettingsResponse) ProtoMessage() {}
 
-func (x *QueryAlertsResponse) ProtoReflect() protoreflect.Message {
+func (x *ListAlertSettingsResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_querysheriff_v1_alert_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -141,12 +141,12 @@ func (x *QueryAlertsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryAlertsResponse.ProtoReflect.Descriptor instead.
-func (*QueryAlertsResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListAlertSettingsResponse.ProtoReflect.Descriptor instead.
+func (*ListAlertSettingsResponse) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_alert_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *QueryAlertsResponse) GetServers() []*ServerAlertSettings {
+func (x *ListAlertSettingsResponse) GetServers() []*ServerAlertSettings {
 	if x != nil {
 		return x.Servers
 	}
@@ -289,29 +289,28 @@ func (x *AlertSetting) GetFiresLastWeek() int64 {
 	return 0
 }
 
-type UpdateAlertSettingsRequest struct {
+type UpdateAlertWebhookRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ServerName      string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
 	SlackWebhookUrl string                 `protobuf:"bytes,2,opt,name=slack_webhook_url,json=slackWebhookUrl,proto3" json:"slack_webhook_url,omitempty"`
-	Toggles         []*AlertToggle         `protobuf:"bytes,3,rep,name=toggles,proto3" json:"toggles,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
-func (x *UpdateAlertSettingsRequest) Reset() {
-	*x = UpdateAlertSettingsRequest{}
+func (x *UpdateAlertWebhookRequest) Reset() {
+	*x = UpdateAlertWebhookRequest{}
 	mi := &file_querysheriff_v1_alert_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *UpdateAlertSettingsRequest) String() string {
+func (x *UpdateAlertWebhookRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*UpdateAlertSettingsRequest) ProtoMessage() {}
+func (*UpdateAlertWebhookRequest) ProtoMessage() {}
 
-func (x *UpdateAlertSettingsRequest) ProtoReflect() protoreflect.Message {
+func (x *UpdateAlertWebhookRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_querysheriff_v1_alert_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -323,54 +322,45 @@ func (x *UpdateAlertSettingsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateAlertSettingsRequest.ProtoReflect.Descriptor instead.
-func (*UpdateAlertSettingsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use UpdateAlertWebhookRequest.ProtoReflect.Descriptor instead.
+func (*UpdateAlertWebhookRequest) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_alert_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *UpdateAlertSettingsRequest) GetServerName() string {
+func (x *UpdateAlertWebhookRequest) GetServerName() string {
 	if x != nil {
 		return x.ServerName
 	}
 	return ""
 }
 
-func (x *UpdateAlertSettingsRequest) GetSlackWebhookUrl() string {
+func (x *UpdateAlertWebhookRequest) GetSlackWebhookUrl() string {
 	if x != nil {
 		return x.SlackWebhookUrl
 	}
 	return ""
 }
 
-func (x *UpdateAlertSettingsRequest) GetToggles() []*AlertToggle {
-	if x != nil {
-		return x.Toggles
-	}
-	return nil
-}
-
-type AlertToggle struct {
+type UpdateAlertWebhookResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Enabled       bool                   `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AlertToggle) Reset() {
-	*x = AlertToggle{}
+func (x *UpdateAlertWebhookResponse) Reset() {
+	*x = UpdateAlertWebhookResponse{}
 	mi := &file_querysheriff_v1_alert_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AlertToggle) String() string {
+func (x *UpdateAlertWebhookResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AlertToggle) ProtoMessage() {}
+func (*UpdateAlertWebhookResponse) ProtoMessage() {}
 
-func (x *AlertToggle) ProtoReflect() protoreflect.Message {
+func (x *UpdateAlertWebhookResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_querysheriff_v1_alert_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -382,46 +372,92 @@ func (x *AlertToggle) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AlertToggle.ProtoReflect.Descriptor instead.
-func (*AlertToggle) Descriptor() ([]byte, []int) {
+// Deprecated: Use UpdateAlertWebhookResponse.ProtoReflect.Descriptor instead.
+func (*UpdateAlertWebhookResponse) Descriptor() ([]byte, []int) {
 	return file_querysheriff_v1_alert_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *AlertToggle) GetKey() string {
+type UpdateAlertSettingRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ServerName    string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Enabled       bool                   `protobuf:"varint,3,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateAlertSettingRequest) Reset() {
+	*x = UpdateAlertSettingRequest{}
+	mi := &file_querysheriff_v1_alert_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateAlertSettingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateAlertSettingRequest) ProtoMessage() {}
+
+func (x *UpdateAlertSettingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_alert_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateAlertSettingRequest.ProtoReflect.Descriptor instead.
+func (*UpdateAlertSettingRequest) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_alert_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *UpdateAlertSettingRequest) GetServerName() string {
+	if x != nil {
+		return x.ServerName
+	}
+	return ""
+}
+
+func (x *UpdateAlertSettingRequest) GetKey() string {
 	if x != nil {
 		return x.Key
 	}
 	return ""
 }
 
-func (x *AlertToggle) GetEnabled() bool {
+func (x *UpdateAlertSettingRequest) GetEnabled() bool {
 	if x != nil {
 		return x.Enabled
 	}
 	return false
 }
 
-type UpdateAlertSettingsResponse struct {
+type UpdateAlertSettingResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *UpdateAlertSettingsResponse) Reset() {
-	*x = UpdateAlertSettingsResponse{}
-	mi := &file_querysheriff_v1_alert_proto_msgTypes[6]
+func (x *UpdateAlertSettingResponse) Reset() {
+	*x = UpdateAlertSettingResponse{}
+	mi := &file_querysheriff_v1_alert_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *UpdateAlertSettingsResponse) String() string {
+func (x *UpdateAlertSettingResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*UpdateAlertSettingsResponse) ProtoMessage() {}
+func (*UpdateAlertSettingResponse) ProtoMessage() {}
 
-func (x *UpdateAlertSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_querysheriff_v1_alert_proto_msgTypes[6]
+func (x *UpdateAlertSettingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_querysheriff_v1_alert_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -432,18 +468,18 @@ func (x *UpdateAlertSettingsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpdateAlertSettingsResponse.ProtoReflect.Descriptor instead.
-func (*UpdateAlertSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_querysheriff_v1_alert_proto_rawDescGZIP(), []int{6}
+// Deprecated: Use UpdateAlertSettingResponse.ProtoReflect.Descriptor instead.
+func (*UpdateAlertSettingResponse) Descriptor() ([]byte, []int) {
+	return file_querysheriff_v1_alert_proto_rawDescGZIP(), []int{7}
 }
 
 var File_querysheriff_v1_alert_proto protoreflect.FileDescriptor
 
 const file_querysheriff_v1_alert_proto_rawDesc = "" +
 	"\n" +
-	"\x1bquerysheriff/v1/alert.proto\x12\x0fquerysheriff.v1\"\x14\n" +
-	"\x12QueryAlertsRequest\"U\n" +
-	"\x13QueryAlertsResponse\x12>\n" +
+	"\x1bquerysheriff/v1/alert.proto\x12\x0fquerysheriff.v1\"\x1a\n" +
+	"\x18ListAlertSettingsRequest\"[\n" +
+	"\x19ListAlertSettingsResponse\x12>\n" +
 	"\aservers\x18\x01 \x03(\v2$.querysheriff.v1.ServerAlertSettingsR\aservers\"\x99\x01\n" +
 	"\x13ServerAlertSettings\x12\x1f\n" +
 	"\vserver_name\x18\x01 \x01(\tR\n" +
@@ -455,25 +491,28 @@ const file_querysheriff_v1_alert_proto_rawDesc = "" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x121\n" +
 	"\x05level\x18\x03 \x01(\x0e2\x1b.querysheriff.v1.AlertLevelR\x05level\x12\x18\n" +
 	"\aenabled\x18\x04 \x01(\bR\aenabled\x12&\n" +
-	"\x0ffires_last_week\x18\x05 \x01(\x03R\rfiresLastWeek\"\xa1\x01\n" +
-	"\x1aUpdateAlertSettingsRequest\x12\x1f\n" +
+	"\x0ffires_last_week\x18\x05 \x01(\x03R\rfiresLastWeek\"h\n" +
+	"\x19UpdateAlertWebhookRequest\x12\x1f\n" +
 	"\vserver_name\x18\x01 \x01(\tR\n" +
 	"serverName\x12*\n" +
-	"\x11slack_webhook_url\x18\x02 \x01(\tR\x0fslackWebhookUrl\x126\n" +
-	"\atoggles\x18\x03 \x03(\v2\x1c.querysheriff.v1.AlertToggleR\atoggles\"9\n" +
-	"\vAlertToggle\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x18\n" +
-	"\aenabled\x18\x02 \x01(\bR\aenabled\"\x1d\n" +
-	"\x1bUpdateAlertSettingsResponse*r\n" +
+	"\x11slack_webhook_url\x18\x02 \x01(\tR\x0fslackWebhookUrl\"\x1c\n" +
+	"\x1aUpdateAlertWebhookResponse\"h\n" +
+	"\x19UpdateAlertSettingRequest\x12\x1f\n" +
+	"\vserver_name\x18\x01 \x01(\tR\n" +
+	"serverName\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12\x18\n" +
+	"\aenabled\x18\x03 \x01(\bR\aenabled\"\x1c\n" +
+	"\x1aUpdateAlertSettingResponse*r\n" +
 	"\n" +
 	"AlertLevel\x12\x1b\n" +
 	"\x17ALERT_LEVEL_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10ALERT_LEVEL_INFO\x10\x01\x12\x17\n" +
 	"\x13ALERT_LEVEL_WARNING\x10\x02\x12\x18\n" +
-	"\x14ALERT_LEVEL_CRITICAL\x10\x032\xde\x01\n" +
-	"\fAlertService\x12Z\n" +
-	"\vQueryAlerts\x12#.querysheriff.v1.QueryAlertsRequest\x1a$.querysheriff.v1.QueryAlertsResponse\"\x00\x12r\n" +
-	"\x13UpdateAlertSettings\x12+.querysheriff.v1.UpdateAlertSettingsRequest\x1a,.querysheriff.v1.UpdateAlertSettingsResponse\"\x00BDZBgithub.com/querysheriff/backend/gen/querysheriff/v1;querysheriffv1b\x06proto3"
+	"\x14ALERT_LEVEL_CRITICAL\x10\x032\xde\x02\n" +
+	"\fAlertService\x12l\n" +
+	"\x11ListAlertSettings\x12).querysheriff.v1.ListAlertSettingsRequest\x1a*.querysheriff.v1.ListAlertSettingsResponse\"\x00\x12o\n" +
+	"\x12UpdateAlertWebhook\x12*.querysheriff.v1.UpdateAlertWebhookRequest\x1a+.querysheriff.v1.UpdateAlertWebhookResponse\"\x00\x12o\n" +
+	"\x12UpdateAlertSetting\x12*.querysheriff.v1.UpdateAlertSettingRequest\x1a+.querysheriff.v1.UpdateAlertSettingResponse\"\x00BDZBgithub.com/querysheriff/backend/gen/querysheriff/v1;querysheriffv1b\x06proto3"
 
 var (
 	file_querysheriff_v1_alert_proto_rawDescOnce sync.Once
@@ -488,31 +527,33 @@ func file_querysheriff_v1_alert_proto_rawDescGZIP() []byte {
 }
 
 var file_querysheriff_v1_alert_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_querysheriff_v1_alert_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_querysheriff_v1_alert_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_querysheriff_v1_alert_proto_goTypes = []any{
-	(AlertLevel)(0),                     // 0: querysheriff.v1.AlertLevel
-	(*QueryAlertsRequest)(nil),          // 1: querysheriff.v1.QueryAlertsRequest
-	(*QueryAlertsResponse)(nil),         // 2: querysheriff.v1.QueryAlertsResponse
-	(*ServerAlertSettings)(nil),         // 3: querysheriff.v1.ServerAlertSettings
-	(*AlertSetting)(nil),                // 4: querysheriff.v1.AlertSetting
-	(*UpdateAlertSettingsRequest)(nil),  // 5: querysheriff.v1.UpdateAlertSettingsRequest
-	(*AlertToggle)(nil),                 // 6: querysheriff.v1.AlertToggle
-	(*UpdateAlertSettingsResponse)(nil), // 7: querysheriff.v1.UpdateAlertSettingsResponse
+	(AlertLevel)(0),                    // 0: querysheriff.v1.AlertLevel
+	(*ListAlertSettingsRequest)(nil),   // 1: querysheriff.v1.ListAlertSettingsRequest
+	(*ListAlertSettingsResponse)(nil),  // 2: querysheriff.v1.ListAlertSettingsResponse
+	(*ServerAlertSettings)(nil),        // 3: querysheriff.v1.ServerAlertSettings
+	(*AlertSetting)(nil),               // 4: querysheriff.v1.AlertSetting
+	(*UpdateAlertWebhookRequest)(nil),  // 5: querysheriff.v1.UpdateAlertWebhookRequest
+	(*UpdateAlertWebhookResponse)(nil), // 6: querysheriff.v1.UpdateAlertWebhookResponse
+	(*UpdateAlertSettingRequest)(nil),  // 7: querysheriff.v1.UpdateAlertSettingRequest
+	(*UpdateAlertSettingResponse)(nil), // 8: querysheriff.v1.UpdateAlertSettingResponse
 }
 var file_querysheriff_v1_alert_proto_depIdxs = []int32{
-	3, // 0: querysheriff.v1.QueryAlertsResponse.servers:type_name -> querysheriff.v1.ServerAlertSettings
+	3, // 0: querysheriff.v1.ListAlertSettingsResponse.servers:type_name -> querysheriff.v1.ServerAlertSettings
 	4, // 1: querysheriff.v1.ServerAlertSettings.alerts:type_name -> querysheriff.v1.AlertSetting
 	0, // 2: querysheriff.v1.AlertSetting.level:type_name -> querysheriff.v1.AlertLevel
-	6, // 3: querysheriff.v1.UpdateAlertSettingsRequest.toggles:type_name -> querysheriff.v1.AlertToggle
-	1, // 4: querysheriff.v1.AlertService.QueryAlerts:input_type -> querysheriff.v1.QueryAlertsRequest
-	5, // 5: querysheriff.v1.AlertService.UpdateAlertSettings:input_type -> querysheriff.v1.UpdateAlertSettingsRequest
-	2, // 6: querysheriff.v1.AlertService.QueryAlerts:output_type -> querysheriff.v1.QueryAlertsResponse
-	7, // 7: querysheriff.v1.AlertService.UpdateAlertSettings:output_type -> querysheriff.v1.UpdateAlertSettingsResponse
-	6, // [6:8] is the sub-list for method output_type
-	4, // [4:6] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	1, // 3: querysheriff.v1.AlertService.ListAlertSettings:input_type -> querysheriff.v1.ListAlertSettingsRequest
+	5, // 4: querysheriff.v1.AlertService.UpdateAlertWebhook:input_type -> querysheriff.v1.UpdateAlertWebhookRequest
+	7, // 5: querysheriff.v1.AlertService.UpdateAlertSetting:input_type -> querysheriff.v1.UpdateAlertSettingRequest
+	2, // 6: querysheriff.v1.AlertService.ListAlertSettings:output_type -> querysheriff.v1.ListAlertSettingsResponse
+	6, // 7: querysheriff.v1.AlertService.UpdateAlertWebhook:output_type -> querysheriff.v1.UpdateAlertWebhookResponse
+	8, // 8: querysheriff.v1.AlertService.UpdateAlertSetting:output_type -> querysheriff.v1.UpdateAlertSettingResponse
+	6, // [6:9] is the sub-list for method output_type
+	3, // [3:6] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_querysheriff_v1_alert_proto_init() }
@@ -526,7 +567,7 @@ func file_querysheriff_v1_alert_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_querysheriff_v1_alert_proto_rawDesc), len(file_querysheriff_v1_alert_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

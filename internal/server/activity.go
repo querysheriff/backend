@@ -2,39 +2,25 @@ package server
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"slices"
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 	"github.com/querysheriff/backend/internal/alerts"
 	"github.com/querysheriff/backend/internal/clickhouse"
-	"github.com/querysheriff/backend/internal/gen/db"
-	"github.com/querysheriff/backend/internal/humanize"
 	"github.com/querysheriff/backend/internal/timeseries"
 )
 
-const (
-	activeState        = "active"
-	longQueryThreshold = time.Minute
-	blockingThreshold  = 10 * time.Second
-	openTxnThreshold   = 10 * time.Minute
-)
-
 type ActivityServer struct {
-	pool     *pgxpool.Pool
-	queries  *db.Queries
 	stats    *clickhouse.Client
 	notifier *alerts.Notifier
 }
 
-func NewActivityServer(pool *pgxpool.Pool, stats *clickhouse.Client, notifier *alerts.Notifier) *ActivityServer {
-	return &ActivityServer{pool: pool, queries: db.New(pool), stats: stats, notifier: notifier}
+func NewActivityServer(stats *clickhouse.Client, notifier *alerts.Notifier) *ActivityServer {
+	return &ActivityServer{stats: stats, notifier: notifier}
 }
 
 // ReportActivity stores transaction activity snapshots and evaluates alerts.
@@ -76,136 +62,21 @@ func (s *ActivityServer) ReportActivity(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	s.evaluateAlerts(serverName, msg.GetCollectedAt().AsTime(), txnSnapshots)
+	s.notifier.CheckActivity(serverName, collectedAt, txnSnapshots)
 
 	return connect.NewResponse(&querysheriffv1.ReportActivityResponse{}), nil
 }
 
-func (s *ActivityServer) evaluateAlerts(
-	serverName string,
-	collectedAt time.Time,
-	snapshots []*querysheriffv1.ActivitySnapshot,
-) {
-	blocked, blockedFor := longestOver(snapshots, blockingThreshold,
-		func(snap *querysheriffv1.ActivitySnapshot) (time.Duration, bool) {
-			if snap.GetBlockedByPid() == 0 || snap.GetLockWaitStart() == nil {
-				return 0, false
-			}
-
-			return collectedAt.Sub(snap.GetLockWaitStart().AsTime()), true
-		})
-
-	running, runningFor := longestOver(snapshots, longQueryThreshold,
-		func(snap *querysheriffv1.ActivitySnapshot) (time.Duration, bool) {
-			if snap.GetState() != activeState || snap.GetQueryStart() == nil {
-				return 0, false
-			}
-
-			return collectedAt.Sub(snap.GetQueryStart().AsTime()), true
-		})
-
-	open, openFor := longestOver(snapshots, openTxnThreshold,
-		func(snap *querysheriffv1.ActivitySnapshot) (time.Duration, bool) {
-			return collectedAt.Sub(snap.GetXactStart().AsTime()), true
-		})
-
-	if blocked != nil {
-		s.notifier.Fire(serverName, alerts.KeyBlockedQuery, blockedQueryText(blocked, blockedFor, snapshots))
-	}
-	if running != nil {
-		s.notifier.Fire(serverName, alerts.KeyLongQuery, sessionText("query", "running", running, runningFor))
-	}
-	if open != nil {
-		s.notifier.Fire(serverName, alerts.KeyLongTransaction, sessionText("transaction", "open", open, openFor))
-	}
-}
-
-func longestOver(
-	snapshots []*querysheriffv1.ActivitySnapshot,
-	threshold time.Duration,
-	measure func(*querysheriffv1.ActivitySnapshot) (time.Duration, bool),
-) (*querysheriffv1.ActivitySnapshot, time.Duration) {
-	var worst *querysheriffv1.ActivitySnapshot
-	var longest time.Duration
-
-	for _, snap := range snapshots {
-		measured, ok := measure(snap)
-		if ok && measured >= threshold && measured > longest {
-			worst, longest = snap, measured
-		}
-	}
-
-	return worst, longest
-}
-
-func inDatabase(name string) string {
-	if name == "" {
-		return ""
-	}
-
-	return " in " + name
-}
-
-func sessionText(
-	subject, verb string,
-	snap *querysheriffv1.ActivitySnapshot,
-	elapsed time.Duration,
-) string {
-	return fmt.Sprintf(
-		"A %s%s has been %s %s.\n\nquery: %s\npid: %d",
-		subject,
-		inDatabase(snap.GetDatabaseName()),
-		verb,
-		humanize.Duration(elapsed),
-		humanize.QueryPreview(snap.GetQuery()),
-		snap.GetPid(),
-	)
-}
-
-func blockedQueryText(
-	blocked *querysheriffv1.ActivitySnapshot,
-	waited time.Duration,
-	snapshots []*querysheriffv1.ActivitySnapshot,
-) string {
-	blockerQuery := "not captured"
-	for _, snap := range snapshots {
-		if snap.GetPid() == blocked.GetBlockedByPid() {
-			blockerQuery = humanize.QueryPreview(snap.GetQuery())
-
-			break
-		}
-	}
-
-	return fmt.Sprintf(
-		"A query%s has been waiting %s for a lock.\n\nwaiting: %s\nblocking: %s\npids: %d blocked by %d",
-		inDatabase(blocked.GetDatabaseName()),
-		humanize.Duration(waited),
-		humanize.QueryPreview(blocked.GetQuery()),
-		blockerQuery,
-		blocked.GetPid(),
-		blocked.GetBlockedByPid(),
-	)
-}
-
-// QueryTransactions returns filtered, sorted, paginated transactions with reconstructed events.
+// ListTransactions returns filtered, sorted, paginated transactions with reconstructed events.
 // Example: minOpen=30s, limit=50 -> transactions open for at least 30s.
-func (s *ActivityServer) QueryTransactions(
+func (s *ActivityServer) ListTransactions(
 	ctx context.Context,
-	req *connect.Request[querysheriffv1.QueryTransactionsRequest],
-) (*connect.Response[querysheriffv1.QueryTransactionsResponse], error) {
+	req *connect.Request[querysheriffv1.ListTransactionsRequest],
+) (*connect.Response[querysheriffv1.ListTransactionsResponse], error) {
 	msg := req.Msg
 
-	principal, err := requirePrincipal(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if name := msg.GetServerName(); name != "" && !principal.CanViewServer(name) {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("access to that server is not allowed"))
-	}
-
 	from, to := msg.GetFrom(), msg.GetTo()
-	if err = requireRange(from, to); err != nil {
+	if err := authorizeDatabaseQuery(ctx, msg.GetServerName(), msg.GetDatabaseName(), from, to); err != nil {
 		return nil, err
 	}
 
@@ -226,29 +97,19 @@ func (s *ActivityServer) QueryTransactions(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	hasMore := len(rows) > int(limit)
-	if hasMore {
-		rows = rows[:limit]
-	}
-
+	rows, hasMore := trimPage(rows, limit)
 	if len(rows) == 0 {
-		return connect.NewResponse(&querysheriffv1.QueryTransactionsResponse{}), nil
+		return connect.NewResponse(&querysheriffv1.ListTransactionsResponse{}), nil
 	}
 
-	ids := make([]uint64, len(rows))
-	for i, row := range rows {
-		ids[i] = row.ID
-	}
-
-	eventRows, err := s.stats.ListTransactionEvents(ctx, scope, ids)
+	eventRows, err := s.stats.ListTransactionEvents(ctx, scope, rows)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	eventsByTxn := make(map[uint64][]reconstructedEvent, len(rows))
+	eventsByTxn := make(map[uint64][]clickhouse.TransactionEvent, len(rows))
 	for _, row := range eventRows {
-		eventsByTxn[row.TransactionID] = append(
-			eventsByTxn[row.TransactionID], reconstructedEventFromRow(row))
+		eventsByTxn[row.TransactionID] = append(eventsByTxn[row.TransactionID], row)
 	}
 
 	transactions := make([]*querysheriffv1.Transaction, len(rows))
@@ -257,13 +118,13 @@ func (s *ActivityServer) QueryTransactions(
 		transactions[i] = &querysheriffv1.Transaction{
 			Pid:             signedPid(row.Pid),
 			ApplicationName: row.ApplicationName,
-			Start:           timestamppb.New(row.XactStart),
-			End:             timestamppb.New(row.LastSeenAt),
-			Events:          buildTransactionEvents(row.XactStart, events),
+			StartedAt:       timestamppb.New(row.XactStart),
+			LastSeenAt:      timestamppb.New(row.LastSeenAt),
+			Events:          transactionEventsProto(row.XactStart, events),
 		}
 	}
 
-	return connect.NewResponse(&querysheriffv1.QueryTransactionsResponse{
+	return connect.NewResponse(&querysheriffv1.ListTransactionsResponse{
 		Transactions: transactions,
 		HasMore:      hasMore,
 	}), nil
@@ -281,72 +142,54 @@ func transactionSortKey(col querysheriffv1.TransactionSortColumn) string {
 	return "open"
 }
 
-type activitySeriesScope struct {
-	bounds       timeseries.Bounds
-	serverName   string
-	databaseName string
-}
-
-func (s *ActivityServer) resolveSeriesScope(
+// activitySeries authorizes a chart request and returns its chart bounds and the matching scope.
+func activitySeries(
 	ctx context.Context,
 	serverName, databaseName string,
 	from, to *timestamppb.Timestamp,
-) (activitySeriesScope, error) {
-	principal, err := requirePrincipal(ctx)
-	if err != nil {
-		return activitySeriesScope{}, err
+) (clickhouse.TransactionScope, timeseries.Bounds, error) {
+	if err := authorizeDatabaseQuery(ctx, serverName, databaseName, from, to); err != nil {
+		return clickhouse.TransactionScope{}, timeseries.Bounds{}, err
 	}
 
-	if serverName != "" && !principal.CanViewServer(serverName) {
-		return activitySeriesScope{}, connect.NewError(
-			connect.CodePermissionDenied, errors.New("access to that server is not allowed"))
-	}
+	bounds := timeseries.NewBounds(from.AsTime(), to.AsTime(), time.Now())
 
-	if err = requireRange(from, to); err != nil {
-		return activitySeriesScope{}, err
-	}
-
-	return activitySeriesScope{
-		bounds:       timeseries.NewBounds(from.AsTime(), to.AsTime(), time.Now()),
-		serverName:   serverName,
-		databaseName: databaseName,
-	}, nil
-}
-
-func (a activitySeriesScope) transactionScope() clickhouse.TransactionScope {
 	return clickhouse.TransactionScope{
-		ServerName:   a.serverName,
-		DatabaseName: a.databaseName,
-		From:         a.bounds.RangeStart,
-		To:           a.bounds.Anchor,
-	}
+		ServerName:   serverName,
+		DatabaseName: databaseName,
+		From:         bounds.RangeStart,
+		To:           bounds.Anchor,
+	}, bounds, nil
 }
 
-// QueryTransactionAgeSeries returns the oldest transaction age per time bucket.
+// GetTransactionAgeSeries returns the oldest transaction age per time bucket.
 // Example: 1m buckets -> [{12:01, 120s}, {12:02, 180s}, ...].
-func (s *ActivityServer) QueryTransactionAgeSeries(
+func (s *ActivityServer) GetTransactionAgeSeries(
 	ctx context.Context,
-	req *connect.Request[querysheriffv1.QueryTransactionAgeSeriesRequest],
-) (*connect.Response[querysheriffv1.QueryTransactionAgeSeriesResponse], error) {
+	req *connect.Request[querysheriffv1.GetTransactionAgeSeriesRequest],
+) (*connect.Response[querysheriffv1.GetTransactionAgeSeriesResponse], error) {
 	msg := req.Msg
 
-	scope, err := s.resolveSeriesScope(ctx, msg.GetServerName(), msg.GetDatabaseName(), msg.GetFrom(), msg.GetTo())
+	scope, bounds, err := activitySeries(ctx, msg.GetServerName(), msg.GetDatabaseName(), msg.GetFrom(), msg.GetTo())
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := s.stats.TransactionAgeSeries(ctx, scope.transactionScope(), scope.bounds.Bucket)
+	rows, err := s.stats.TransactionAgeSeries(ctx, scope, bounds.Bucket)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	return connect.NewResponse(&querysheriffv1.QueryTransactionAgeSeriesResponse{
-		Series:   transactionAgePoints(scope.bounds.Ends(), rows),
-		BucketMs: scope.bounds.Bucket.Milliseconds(),
+	return connect.NewResponse(&querysheriffv1.GetTransactionAgeSeriesResponse{
+		AgeSeconds: transactionAgePointsProto(bounds.Ends(), rows),
+		BucketMs:   bounds.Bucket.Milliseconds(),
 	}), nil
 }
 
-func transactionAgePoints(ends []time.Time, rows []clickhouse.TransactionAgeBin) []*querysheriffv1.TransactionAgePoint {
+func transactionAgePointsProto(
+	ends []time.Time,
+	rows []clickhouse.TransactionAgeBin,
+) []*querysheriffv1.MetricPoint {
 	endedAge := make(map[int64]float64, len(rows))
 	for _, r := range rows {
 		endedAge[r.BucketEnd.UnixNano()] = r.EndedAge
@@ -355,7 +198,7 @@ func transactionAgePoints(ends []time.Time, rows []clickhouse.TransactionAgeBin)
 	next := len(rows) - 1
 	var oldestOpen time.Time
 
-	points := make([]*querysheriffv1.TransactionAgePoint, len(ends))
+	points := make([]*querysheriffv1.MetricPoint, len(ends))
 	for i, end := range slices.Backward(ends) {
 		for next >= 0 && rows[next].BucketEnd.After(end) {
 			if start := rows[next].OldestStart; oldestOpen.IsZero() || start.Before(oldestOpen) {
@@ -371,7 +214,7 @@ func transactionAgePoints(ends []time.Time, rows []clickhouse.TransactionAgeBin)
 			}
 		}
 
-		points[i] = &querysheriffv1.TransactionAgePoint{At: timestamppb.New(end), AgeSeconds: age}
+		points[i] = metricPointProto(end, age)
 	}
 
 	return points
@@ -414,80 +257,41 @@ func transactionActivityRow(
 	return row
 }
 
-const (
-	stateActive                   = "active"
-	stateIdleInTransaction        = "idle in transaction"
-	stateIdleInTransactionAborted = "idle in transaction (aborted)"
-)
-
-const (
-	statusActive  = querysheriffv1.TransactionEventStatus_TRANSACTION_EVENT_STATUS_ACTIVE
-	statusIdle    = querysheriffv1.TransactionEventStatus_TRANSACTION_EVENT_STATUS_IDLE
-	statusAborted = querysheriffv1.TransactionEventStatus_TRANSACTION_EVENT_STATUS_ABORTED
-)
-
-type reconstructedEvent struct {
-	state         string
-	waitEventType string
-	waitEvent     string
-	lockMode      string
-	query         string
-	queryTags     map[string]string
-	queryStart    time.Time
-	firstSeen     time.Time
-	lastSeen      time.Time
-}
-
-func reconstructedEventFromRow(row clickhouse.TransactionEvent) reconstructedEvent {
-	return reconstructedEvent{
-		state:         row.State,
-		waitEventType: row.WaitEventType,
-		waitEvent:     row.WaitEvent,
-		lockMode:      row.LockMode,
-		query:         row.Query,
-		queryTags:     row.QueryTags,
-		queryStart:    row.QueryStart,
-		firstSeen:     row.FirstSeenAt,
-		lastSeen:      row.LastSeenAt,
-	}
-}
-
-func buildTransactionEvents(start time.Time, events []reconstructedEvent) []*querysheriffv1.TransactionEvent {
+func transactionEventsProto(start time.Time, events []clickhouse.TransactionEvent) []*querysheriffv1.TransactionEvent {
 	out := make([]*querysheriffv1.TransactionEvent, len(events))
 	for i, e := range events {
-		from := e.firstSeen
+		from := e.FirstSeenAt
 		if i == 0 && start.Before(from) {
 			from = start
 		}
 
-		to := e.lastSeen
+		to := e.LastSeenAt
 		if i+1 < len(events) {
-			to = events[i+1].firstSeen
+			to = events[i+1].FirstSeenAt
 		}
 
 		out[i] = &querysheriffv1.TransactionEvent{
-			From:          timestamppb.New(from),
-			To:            timestamppb.New(to),
-			Status:        eventStatus(e.state),
-			WaitEventType: e.waitEventType,
-			WaitEvent:     e.waitEvent,
-			LockMode:      e.lockMode,
-			Query:         e.query,
-			QueryTags:     e.queryTags,
-			QueryStart:    timestamppb.New(e.queryStart),
+			From:       timestamppb.New(from),
+			To:         timestamppb.New(to),
+			Status:     transactionEventStatusProto(e.State),
+			Query:      e.Query,
+			QueryStart: timestamppb.New(e.QueryStart),
+			QueryTags:  e.QueryTags,
+			WaitEvent:  e.WaitEvent,
+			LockMode:   e.LockMode,
 		}
 	}
 
 	return out
 }
 
-func eventStatus(state string) querysheriffv1.TransactionEventStatus {
+func transactionEventStatusProto(state string) querysheriffv1.TransactionEventStatus {
 	switch state {
-	case stateIdleInTransactionAborted:
-		return statusAborted
-	case stateIdleInTransaction:
-		return statusIdle
+	case "idle in transaction (aborted)":
+		return querysheriffv1.TransactionEventStatus_TRANSACTION_EVENT_STATUS_ABORTED
+	case "idle in transaction":
+		return querysheriffv1.TransactionEventStatus_TRANSACTION_EVENT_STATUS_IDLE
 	default:
-		return statusActive
+		return querysheriffv1.TransactionEventStatus_TRANSACTION_EVENT_STATUS_ACTIVE
 	}
 }

@@ -36,15 +36,15 @@ const (
 	// HealthServiceReportHealthProcedure is the fully-qualified name of the HealthService's
 	// ReportHealth RPC.
 	HealthServiceReportHealthProcedure = "/querysheriff.v1.HealthService/ReportHealth"
-	// HealthServiceQueryServersProcedure is the fully-qualified name of the HealthService's
-	// QueryServers RPC.
-	HealthServiceQueryServersProcedure = "/querysheriff.v1.HealthService/QueryServers"
+	// HealthServiceListServersProcedure is the fully-qualified name of the HealthService's ListServers
+	// RPC.
+	HealthServiceListServersProcedure = "/querysheriff.v1.HealthService/ListServers"
 )
 
 // HealthServiceClient is a client for the querysheriff.v1.HealthService service.
 type HealthServiceClient interface {
 	ReportHealth(context.Context, *connect.Request[v1.ReportHealthRequest]) (*connect.Response[v1.ReportHealthResponse], error)
-	QueryServers(context.Context, *connect.Request[v1.QueryServersRequest]) (*connect.Response[v1.QueryServersResponse], error)
+	ListServers(context.Context, *connect.Request[v1.ListServersRequest]) (*connect.Response[v1.ListServersResponse], error)
 }
 
 // NewHealthServiceClient constructs a client for the querysheriff.v1.HealthService service. By
@@ -64,10 +64,10 @@ func NewHealthServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(healthServiceMethods.ByName("ReportHealth")),
 			connect.WithClientOptions(opts...),
 		),
-		queryServers: connect.NewClient[v1.QueryServersRequest, v1.QueryServersResponse](
+		listServers: connect.NewClient[v1.ListServersRequest, v1.ListServersResponse](
 			httpClient,
-			baseURL+HealthServiceQueryServersProcedure,
-			connect.WithSchema(healthServiceMethods.ByName("QueryServers")),
+			baseURL+HealthServiceListServersProcedure,
+			connect.WithSchema(healthServiceMethods.ByName("ListServers")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -76,7 +76,7 @@ func NewHealthServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 // healthServiceClient implements HealthServiceClient.
 type healthServiceClient struct {
 	reportHealth *connect.Client[v1.ReportHealthRequest, v1.ReportHealthResponse]
-	queryServers *connect.Client[v1.QueryServersRequest, v1.QueryServersResponse]
+	listServers  *connect.Client[v1.ListServersRequest, v1.ListServersResponse]
 }
 
 // ReportHealth calls querysheriff.v1.HealthService.ReportHealth.
@@ -84,15 +84,15 @@ func (c *healthServiceClient) ReportHealth(ctx context.Context, req *connect.Req
 	return c.reportHealth.CallUnary(ctx, req)
 }
 
-// QueryServers calls querysheriff.v1.HealthService.QueryServers.
-func (c *healthServiceClient) QueryServers(ctx context.Context, req *connect.Request[v1.QueryServersRequest]) (*connect.Response[v1.QueryServersResponse], error) {
-	return c.queryServers.CallUnary(ctx, req)
+// ListServers calls querysheriff.v1.HealthService.ListServers.
+func (c *healthServiceClient) ListServers(ctx context.Context, req *connect.Request[v1.ListServersRequest]) (*connect.Response[v1.ListServersResponse], error) {
+	return c.listServers.CallUnary(ctx, req)
 }
 
 // HealthServiceHandler is an implementation of the querysheriff.v1.HealthService service.
 type HealthServiceHandler interface {
 	ReportHealth(context.Context, *connect.Request[v1.ReportHealthRequest]) (*connect.Response[v1.ReportHealthResponse], error)
-	QueryServers(context.Context, *connect.Request[v1.QueryServersRequest]) (*connect.Response[v1.QueryServersResponse], error)
+	ListServers(context.Context, *connect.Request[v1.ListServersRequest]) (*connect.Response[v1.ListServersResponse], error)
 }
 
 // NewHealthServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -108,18 +108,18 @@ func NewHealthServiceHandler(svc HealthServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(healthServiceMethods.ByName("ReportHealth")),
 		connect.WithHandlerOptions(opts...),
 	)
-	healthServiceQueryServersHandler := connect.NewUnaryHandler(
-		HealthServiceQueryServersProcedure,
-		svc.QueryServers,
-		connect.WithSchema(healthServiceMethods.ByName("QueryServers")),
+	healthServiceListServersHandler := connect.NewUnaryHandler(
+		HealthServiceListServersProcedure,
+		svc.ListServers,
+		connect.WithSchema(healthServiceMethods.ByName("ListServers")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/querysheriff.v1.HealthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case HealthServiceReportHealthProcedure:
 			healthServiceReportHealthHandler.ServeHTTP(w, r)
-		case HealthServiceQueryServersProcedure:
-			healthServiceQueryServersHandler.ServeHTTP(w, r)
+		case HealthServiceListServersProcedure:
+			healthServiceListServersHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -133,6 +133,6 @@ func (UnimplementedHealthServiceHandler) ReportHealth(context.Context, *connect.
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.HealthService.ReportHealth is not implemented"))
 }
 
-func (UnimplementedHealthServiceHandler) QueryServers(context.Context, *connect.Request[v1.QueryServersRequest]) (*connect.Response[v1.QueryServersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.HealthService.QueryServers is not implemented"))
+func (UnimplementedHealthServiceHandler) ListServers(context.Context, *connect.Request[v1.ListServersRequest]) (*connect.Response[v1.ListServersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.HealthService.ListServers is not implemented"))
 }

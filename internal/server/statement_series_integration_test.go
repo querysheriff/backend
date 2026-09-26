@@ -4,7 +4,6 @@ package server_test
 
 import (
 	"context"
-	"log/slog"
 	"testing"
 	"time"
 
@@ -18,7 +17,7 @@ import (
 	"github.com/querysheriff/backend/internal/testdb"
 )
 
-func TestSeriesScopeResolvesServerAndDatabaseFromStatement(t *testing.T) {
+func TestStatementSeriesSumsTheStatementsCalls(t *testing.T) {
 	t.Parallel()
 
 	const serverName = "series-scope-test"
@@ -42,25 +41,25 @@ func TestSeriesScopeResolvesServerAndDatabaseFromStatement(t *testing.T) {
 		t.Fatalf("seed delta: %v", err)
 	}
 
-	srv := server.NewStatementServer(nil, stats, slog.New(slog.DiscardHandler))
+	srv := server.NewStatementServer(stats)
 	viewer := auth.WithPrincipal(ctx, &auth.Principal{
 		UserID: 1, Email: "viewer@dev.dev", IsSuperAdmin: true,
 	})
 
-	resp, err := srv.QueryStatementCallsSeries(viewer,
-		connect.NewRequest(&querysheriffv1.QueryStatementCallsSeriesRequest{
-			Scope: &querysheriffv1.SeriesScope{
-				StatementId: id,
-				From:        timestamppb.New(now.Add(-time.Hour)),
-				To:          timestamppb.New(now.Add(time.Hour)),
-			},
+	resp, err := srv.GetStatementSeries(viewer,
+		connect.NewRequest(&querysheriffv1.GetStatementSeriesRequest{
+			ServerName:   serverName,
+			DatabaseName: "shop",
+			StatementId:  id,
+			From:         timestamppb.New(now.Add(-time.Hour)),
+			To:           timestamppb.New(now.Add(time.Hour)),
 		}))
 	if err != nil {
-		t.Fatalf("the query detail charts send only a statement id: %v", err)
+		t.Fatalf("GetStatementSeries: %v", err)
 	}
 
 	var total float64
-	for _, point := range resp.Msg.GetCalls().GetSeries() {
+	for _, point := range resp.Msg.GetCalls() {
 		total += point.GetValue()
 	}
 

@@ -14,7 +14,7 @@ import (
 
 	"connectrpc.com/connect"
 	connectcors "connectrpc.com/cors"
-	"github.com/jackc/pgx/v5"
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/rs/cors"
@@ -24,17 +24,19 @@ import (
 	chstats "github.com/querysheriff/backend/internal/clickhouse"
 	"github.com/querysheriff/backend/internal/config"
 	"github.com/querysheriff/backend/internal/gen/db"
+	"github.com/querysheriff/backend/internal/postgres"
 	"github.com/querysheriff/backend/internal/server"
 	schema "github.com/querysheriff/backend/proto"
 )
 
 const (
 	readHeaderTimeout = 10 * time.Second
-	connectTimeout    = 10 * time.Second
+	readTimeout       = 1 * time.Minute
+	idleTimeout       = 2 * time.Minute
 	shutdownTimeout   = 10 * time.Second
 	readyzTimeout     = 2 * time.Second
-
-	apiPrefix = "/api"
+	apiPrefix         = "/api"
+	maxRequestBytes   = 256 << 20 // 256 MiB
 )
 
 func main() {
@@ -54,19 +56,22 @@ func run(logger *slog.Logger) error {
 
 	_ = godotenv.Load()
 
-	cfg, err := config.LoadAPI()
+	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
 
-	pool, err := connectPool(ctx, cfg.DatabaseURL)
+	pool, err := postgres.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 
 	queries := db.New(pool)
-	interceptors := connect.WithInterceptors(server.NewAuthInterceptor(queries))
+	handlerOptions := connect.WithOptions(
+		connect.WithInterceptors(server.NewAuthInterceptor(queries)),
+		connect.WithReadMaxBytes(maxRequestBytes),
+	)
 
 	conn, err := chstats.Connect(ctx, cfg.ClickHouseURL)
 	if err != nil {
@@ -75,12 +80,14 @@ func run(logger *slog.Logger) error {
 	defer func() { _ = conn.Close() }()
 
 	stats := chstats.New(conn)
+	notifier := alerts.NewNotifier(queries, logger)
+	defer notifier.Wait()
 
-	apiMux := registerServices(pool, queries, stats, cfg, logger, interceptors)
+	apiMux := registerServices(pool, queries, stats, notifier, cfg, handlerOptions)
 
 	mux := http.NewServeMux()
 
-	registerHealthEndpoints(mux, pool)
+	registerHealthEndpoints(mux, pool, conn)
 
 	if err = registerSchemaEndpoint(mux); err != nil {
 		return err
@@ -96,6 +103,8 @@ func run(logger *slog.Logger) error {
 		Addr:              cfg.ListenAddr,
 		Handler:           withCORS(mux, cfg.AllowedOrigins),
 		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		IdleTimeout:       idleTimeout,
 		Protocols:         &protocols,
 	}
 
@@ -121,7 +130,7 @@ func run(logger *slog.Logger) error {
 	}
 }
 
-func registerHealthEndpoints(mux *http.ServeMux, pool *pgxpool.Pool) {
+func registerHealthEndpoints(mux *http.ServeMux, pool *pgxpool.Pool, conn driver.Conn) {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -130,7 +139,7 @@ func registerHealthEndpoints(mux *http.ServeMux, pool *pgxpool.Pool) {
 		pingCtx, cancel := context.WithTimeout(r.Context(), readyzTimeout)
 		defer cancel()
 
-		if pingErr := pool.Ping(pingCtx); pingErr != nil {
+		if pool.Ping(pingCtx) != nil || conn.Ping(pingCtx) != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
 
 			return
@@ -163,34 +172,6 @@ func registerSchemaEndpoint(mux *http.ServeMux) error {
 	return nil
 }
 
-func connectPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
-	poolCfg, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		return nil, err
-	}
-
-	// This mode never creates named prepared statements, which have two problems:
-	//  1) They don't survive PgBouncer's transaction pooling
-	//  2) Postgres plan them generically instead of for the actual arguments, which is slower
-	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeCacheDescribe
-
-	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
-	if err != nil {
-		return nil, err
-	}
-
-	pingCtx, cancel := context.WithTimeout(ctx, connectTimeout)
-	defer cancel()
-
-	if pingErr := pool.Ping(pingCtx); pingErr != nil {
-		pool.Close()
-
-		return nil, pingErr
-	}
-
-	return pool, nil
-}
-
 func withCORS(handler http.Handler, allowedOrigins []string) http.Handler {
 	middleware := cors.New(cors.Options{
 		AllowedOrigins:   allowedOrigins,
@@ -207,47 +188,49 @@ func registerServices(
 	pool *pgxpool.Pool,
 	queries *db.Queries,
 	stats *chstats.Client,
-	cfg config.APIConfig,
-	logger *slog.Logger,
-	interceptors connect.Option,
+	notifier *alerts.Notifier,
+	cfg config.Config,
+	handlerOptions connect.Option,
 ) *http.ServeMux {
-	notifier := alerts.NewNotifier(queries, logger)
 	apiMux := http.NewServeMux()
 
 	activityPath, activityHandler := querysheriffv1connect.NewActivityServiceHandler(
-		server.NewActivityServer(pool, stats, notifier),
-		interceptors,
+		server.NewActivityServer(stats, notifier),
+		handlerOptions,
 	)
 	apiMux.Handle(activityPath, activityHandler)
 
 	statementPath, statementHandler := querysheriffv1connect.NewStatementServiceHandler(
-		server.NewStatementServer(queries, stats, logger),
-		interceptors,
+		server.NewStatementServer(stats),
+		handlerOptions,
 	)
 	apiMux.Handle(statementPath, statementHandler)
 
 	logPath, logHandler := querysheriffv1connect.NewLogServiceHandler(
-		server.NewLogServer(queries, stats, notifier),
-		interceptors,
+		server.NewLogServer(stats, notifier),
+		handlerOptions,
 	)
 	apiMux.Handle(logPath, logHandler)
 
 	healthPath, healthHandler := querysheriffv1connect.NewHealthServiceHandler(
 		server.NewHealthServer(queries),
-		interceptors,
+		handlerOptions,
 	)
 	apiMux.Handle(healthPath, healthHandler)
 
 	authPath, authHandler := querysheriffv1connect.NewAuthServiceHandler(
-		server.NewAuthServer(pool, cfg.CookieSecure),
-		interceptors,
+		server.NewAuthServer(queries, cfg.CookieSecure),
+		handlerOptions,
 	)
 	apiMux.Handle(authPath, authHandler)
 
-	adminPath, adminHandler := querysheriffv1connect.NewAdminServiceHandler(server.NewAdminServer(pool), interceptors)
+	adminPath, adminHandler := querysheriffv1connect.NewAdminServiceHandler(server.NewAdminServer(pool), handlerOptions)
 	apiMux.Handle(adminPath, adminHandler)
 
-	alertPath, alertHandler := querysheriffv1connect.NewAlertServiceHandler(server.NewAlertServer(pool), interceptors)
+	alertPath, alertHandler := querysheriffv1connect.NewAlertServiceHandler(
+		server.NewAlertServer(queries),
+		handlerOptions,
+	)
 	apiMux.Handle(alertPath, alertHandler)
 
 	return apiMux

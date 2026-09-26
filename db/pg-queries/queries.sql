@@ -18,31 +18,32 @@ SELECT count(*) AS total FROM users;
 -- name: CreateUser :one
 INSERT INTO users (name, email, password_hash, is_super_admin, allowed_servers)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, email, is_super_admin, created_at, allowed_servers;
+RETURNING *;
 
 -- name: GetUserByEmail :one
-SELECT id, name, email, password_hash, is_super_admin, created_at, allowed_servers
-FROM users
-WHERE email = $1;
+SELECT * FROM users WHERE email = $1;
 
 -- name: GetUserByID :one
-SELECT id, name, email, password_hash, is_super_admin, created_at, allowed_servers
-FROM users
-WHERE id = $1;
+SELECT * FROM users WHERE id = $1;
 
 -- name: ListUsers :many
-SELECT id, name, email, is_super_admin, created_at, allowed_servers
-FROM users
-ORDER BY created_at, id;
+SELECT * FROM users ORDER BY created_at, id;
 
+-- A new password ends every session opened with the old one, except the caller's own.
 -- name: UpdateUser :one
+WITH revoked AS (
+    DELETE FROM user_sessions
+    WHERE user_id = sqlc.arg('id')
+      AND token_hash <> sqlc.arg('caller_session_hash')
+      AND sqlc.narg('password_hash')::text IS NOT NULL
+)
 UPDATE users
 SET name = sqlc.arg('name'),
     email = sqlc.arg('email'),
     password_hash = coalesce(sqlc.narg('password_hash')::text, password_hash),
     allowed_servers = sqlc.arg('allowed_servers')
 WHERE id = sqlc.arg('id')
-RETURNING id, name, email, is_super_admin, created_at, allowed_servers;
+RETURNING *;
 
 -- name: DeleteUser :exec
 DELETE FROM users WHERE id = $1;
@@ -52,13 +53,14 @@ INSERT INTO user_sessions (token_hash, user_id, expires_at)
 VALUES ($1, $2, $3);
 
 -- name: GetSessionUser :one
-SELECT u.id, u.name, u.email, u.is_super_admin, u.created_at, u.allowed_servers
-FROM user_sessions s
-JOIN users u ON u.id = s.user_id
-WHERE s.token_hash = $1 AND s.expires_at > now();
+SELECT * FROM users
+WHERE id = (SELECT user_id FROM user_sessions WHERE token_hash = $1 AND expires_at > now());
 
 -- name: DeleteSession :exec
 DELETE FROM user_sessions WHERE token_hash = $1;
+
+-- name: DeleteExpiredSessions :exec
+DELETE FROM user_sessions WHERE expires_at <= now();
 
 -- name: CreateCollectorToken :one
 INSERT INTO collector_tokens (server_name, token_hash)
@@ -96,7 +98,7 @@ INSERT INTO alert_settings (server_name, slack_webhook_url)
 VALUES ($1, $2)
 ON CONFLICT (server_name) DO UPDATE SET slack_webhook_url = EXCLUDED.slack_webhook_url;
 
--- name: UpsertAlertToggle :batchexec
+-- name: UpsertAlertToggle :exec
 INSERT INTO alert_toggles (server_name, alert_key, enabled)
 VALUES ($1, $2, $3)
 ON CONFLICT (server_name, alert_key) DO UPDATE SET enabled = EXCLUDED.enabled;
@@ -113,11 +115,14 @@ cleared_fires AS (
 )
 DELETE FROM alert_notifications WHERE alert_notifications.server_name = sqlc.arg('server_name');
 
--- name: GetAlertWebhook :one
-SELECT slack_webhook_url FROM alert_settings WHERE server_name = $1;
-
--- name: GetAlertEnabled :one
-SELECT enabled FROM alert_toggles WHERE server_name = $1 AND alert_key = $2;
+-- name: GetEnabledAlertWebhook :one
+SELECT s.slack_webhook_url
+FROM alert_settings s
+LEFT JOIN alert_toggles t
+  ON t.server_name = s.server_name AND t.alert_key = sqlc.arg('alert_key')
+WHERE s.server_name = sqlc.arg('server_name')
+  AND s.slack_webhook_url <> ''
+  AND coalesce(t.enabled, true);
 
 -- name: TryClaimAlertNotification :one
 WITH claimed AS (
@@ -134,6 +139,18 @@ recorded AS (
     FROM claimed
 )
 SELECT last_fired_at FROM claimed;
+
+-- name: ReleaseAlertClaim :exec
+WITH released_fire AS (
+    DELETE FROM alert_fires
+    WHERE alert_fires.server_name = sqlc.arg('server_name')
+      AND alert_fires.alert_key = sqlc.arg('alert_key')
+      AND alert_fires.fired_at = sqlc.arg('fired_at')
+)
+DELETE FROM alert_notifications
+WHERE alert_notifications.server_name = sqlc.arg('server_name')
+  AND alert_notifications.alert_key = sqlc.arg('alert_key')
+  AND alert_notifications.last_fired_at = sqlc.arg('fired_at');
 
 -- name: CountRecentAlertFires :many
 SELECT server_name, alert_key, count(*) AS fires

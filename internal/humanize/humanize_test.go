@@ -1,7 +1,6 @@
 package humanize_test
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -71,27 +70,6 @@ func TestCount(t *testing.T) {
 		if got := humanize.Count(c.in); got != c.want {
 			t.Errorf("Count(%d) = %q, want %q", c.in, got, c.want)
 		}
-	}
-}
-
-func TestQueryPreviewCollapsesWhitespace(t *testing.T) {
-	t.Parallel()
-
-	if got := humanize.QueryPreview("SELECT\n  1\n"); got != "SELECT 1" {
-		t.Errorf("QueryPreview() = %q, want %q", got, "SELECT 1")
-	}
-}
-
-func TestQueryPreviewTruncatesLongQueries(t *testing.T) {
-	t.Parallel()
-
-	got := humanize.QueryPreview(strings.Repeat("column, ", 40))
-	if len(got) != humanize.MaxQueryPreview+len("...") {
-		t.Errorf("QueryPreview() is %d long, want %d", len(got), humanize.MaxQueryPreview+len("..."))
-	}
-
-	if !strings.HasSuffix(got, "...") {
-		t.Errorf("QueryPreview() = %q, want it to end in an ellipsis", got)
 	}
 }
 

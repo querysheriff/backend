@@ -3,15 +3,17 @@ syntax = "proto3";
 package querysheriff.v1;
 
 import "google/protobuf/timestamp.proto";
+import "querysheriff/v1/common.proto";
 
 option go_package = "github.com/querysheriff/backend/gen/querysheriff/v1;querysheriffv1";
 
 service ActivityService {
   rpc ReportActivity(ReportActivityRequest) returns (ReportActivityResponse) {}
-  rpc QueryTransactions(QueryTransactionsRequest) returns (QueryTransactionsResponse) {}
-  rpc QueryLockWaits(QueryLockWaitsRequest) returns (QueryLockWaitsResponse) {}
-  rpc QueryLockWaitSeries(QueryLockWaitSeriesRequest) returns (QueryLockWaitSeriesResponse) {}
-  rpc QueryTransactionAgeSeries(QueryTransactionAgeSeriesRequest) returns (QueryTransactionAgeSeriesResponse) {}
+
+  rpc ListTransactions(ListTransactionsRequest) returns (ListTransactionsResponse) {}
+  rpc GetTransactionAgeSeries(GetTransactionAgeSeriesRequest) returns (GetTransactionAgeSeriesResponse) {}
+  rpc ListLockWaits(ListLockWaitsRequest) returns (ListLockWaitsResponse) {}
+  rpc GetLockWaitSeries(GetLockWaitSeriesRequest) returns (GetLockWaitSeriesResponse) {}
 }
 
 message ReportActivityRequest {
@@ -40,32 +42,25 @@ message ActivitySnapshot {
   string lock_mode = 16;
 }
 
-enum TransactionEventStatus {
-  TRANSACTION_EVENT_STATUS_UNSPECIFIED = 0;
-  TRANSACTION_EVENT_STATUS_ACTIVE = 1;
-  TRANSACTION_EVENT_STATUS_IDLE = 2;
-  TRANSACTION_EVENT_STATUS_ABORTED = 4;
-}
-
 enum TransactionSortColumn {
   TRANSACTION_SORT_COLUMN_UNSPECIFIED = 0;
   TRANSACTION_SORT_COLUMN_STARTED = 1;
   TRANSACTION_SORT_COLUMN_OPEN = 2;
 }
 
-message QueryTransactionsRequest {
+message ListTransactionsRequest {
   string server_name = 1;
   string database_name = 2;
   google.protobuf.Timestamp from = 3;
   google.protobuf.Timestamp to = 4;
-  int32 limit = 5;
-  int32 offset = 6;
-  TransactionSortColumn sort_column = 7;
-  bool sort_desc = 8;
-  int64 min_open_ms = 9;
+  int64 min_open_ms = 5;
+  TransactionSortColumn sort_column = 6;
+  bool sort_desc = 7;
+  int32 limit = 8;
+  int32 offset = 9;
 }
 
-message QueryTransactionsResponse {
+message ListTransactionsResponse {
   repeated Transaction transactions = 1;
   bool has_more = 2;
 }
@@ -73,38 +68,39 @@ message QueryTransactionsResponse {
 message Transaction {
   int32 pid = 1;
   string application_name = 2;
-  google.protobuf.Timestamp start = 3;
-  google.protobuf.Timestamp end = 4;
-  repeated TransactionEvent events = 6;
+  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Timestamp last_seen_at = 4;
+  repeated TransactionEvent events = 5;
+}
+
+enum TransactionEventStatus {
+  TRANSACTION_EVENT_STATUS_UNSPECIFIED = 0;
+  TRANSACTION_EVENT_STATUS_ACTIVE = 1;
+  TRANSACTION_EVENT_STATUS_IDLE = 2;
+  TRANSACTION_EVENT_STATUS_ABORTED = 3;
 }
 
 message TransactionEvent {
   google.protobuf.Timestamp from = 1;
   google.protobuf.Timestamp to = 2;
   TransactionEventStatus status = 3;
-  string query = 5;
-  string wait_event_type = 7;
-  string wait_event = 8;
-  string lock_mode = 9;
-  map<string, string> query_tags = 10;
-  google.protobuf.Timestamp query_start = 11;
+  string query = 4;
+  google.protobuf.Timestamp query_start = 5;
+  map<string, string> query_tags = 6;
+  string wait_event = 7;
+  string lock_mode = 8;
 }
 
-message QueryLockWaitSeriesRequest {
+message GetTransactionAgeSeriesRequest {
   string server_name = 1;
   string database_name = 2;
   google.protobuf.Timestamp from = 3;
   google.protobuf.Timestamp to = 4;
 }
 
-message QueryLockWaitSeriesResponse {
-  repeated LockWaitPoint series = 1;
+message GetTransactionAgeSeriesResponse {
+  repeated MetricPoint age_seconds = 1;
   int64 bucket_ms = 2;
-}
-
-message LockWaitPoint {
-  google.protobuf.Timestamp at = 1;
-  double wait_seconds = 2;
 }
 
 enum LockWaitSortColumn {
@@ -113,18 +109,18 @@ enum LockWaitSortColumn {
   LOCK_WAIT_SORT_COLUMN_WAITED = 2;
 }
 
-message QueryLockWaitsRequest {
+message ListLockWaitsRequest {
   string server_name = 1;
   string database_name = 2;
   google.protobuf.Timestamp from = 3;
   google.protobuf.Timestamp to = 4;
-  int32 limit = 5;
-  int32 offset = 6;
-  LockWaitSortColumn sort_column = 7;
-  bool sort_desc = 8;
+  LockWaitSortColumn sort_column = 5;
+  bool sort_desc = 6;
+  int32 limit = 7;
+  int32 offset = 8;
 }
 
-message QueryLockWaitsResponse {
+message ListLockWaitsResponse {
   repeated LockWait waits = 1;
   bool has_more = 2;
 }
@@ -132,9 +128,9 @@ message QueryLockWaitsResponse {
 message LockWait {
   LockParty waiting = 1;
   LockParty blocking = 2;
-  google.protobuf.Timestamp started_waiting = 3;
-  google.protobuf.Timestamp last_seen = 4;
-  string lock_mode = 5;
+  string lock_mode = 3;
+  google.protobuf.Timestamp started_at = 4;
+  google.protobuf.Timestamp last_seen_at = 5;
 }
 
 message LockParty {
@@ -144,19 +140,14 @@ message LockParty {
   map<string, string> query_tags = 4;
 }
 
-message QueryTransactionAgeSeriesRequest {
+message GetLockWaitSeriesRequest {
   string server_name = 1;
   string database_name = 2;
   google.protobuf.Timestamp from = 3;
   google.protobuf.Timestamp to = 4;
 }
 
-message QueryTransactionAgeSeriesResponse {
-  repeated TransactionAgePoint series = 1;
+message GetLockWaitSeriesResponse {
+  repeated MetricPoint wait_seconds = 1;
   int64 bucket_ms = 2;
-}
-
-message TransactionAgePoint {
-  google.protobuf.Timestamp at = 1;
-  double age_seconds = 2;
 }

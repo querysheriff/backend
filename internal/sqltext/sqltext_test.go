@@ -64,6 +64,7 @@ func TestProcessKind(t *testing.T) {
 		"SELECT set_config($2, $1, $3)":     querysheriffv1.QueryKind_QUERY_KIND_OTHERS,
 		"SELECT pg_catalog.set_config('search_path', $1, false)": querysheriffv1.QueryKind_QUERY_KIND_OTHERS,
 		"totally not valid sql":                                  querysheriffv1.QueryKind_QUERY_KIND_OTHERS,
+		"SELECT * FROM asset_configs":                            querysheriffv1.QueryKind_QUERY_KIND_READS,
 	}
 	for sql, want := range cases {
 		if got := sqltext.Process(sql).Kind; got != want {

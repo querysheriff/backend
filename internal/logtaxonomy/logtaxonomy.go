@@ -5,22 +5,22 @@ import (
 )
 
 type group struct {
-	category        querysheriffv1.LogEvent_LogCategory
+	category        querysheriffv1.LogCategory
 	classifications []querysheriffv1.LogEvent_LogClassification
 }
 
 type Categories struct {
-	byClassification map[querysheriffv1.LogEvent_LogClassification]querysheriffv1.LogEvent_LogCategory
-	byCategory       map[querysheriffv1.LogEvent_LogCategory][]querysheriffv1.LogEvent_LogClassification
-	order            []querysheriffv1.LogEvent_LogCategory
+	byClassification map[querysheriffv1.LogEvent_LogClassification]querysheriffv1.LogCategory
+	byCategory       map[querysheriffv1.LogCategory][]querysheriffv1.LogEvent_LogClassification
+	order            []querysheriffv1.LogCategory
 }
 
 func New() *Categories {
 	groups := append(serverGroups(), statementGroups()...)
 
 	resolved := &Categories{
-		byClassification: make(map[querysheriffv1.LogEvent_LogClassification]querysheriffv1.LogEvent_LogCategory),
-		byCategory:       make(map[querysheriffv1.LogEvent_LogCategory][]querysheriffv1.LogEvent_LogClassification),
+		byClassification: make(map[querysheriffv1.LogEvent_LogClassification]querysheriffv1.LogCategory),
+		byCategory:       make(map[querysheriffv1.LogCategory][]querysheriffv1.LogEvent_LogClassification),
 	}
 
 	for _, group := range groups {
@@ -37,7 +37,7 @@ func New() *Categories {
 
 // All returns categories in display order.
 // Example: [SERVER, CONNECTION, WAL_CHECKPOINT, ...].
-func (c *Categories) All() []querysheriffv1.LogEvent_LogCategory {
+func (c *Categories) All() []querysheriffv1.LogCategory {
 	return c.order
 }
 
@@ -45,11 +45,11 @@ func (c *Categories) All() []querysheriffv1.LogEvent_LogCategory {
 // Example: Of(LOCK_TIMEOUT) -> LOCK.
 func (c *Categories) Of(
 	classification querysheriffv1.LogEvent_LogClassification,
-) querysheriffv1.LogEvent_LogCategory {
+) querysheriffv1.LogCategory {
 	return c.byClassification[classification]
 }
 
-func (c *Categories) expand(categories []querysheriffv1.LogEvent_LogCategory) []int32 {
+func (c *Categories) expand(categories []querysheriffv1.LogCategory) []int32 {
 	if len(categories) == 0 {
 		return nil
 	}
@@ -57,7 +57,7 @@ func (c *Categories) expand(categories []querysheriffv1.LogEvent_LogCategory) []
 	var out []int32
 
 	for _, category := range categories {
-		if category == querysheriffv1.LogEvent_LOG_CATEGORY_UNSPECIFIED {
+		if category == querysheriffv1.LogCategory_LOG_CATEGORY_UNSPECIFIED {
 			out = append(out, int32(querysheriffv1.LogEvent_LOG_CLASSIFICATION_UNSPECIFIED))
 
 			continue
@@ -75,7 +75,7 @@ func (c *Categories) expand(categories []querysheriffv1.LogEvent_LogCategory) []
 // Example: explicit=[LOCK_TIMEOUT], categories=[STATEMENT] -> [LOCK_TIMEOUT, STATEMENT_DURATION, ...].
 func (c *Categories) Selected(
 	explicit []int32,
-	categories []querysheriffv1.LogEvent_LogCategory,
+	categories []querysheriffv1.LogCategory,
 ) []int32 {
 	expanded := c.expand(categories)
 	if len(explicit) == 0 && len(expanded) == 0 {
@@ -97,62 +97,9 @@ func (c *Categories) Selected(
 	return out
 }
 
-// Ranks returns category sort ranks indexed by classification value.
-// Example: classifications in SERVER get rank 0, CONNECTION rank 1, etc.
-func (c *Categories) Ranks() []int32 {
-	rank := make(map[querysheriffv1.LogEvent_LogCategory]int32, len(c.order))
-
-	var next int32
-	for _, category := range c.order {
-		rank[category] = next
-		next++
-	}
-
-	var highest int32
-	for classification := range c.byClassification {
-		if int32(classification) > highest {
-			highest = int32(classification)
-		}
-	}
-
-	out := make([]int32, highest+1)
-	for i := range out {
-		out[i] = next
-	}
-
-	for classification, category := range c.byClassification {
-		out[classification] = rank[category]
-	}
-
-	return out
-}
-
-// SeverityRanks returns severity sort ranks indexed by log-level value.
-// Example: DEBUG=1, INFO=2, WARNING=5, ERROR=6.
-func SeverityRanks() []int32 {
-	order := []querysheriffv1.LogEvent_LogLevel{
-		querysheriffv1.LogEvent_LOG_LEVEL_UNSPECIFIED,
-		querysheriffv1.LogEvent_LOG_LEVEL_DEBUG,
-		querysheriffv1.LogEvent_LOG_LEVEL_INFO,
-		querysheriffv1.LogEvent_LOG_LEVEL_LOG,
-		querysheriffv1.LogEvent_LOG_LEVEL_NOTICE,
-		querysheriffv1.LogEvent_LOG_LEVEL_WARNING,
-		querysheriffv1.LogEvent_LOG_LEVEL_ERROR,
-		querysheriffv1.LogEvent_LOG_LEVEL_FATAL,
-		querysheriffv1.LogEvent_LOG_LEVEL_PANIC,
-	}
-
-	ranks := make([]int32, len(querysheriffv1.LogEvent_LogLevel_name))
-	for rank, level := range order {
-		ranks[level] = int32(rank)
-	}
-
-	return ranks
-}
-
 func serverGroups() []group {
 	return []group{
-		{querysheriffv1.LogEvent_LOG_CATEGORY_SERVER, []querysheriffv1.LogEvent_LogClassification{
+		{querysheriffv1.LogCategory_LOG_CATEGORY_SERVER, []querysheriffv1.LogEvent_LogClassification{
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_SERVER_CRASHED,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_SERVER_START,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_SERVER_START_RECOVERING,
@@ -165,7 +112,7 @@ func serverGroups() []group {
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_SERVER_PROCESS_EXITED,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_SERVER_STATS_COLLECTOR_TIMEOUT,
 		}},
-		{querysheriffv1.LogEvent_LOG_CATEGORY_CONNECTION, []querysheriffv1.LogEvent_LogClassification{
+		{querysheriffv1.LogCategory_LOG_CATEGORY_CONNECTION, []querysheriffv1.LogEvent_LogClassification{
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_CONNECTION_RECEIVED,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_CONNECTION_AUTHORIZED,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_CONNECTION_AUTHENTICATED,
@@ -182,7 +129,7 @@ func serverGroups() []group {
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_PROTOCOL_ERROR_INCOMPLETE_MESSAGE,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_TOO_MANY_CONNECTIONS_DATABASE,
 		}},
-		{querysheriffv1.LogEvent_LOG_CATEGORY_WAL_CHECKPOINT, []querysheriffv1.LogEvent_LogClassification{
+		{querysheriffv1.LogCategory_LOG_CATEGORY_WAL_CHECKPOINT, []querysheriffv1.LogEvent_LogClassification{
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_CHECKPOINT_STARTING,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_CHECKPOINT_COMPLETE,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_CHECKPOINT_TOO_FREQUENT,
@@ -195,7 +142,7 @@ func serverGroups() []group {
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_WAL_ARCHIVE_COMMAND_FAILED,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_WAL_BASE_BACKUP_COMPLETE,
 		}},
-		{querysheriffv1.LogEvent_LOG_CATEGORY_AUTOVACUUM, []querysheriffv1.LogEvent_LogClassification{
+		{querysheriffv1.LogCategory_LOG_CATEGORY_AUTOVACUUM, []querysheriffv1.LogEvent_LogClassification{
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_AUTOVACUUM_CANCEL,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_TXID_WRAPAROUND_WARNING,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_TXID_WRAPAROUND_ERROR,
@@ -206,7 +153,7 @@ func serverGroups() []group {
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_SKIPPING_VACUUM_LOCK_NOT_AVAILABLE,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_SKIPPING_ANALYZE_LOCK_NOT_AVAILABLE,
 		}},
-		{querysheriffv1.LogEvent_LOG_CATEGORY_STANDBY, []querysheriffv1.LogEvent_LogClassification{
+		{querysheriffv1.LogCategory_LOG_CATEGORY_STANDBY, []querysheriffv1.LogEvent_LogClassification{
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_STANDBY_RESTORED_WAL_FROM_ARCHIVE,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_STANDBY_STARTED_STREAMING,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_STANDBY_STREAMING_INTERRUPTED,
@@ -219,28 +166,28 @@ func serverGroups() []group {
 
 func statementGroups() []group {
 	return []group{
-		{querysheriffv1.LogEvent_LOG_CATEGORY_LOCK, []querysheriffv1.LogEvent_LogClassification{
+		{querysheriffv1.LogCategory_LOG_CATEGORY_LOCK, []querysheriffv1.LogEvent_LogClassification{
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_LOCK_ACQUIRED,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_LOCK_WAITING,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_LOCK_TIMEOUT,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_LOCK_DEADLOCK_DETECTED,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_LOCK_DEADLOCK_AVOIDED,
 		}},
-		{querysheriffv1.LogEvent_LOG_CATEGORY_STATEMENT, []querysheriffv1.LogEvent_LogClassification{
+		{querysheriffv1.LogCategory_LOG_CATEGORY_STATEMENT, []querysheriffv1.LogEvent_LogClassification{
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_STATEMENT_DURATION,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_STATEMENT_CANCELED_TIMEOUT,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_STATEMENT_CANCELED_USER,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_STATEMENT_LOG,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_STATEMENT_AUTO_EXPLAIN,
 		}},
-		{querysheriffv1.LogEvent_LOG_CATEGORY_CONSTRAINT_VIOLATION, []querysheriffv1.LogEvent_LogClassification{
+		{querysheriffv1.LogCategory_LOG_CATEGORY_CONSTRAINT_VIOLATION, []querysheriffv1.LogEvent_LogClassification{
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_UNIQUE_CONSTRAINT_VIOLATION,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_FOREIGN_KEY_CONSTRAINT_VIOLATION,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_NOT_NULL_CONSTRAINT_VIOLATION,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_CHECK_CONSTRAINT_VIOLATION,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_EXCLUSION_CONSTRAINT_VIOLATION,
 		}},
-		{querysheriffv1.LogEvent_LOG_CATEGORY_APPLICATION_ERROR, []querysheriffv1.LogEvent_LogClassification{
+		{querysheriffv1.LogCategory_LOG_CATEGORY_APPLICATION_ERROR, []querysheriffv1.LogEvent_LogClassification{
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_SYNTAX_ERROR,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_INVALID_INPUT_SYNTAX,
 			querysheriffv1.LogEvent_LOG_CLASSIFICATION_VALUE_TOO_LONG_FOR_TYPE,

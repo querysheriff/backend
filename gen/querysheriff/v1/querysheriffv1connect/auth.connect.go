@@ -37,15 +37,16 @@ const (
 	AuthServiceLoginProcedure = "/querysheriff.v1.AuthService/Login"
 	// AuthServiceLogoutProcedure is the fully-qualified name of the AuthService's Logout RPC.
 	AuthServiceLogoutProcedure = "/querysheriff.v1.AuthService/Logout"
-	// AuthServiceCurrentUserProcedure is the fully-qualified name of the AuthService's CurrentUser RPC.
-	AuthServiceCurrentUserProcedure = "/querysheriff.v1.AuthService/CurrentUser"
+	// AuthServiceGetCurrentUserProcedure is the fully-qualified name of the AuthService's
+	// GetCurrentUser RPC.
+	AuthServiceGetCurrentUserProcedure = "/querysheriff.v1.AuthService/GetCurrentUser"
 )
 
 // AuthServiceClient is a client for the querysheriff.v1.AuthService service.
 type AuthServiceClient interface {
 	Login(context.Context, *connect.Request[v1.LoginRequest]) (*connect.Response[v1.LoginResponse], error)
 	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
-	CurrentUser(context.Context, *connect.Request[v1.CurrentUserRequest]) (*connect.Response[v1.CurrentUserResponse], error)
+	GetCurrentUser(context.Context, *connect.Request[v1.GetCurrentUserRequest]) (*connect.Response[v1.GetCurrentUserResponse], error)
 }
 
 // NewAuthServiceClient constructs a client for the querysheriff.v1.AuthService service. By default,
@@ -71,10 +72,10 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("Logout")),
 			connect.WithClientOptions(opts...),
 		),
-		currentUser: connect.NewClient[v1.CurrentUserRequest, v1.CurrentUserResponse](
+		getCurrentUser: connect.NewClient[v1.GetCurrentUserRequest, v1.GetCurrentUserResponse](
 			httpClient,
-			baseURL+AuthServiceCurrentUserProcedure,
-			connect.WithSchema(authServiceMethods.ByName("CurrentUser")),
+			baseURL+AuthServiceGetCurrentUserProcedure,
+			connect.WithSchema(authServiceMethods.ByName("GetCurrentUser")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -82,9 +83,9 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 
 // authServiceClient implements AuthServiceClient.
 type authServiceClient struct {
-	login       *connect.Client[v1.LoginRequest, v1.LoginResponse]
-	logout      *connect.Client[v1.LogoutRequest, v1.LogoutResponse]
-	currentUser *connect.Client[v1.CurrentUserRequest, v1.CurrentUserResponse]
+	login          *connect.Client[v1.LoginRequest, v1.LoginResponse]
+	logout         *connect.Client[v1.LogoutRequest, v1.LogoutResponse]
+	getCurrentUser *connect.Client[v1.GetCurrentUserRequest, v1.GetCurrentUserResponse]
 }
 
 // Login calls querysheriff.v1.AuthService.Login.
@@ -97,16 +98,16 @@ func (c *authServiceClient) Logout(ctx context.Context, req *connect.Request[v1.
 	return c.logout.CallUnary(ctx, req)
 }
 
-// CurrentUser calls querysheriff.v1.AuthService.CurrentUser.
-func (c *authServiceClient) CurrentUser(ctx context.Context, req *connect.Request[v1.CurrentUserRequest]) (*connect.Response[v1.CurrentUserResponse], error) {
-	return c.currentUser.CallUnary(ctx, req)
+// GetCurrentUser calls querysheriff.v1.AuthService.GetCurrentUser.
+func (c *authServiceClient) GetCurrentUser(ctx context.Context, req *connect.Request[v1.GetCurrentUserRequest]) (*connect.Response[v1.GetCurrentUserResponse], error) {
+	return c.getCurrentUser.CallUnary(ctx, req)
 }
 
 // AuthServiceHandler is an implementation of the querysheriff.v1.AuthService service.
 type AuthServiceHandler interface {
 	Login(context.Context, *connect.Request[v1.LoginRequest]) (*connect.Response[v1.LoginResponse], error)
 	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
-	CurrentUser(context.Context, *connect.Request[v1.CurrentUserRequest]) (*connect.Response[v1.CurrentUserResponse], error)
+	GetCurrentUser(context.Context, *connect.Request[v1.GetCurrentUserRequest]) (*connect.Response[v1.GetCurrentUserResponse], error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -128,10 +129,10 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("Logout")),
 		connect.WithHandlerOptions(opts...),
 	)
-	authServiceCurrentUserHandler := connect.NewUnaryHandler(
-		AuthServiceCurrentUserProcedure,
-		svc.CurrentUser,
-		connect.WithSchema(authServiceMethods.ByName("CurrentUser")),
+	authServiceGetCurrentUserHandler := connect.NewUnaryHandler(
+		AuthServiceGetCurrentUserProcedure,
+		svc.GetCurrentUser,
+		connect.WithSchema(authServiceMethods.ByName("GetCurrentUser")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/querysheriff.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -140,8 +141,8 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceLoginHandler.ServeHTTP(w, r)
 		case AuthServiceLogoutProcedure:
 			authServiceLogoutHandler.ServeHTTP(w, r)
-		case AuthServiceCurrentUserProcedure:
-			authServiceCurrentUserHandler.ServeHTTP(w, r)
+		case AuthServiceGetCurrentUserProcedure:
+			authServiceGetCurrentUserHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -159,6 +160,6 @@ func (UnimplementedAuthServiceHandler) Logout(context.Context, *connect.Request[
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.AuthService.Logout is not implemented"))
 }
 
-func (UnimplementedAuthServiceHandler) CurrentUser(context.Context, *connect.Request[v1.CurrentUserRequest]) (*connect.Response[v1.CurrentUserResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.AuthService.CurrentUser is not implemented"))
+func (UnimplementedAuthServiceHandler) GetCurrentUser(context.Context, *connect.Request[v1.GetCurrentUserRequest]) (*connect.Response[v1.GetCurrentUserResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.AuthService.GetCurrentUser is not implemented"))
 }

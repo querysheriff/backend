@@ -50,15 +50,14 @@ func (s *LogServer) ListLogFacets(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.ListLogFacetsRequest],
 ) (*connect.Response[querysheriffv1.ListLogFacetsResponse], error) {
-	filter, err := s.resolveLogFilter(ctx, req.Msg)
+	msg := req.Msg
+
+	filter, err := s.resolveLogFilter(ctx, msg.GetServerName(), msg.GetFrom(), msg.GetTo(), msg.GetFilter())
 	if err != nil {
 		return nil, err
 	}
 
-	scoped := filter
-	scoped.Levels = nil
-
-	rows, err := s.stats.LogEventFacets(ctx, scoped)
+	rows, err := s.stats.LogEventFacets(ctx, filter)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -69,52 +68,51 @@ func (s *LogServer) ListLogFacets(
 }
 
 func (s *LogServer) buildLogFacets(rows []clickhouse.LogFacetRow) []*querysheriffv1.LogFacet {
-	counts := map[querysheriffv1.LogFacetField]map[string]int64{}
-	categories := map[querysheriffv1.LogEvent_LogCategory]int64{}
-	classificationCategory := map[string]querysheriffv1.LogEvent_LogCategory{}
+	facets := map[querysheriffv1.LogFacetField]*querysheriffv1.LogFacet{}
+	categories := map[querysheriffv1.LogCategory]int64{}
 
 	for _, row := range rows {
 		field := logFacetField(row.Dimension)
-
-		value := logFacetValueOf(field, row)
-		if counts[field] == nil {
-			counts[field] = map[string]int64{}
-		}
-		counts[field][value] += row.Count
+		value := &querysheriffv1.LogFacetValue{Value: row.Value, Count: row.Count}
 
 		if field == querysheriffv1.LogFacetField_LOG_FACET_FIELD_CLASSIFICATION {
-			category := s.categories.Of(querysheriffv1.LogEvent_LogClassification(row.Classification))
-			classificationCategory[value] = category
-			categories[category] += row.Count
+			classification, _ := strconv.ParseInt(row.Value, 10, 32)
+			value.Category = s.categories.Of(querysheriffv1.LogEvent_LogClassification(classification))
+			categories[value.GetCategory()] += row.Count
 		}
-	}
 
-	facets := make([]*querysheriffv1.LogFacet, 0, len(logFacetOrder()))
+		facet := facets[field]
+		if facet == nil {
+			facet = &querysheriffv1.LogFacet{Field: field}
+			facets[field] = facet
+		}
 
-	for _, field := range logFacetOrder() {
-		if field == querysheriffv1.LogFacetField_LOG_FACET_FIELD_CATEGORY {
-			facets = append(facets, s.categoryFacet(categories))
+		if len(facet.GetValues()) == maxLogFacetValues {
+			facet.Truncated = true
 
 			continue
 		}
 
-		lookup := map[string]querysheriffv1.LogEvent_LogCategory(nil)
-		if field == querysheriffv1.LogFacetField_LOG_FACET_FIELD_CLASSIFICATION {
-			lookup = classificationCategory
-		}
-
-		values, truncated := sortedFacetValues(counts[field], lookup)
-		facets = append(facets, &querysheriffv1.LogFacet{
-			Field:     field,
-			Values:    values,
-			Truncated: truncated,
-		})
+		facet.Values = append(facet.Values, value)
 	}
 
-	return facets
+	ordered := make([]*querysheriffv1.LogFacet, 0, len(logFacetOrder()))
+
+	for _, field := range logFacetOrder() {
+		switch {
+		case field == querysheriffv1.LogFacetField_LOG_FACET_FIELD_CATEGORY:
+			ordered = append(ordered, s.categoryFacet(categories))
+		case facets[field] != nil:
+			ordered = append(ordered, facets[field])
+		default:
+			ordered = append(ordered, &querysheriffv1.LogFacet{Field: field})
+		}
+	}
+
+	return ordered
 }
 
-func (s *LogServer) categoryFacet(counts map[querysheriffv1.LogEvent_LogCategory]int64) *querysheriffv1.LogFacet {
+func (s *LogServer) categoryFacet(counts map[querysheriffv1.LogCategory]int64) *querysheriffv1.LogFacet {
 	roster := s.categories.All()
 	values := make([]*querysheriffv1.LogFacetValue, 0, len(roster)+1)
 
@@ -126,9 +124,9 @@ func (s *LogServer) categoryFacet(counts map[querysheriffv1.LogEvent_LogCategory
 		})
 	}
 
-	if unspecified := counts[querysheriffv1.LogEvent_LOG_CATEGORY_UNSPECIFIED]; unspecified > 0 {
+	if unspecified := counts[querysheriffv1.LogCategory_LOG_CATEGORY_UNSPECIFIED]; unspecified > 0 {
 		values = append(values, &querysheriffv1.LogFacetValue{
-			Value: strconv.Itoa(int(querysheriffv1.LogEvent_LOG_CATEGORY_UNSPECIFIED)),
+			Value: strconv.Itoa(int(querysheriffv1.LogCategory_LOG_CATEGORY_UNSPECIFIED)),
 			Count: unspecified,
 		})
 	}
@@ -139,55 +137,4 @@ func (s *LogServer) categoryFacet(counts map[querysheriffv1.LogEvent_LogCategory
 		Field:  querysheriffv1.LogFacetField_LOG_FACET_FIELD_CATEGORY,
 		Values: values,
 	}
-}
-
-func logFacetValueOf(field querysheriffv1.LogFacetField, row clickhouse.LogFacetRow) string {
-	switch field {
-	case querysheriffv1.LogFacetField_LOG_FACET_FIELD_CLASSIFICATION:
-		return strconv.Itoa(int(row.Classification))
-	case querysheriffv1.LogFacetField_LOG_FACET_FIELD_LEVEL:
-		return strconv.Itoa(int(row.LogLevel))
-	case querysheriffv1.LogFacetField_LOG_FACET_FIELD_DATABASE:
-		return row.DatabaseName
-	case querysheriffv1.LogFacetField_LOG_FACET_FIELD_USERNAME:
-		return row.UserName
-	case querysheriffv1.LogFacetField_LOG_FACET_FIELD_APPLICATION_NAME:
-		return row.ApplicationName
-	case querysheriffv1.LogFacetField_LOG_FACET_FIELD_BACKEND_TYPE:
-		return row.BackendType
-	case querysheriffv1.LogFacetField_LOG_FACET_FIELD_CATEGORY,
-		querysheriffv1.LogFacetField_LOG_FACET_FIELD_UNSPECIFIED:
-		return ""
-	}
-
-	return ""
-}
-
-func sortedFacetValues(
-	counts map[string]int64,
-	classificationCategory map[string]querysheriffv1.LogEvent_LogCategory,
-) ([]*querysheriffv1.LogFacetValue, bool) {
-	values := make([]*querysheriffv1.LogFacetValue, 0, len(counts))
-
-	for value, count := range counts {
-		values = append(values, &querysheriffv1.LogFacetValue{
-			Value:    value,
-			Count:    count,
-			Category: classificationCategory[value],
-		})
-	}
-
-	sort.Slice(values, func(i, j int) bool {
-		if values[i].GetCount() != values[j].GetCount() {
-			return values[i].GetCount() > values[j].GetCount()
-		}
-
-		return values[i].GetValue() < values[j].GetValue()
-	})
-
-	if len(values) > maxLogFacetValues {
-		return values[:maxLogFacetValues], true
-	}
-
-	return values, false
 }

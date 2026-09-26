@@ -35,11 +35,10 @@ const (
 const (
 	// LogServiceReportLogsProcedure is the fully-qualified name of the LogService's ReportLogs RPC.
 	LogServiceReportLogsProcedure = "/querysheriff.v1.LogService/ReportLogs"
-	// LogServiceQueryLogsProcedure is the fully-qualified name of the LogService's QueryLogs RPC.
-	LogServiceQueryLogsProcedure = "/querysheriff.v1.LogService/QueryLogs"
-	// LogServiceQueryLogSeriesProcedure is the fully-qualified name of the LogService's QueryLogSeries
-	// RPC.
-	LogServiceQueryLogSeriesProcedure = "/querysheriff.v1.LogService/QueryLogSeries"
+	// LogServiceListLogsProcedure is the fully-qualified name of the LogService's ListLogs RPC.
+	LogServiceListLogsProcedure = "/querysheriff.v1.LogService/ListLogs"
+	// LogServiceGetLogSeriesProcedure is the fully-qualified name of the LogService's GetLogSeries RPC.
+	LogServiceGetLogSeriesProcedure = "/querysheriff.v1.LogService/GetLogSeries"
 	// LogServiceListLogFacetsProcedure is the fully-qualified name of the LogService's ListLogFacets
 	// RPC.
 	LogServiceListLogFacetsProcedure = "/querysheriff.v1.LogService/ListLogFacets"
@@ -48,8 +47,8 @@ const (
 // LogServiceClient is a client for the querysheriff.v1.LogService service.
 type LogServiceClient interface {
 	ReportLogs(context.Context, *connect.Request[v1.ReportLogsRequest]) (*connect.Response[v1.ReportLogsResponse], error)
-	QueryLogs(context.Context, *connect.Request[v1.QueryLogsRequest]) (*connect.Response[v1.QueryLogsResponse], error)
-	QueryLogSeries(context.Context, *connect.Request[v1.QueryLogSeriesRequest]) (*connect.Response[v1.QueryLogSeriesResponse], error)
+	ListLogs(context.Context, *connect.Request[v1.ListLogsRequest]) (*connect.Response[v1.ListLogsResponse], error)
+	GetLogSeries(context.Context, *connect.Request[v1.GetLogSeriesRequest]) (*connect.Response[v1.GetLogSeriesResponse], error)
 	ListLogFacets(context.Context, *connect.Request[v1.ListLogFacetsRequest]) (*connect.Response[v1.ListLogFacetsResponse], error)
 }
 
@@ -70,16 +69,16 @@ func NewLogServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(logServiceMethods.ByName("ReportLogs")),
 			connect.WithClientOptions(opts...),
 		),
-		queryLogs: connect.NewClient[v1.QueryLogsRequest, v1.QueryLogsResponse](
+		listLogs: connect.NewClient[v1.ListLogsRequest, v1.ListLogsResponse](
 			httpClient,
-			baseURL+LogServiceQueryLogsProcedure,
-			connect.WithSchema(logServiceMethods.ByName("QueryLogs")),
+			baseURL+LogServiceListLogsProcedure,
+			connect.WithSchema(logServiceMethods.ByName("ListLogs")),
 			connect.WithClientOptions(opts...),
 		),
-		queryLogSeries: connect.NewClient[v1.QueryLogSeriesRequest, v1.QueryLogSeriesResponse](
+		getLogSeries: connect.NewClient[v1.GetLogSeriesRequest, v1.GetLogSeriesResponse](
 			httpClient,
-			baseURL+LogServiceQueryLogSeriesProcedure,
-			connect.WithSchema(logServiceMethods.ByName("QueryLogSeries")),
+			baseURL+LogServiceGetLogSeriesProcedure,
+			connect.WithSchema(logServiceMethods.ByName("GetLogSeries")),
 			connect.WithClientOptions(opts...),
 		),
 		listLogFacets: connect.NewClient[v1.ListLogFacetsRequest, v1.ListLogFacetsResponse](
@@ -93,10 +92,10 @@ func NewLogServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 
 // logServiceClient implements LogServiceClient.
 type logServiceClient struct {
-	reportLogs     *connect.Client[v1.ReportLogsRequest, v1.ReportLogsResponse]
-	queryLogs      *connect.Client[v1.QueryLogsRequest, v1.QueryLogsResponse]
-	queryLogSeries *connect.Client[v1.QueryLogSeriesRequest, v1.QueryLogSeriesResponse]
-	listLogFacets  *connect.Client[v1.ListLogFacetsRequest, v1.ListLogFacetsResponse]
+	reportLogs    *connect.Client[v1.ReportLogsRequest, v1.ReportLogsResponse]
+	listLogs      *connect.Client[v1.ListLogsRequest, v1.ListLogsResponse]
+	getLogSeries  *connect.Client[v1.GetLogSeriesRequest, v1.GetLogSeriesResponse]
+	listLogFacets *connect.Client[v1.ListLogFacetsRequest, v1.ListLogFacetsResponse]
 }
 
 // ReportLogs calls querysheriff.v1.LogService.ReportLogs.
@@ -104,14 +103,14 @@ func (c *logServiceClient) ReportLogs(ctx context.Context, req *connect.Request[
 	return c.reportLogs.CallUnary(ctx, req)
 }
 
-// QueryLogs calls querysheriff.v1.LogService.QueryLogs.
-func (c *logServiceClient) QueryLogs(ctx context.Context, req *connect.Request[v1.QueryLogsRequest]) (*connect.Response[v1.QueryLogsResponse], error) {
-	return c.queryLogs.CallUnary(ctx, req)
+// ListLogs calls querysheriff.v1.LogService.ListLogs.
+func (c *logServiceClient) ListLogs(ctx context.Context, req *connect.Request[v1.ListLogsRequest]) (*connect.Response[v1.ListLogsResponse], error) {
+	return c.listLogs.CallUnary(ctx, req)
 }
 
-// QueryLogSeries calls querysheriff.v1.LogService.QueryLogSeries.
-func (c *logServiceClient) QueryLogSeries(ctx context.Context, req *connect.Request[v1.QueryLogSeriesRequest]) (*connect.Response[v1.QueryLogSeriesResponse], error) {
-	return c.queryLogSeries.CallUnary(ctx, req)
+// GetLogSeries calls querysheriff.v1.LogService.GetLogSeries.
+func (c *logServiceClient) GetLogSeries(ctx context.Context, req *connect.Request[v1.GetLogSeriesRequest]) (*connect.Response[v1.GetLogSeriesResponse], error) {
+	return c.getLogSeries.CallUnary(ctx, req)
 }
 
 // ListLogFacets calls querysheriff.v1.LogService.ListLogFacets.
@@ -122,8 +121,8 @@ func (c *logServiceClient) ListLogFacets(ctx context.Context, req *connect.Reque
 // LogServiceHandler is an implementation of the querysheriff.v1.LogService service.
 type LogServiceHandler interface {
 	ReportLogs(context.Context, *connect.Request[v1.ReportLogsRequest]) (*connect.Response[v1.ReportLogsResponse], error)
-	QueryLogs(context.Context, *connect.Request[v1.QueryLogsRequest]) (*connect.Response[v1.QueryLogsResponse], error)
-	QueryLogSeries(context.Context, *connect.Request[v1.QueryLogSeriesRequest]) (*connect.Response[v1.QueryLogSeriesResponse], error)
+	ListLogs(context.Context, *connect.Request[v1.ListLogsRequest]) (*connect.Response[v1.ListLogsResponse], error)
+	GetLogSeries(context.Context, *connect.Request[v1.GetLogSeriesRequest]) (*connect.Response[v1.GetLogSeriesResponse], error)
 	ListLogFacets(context.Context, *connect.Request[v1.ListLogFacetsRequest]) (*connect.Response[v1.ListLogFacetsResponse], error)
 }
 
@@ -140,16 +139,16 @@ func NewLogServiceHandler(svc LogServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(logServiceMethods.ByName("ReportLogs")),
 		connect.WithHandlerOptions(opts...),
 	)
-	logServiceQueryLogsHandler := connect.NewUnaryHandler(
-		LogServiceQueryLogsProcedure,
-		svc.QueryLogs,
-		connect.WithSchema(logServiceMethods.ByName("QueryLogs")),
+	logServiceListLogsHandler := connect.NewUnaryHandler(
+		LogServiceListLogsProcedure,
+		svc.ListLogs,
+		connect.WithSchema(logServiceMethods.ByName("ListLogs")),
 		connect.WithHandlerOptions(opts...),
 	)
-	logServiceQueryLogSeriesHandler := connect.NewUnaryHandler(
-		LogServiceQueryLogSeriesProcedure,
-		svc.QueryLogSeries,
-		connect.WithSchema(logServiceMethods.ByName("QueryLogSeries")),
+	logServiceGetLogSeriesHandler := connect.NewUnaryHandler(
+		LogServiceGetLogSeriesProcedure,
+		svc.GetLogSeries,
+		connect.WithSchema(logServiceMethods.ByName("GetLogSeries")),
 		connect.WithHandlerOptions(opts...),
 	)
 	logServiceListLogFacetsHandler := connect.NewUnaryHandler(
@@ -162,10 +161,10 @@ func NewLogServiceHandler(svc LogServiceHandler, opts ...connect.HandlerOption) 
 		switch r.URL.Path {
 		case LogServiceReportLogsProcedure:
 			logServiceReportLogsHandler.ServeHTTP(w, r)
-		case LogServiceQueryLogsProcedure:
-			logServiceQueryLogsHandler.ServeHTTP(w, r)
-		case LogServiceQueryLogSeriesProcedure:
-			logServiceQueryLogSeriesHandler.ServeHTTP(w, r)
+		case LogServiceListLogsProcedure:
+			logServiceListLogsHandler.ServeHTTP(w, r)
+		case LogServiceGetLogSeriesProcedure:
+			logServiceGetLogSeriesHandler.ServeHTTP(w, r)
 		case LogServiceListLogFacetsProcedure:
 			logServiceListLogFacetsHandler.ServeHTTP(w, r)
 		default:
@@ -181,12 +180,12 @@ func (UnimplementedLogServiceHandler) ReportLogs(context.Context, *connect.Reque
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.LogService.ReportLogs is not implemented"))
 }
 
-func (UnimplementedLogServiceHandler) QueryLogs(context.Context, *connect.Request[v1.QueryLogsRequest]) (*connect.Response[v1.QueryLogsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.LogService.QueryLogs is not implemented"))
+func (UnimplementedLogServiceHandler) ListLogs(context.Context, *connect.Request[v1.ListLogsRequest]) (*connect.Response[v1.ListLogsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.LogService.ListLogs is not implemented"))
 }
 
-func (UnimplementedLogServiceHandler) QueryLogSeries(context.Context, *connect.Request[v1.QueryLogSeriesRequest]) (*connect.Response[v1.QueryLogSeriesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.LogService.QueryLogSeries is not implemented"))
+func (UnimplementedLogServiceHandler) GetLogSeries(context.Context, *connect.Request[v1.GetLogSeriesRequest]) (*connect.Response[v1.GetLogSeriesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.LogService.GetLogSeries is not implemented"))
 }
 
 func (UnimplementedLogServiceHandler) ListLogFacets(context.Context, *connect.Request[v1.ListLogFacetsRequest]) (*connect.Response[v1.ListLogFacetsResponse], error) {

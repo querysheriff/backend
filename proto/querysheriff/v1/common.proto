@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package querysheriff.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/querysheriff/backend/gen/querysheriff/v1;querysheriffv1";
+
+// MetricPoint is one point in a chart series, with at marking the bucket's end time.
+message MetricPoint {
+  google.protobuf.Timestamp at = 1;
+  double value = 2;
+}

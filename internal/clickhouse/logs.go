@@ -11,24 +11,24 @@ import (
 )
 
 type LogEvent struct {
-	ID                uint64
-	ServerName        string
-	CollectedAt       time.Time
-	OccurredAt        time.Time
-	LogLevel          int32
-	Classification    int32
-	Message           string
-	Pid               uint32
-	UserName          string
-	DatabaseName      string
-	ApplicationName   string
-	Detail            string
-	Hint              string
-	Context           string
-	Statement         string
-	BackendType       string
-	StateCode         string
-	StatementSampleID uint64
+	ID                uint64    `ch:"id"`
+	ServerName        string    `ch:"server_name"`
+	CollectedAt       time.Time `ch:"collected_at"`
+	OccurredAt        time.Time `ch:"occurred_at"`
+	LogLevel          int32     `ch:"level_id"`
+	Classification    int32     `ch:"classification_id"`
+	Message           string    `ch:"message"`
+	Pid               uint32    `ch:"pid"`
+	UserName          string    `ch:"user_name"`
+	DatabaseName      string    `ch:"database_name"`
+	ApplicationName   string    `ch:"application_name"`
+	Detail            string    `ch:"detail"`
+	Hint              string    `ch:"hint"`
+	Context           string    `ch:"context"`
+	Statement         string    `ch:"statement"`
+	BackendType       string    `ch:"backend_type"`
+	StateCode         string    `ch:"state_code"`
+	StatementSampleID uint64    `ch:"statement_sample_id"`
 }
 
 // LogEventID creates a stable ID from log event fields.
@@ -46,33 +46,15 @@ func LogEventID(serverName string, collectedAt time.Time, pid uint32, message st
 // InsertLogEvents inserts log events in one ClickHouse batch.
 // Example: [event1, event2] -> 2 rows in log_events.
 func (c *Client) InsertLogEvents(ctx context.Context, events []LogEvent) error {
-	if len(events) == 0 {
-		return nil
-	}
-
-	batch, err := c.conn.PrepareBatch(ctx, "INSERT INTO log_events")
-	if err != nil {
-		return fmt.Errorf("prepare log event batch: %w", err)
-	}
-	defer batch.Close()
-
-	for _, event := range events {
-		if err = batch.Append(
+	return insertBatch(ctx, c, "log_events", events, func(event LogEvent) []any {
+		return []any{
 			event.ID, event.ServerName, event.CollectedAt.UTC(), event.OccurredAt.UTC(),
 			enumOf(event.LogLevel), enumOf(event.Classification), event.Message, event.Pid,
 			event.UserName, event.DatabaseName, event.ApplicationName,
 			event.Detail, event.Hint, event.Context, event.Statement,
 			event.BackendType, event.StateCode, event.StatementSampleID,
-		); err != nil {
-			return fmt.Errorf("append log event: %w", err)
 		}
-	}
-
-	if err = batch.Send(); err != nil {
-		return fmt.Errorf("send log events: %w", err)
-	}
-
-	return nil
+	})
 }
 
 type LogFilter struct {
@@ -98,6 +80,10 @@ func (f LogFilter) conditions(lowerExclusive bool) *conditions {
 	c.add(lower, timeParam("from", f.From))
 	c.add("occurred_at <= {to:DateTime('UTC')}", timeParam("to", f.To))
 	c.add("collected_at >= {from:DateTime('UTC')}")
+
+	if len(f.Levels) > 0 {
+		c.add("log_level IN {levels:Array(Int32)}", listParam("levels", f.Levels))
+	}
 
 	if len(f.Classifications) > 0 {
 		c.add("classification IN {classifications:Array(Int32)}",
@@ -133,111 +119,48 @@ func (f LogFilter) conditions(lowerExclusive bool) *conditions {
 	return c
 }
 
-type LogSortOrder struct {
-	Key        string
-	Desc       bool
-	SeverityOf []int32
-	CategoryOf []int32
-}
-
-func (o LogSortOrder) expression() string {
-	direction := direction(o.Desc)
-
-	switch o.Key {
-	case "database":
-		return "database_name" + direction
-	case "user":
-		return "user_name" + direction
-	case "level":
-		return "{severity_of:Array(Int32)}[log_level + 1]" + direction
-	case "event":
-		return "classification" + direction
-	case "category":
-		return "{category_of:Array(Int32)}[classification + 1]" + direction
-	default:
-		return "occurred_at" + direction
-	}
-}
-
 const listLogEventsSQL = `
-SELECT id, occurred_at, log_level, classification, message, pid, user_name,
-       database_name, application_name, detail, hint, context, statement,
+SELECT id, occurred_at, toInt32(log_level) AS level_id, toInt32(classification) AS classification_id,
+       message, pid, user_name, database_name, application_name, detail, hint, context, statement,
        backend_type, state_code, statement_sample_id
 FROM log_events
 WHERE %s
-ORDER BY %s, occurred_at DESC, id DESC
+ORDER BY occurred_at%[2]s, id%[2]s
 LIMIT {row_limit:UInt32} OFFSET {row_offset:UInt32}`
 
-// ListLogEvents returns filtered, sorted, paginated log events.
-// Example: server=prod, levels=[ERROR], limit=50 -> latest 50 matching events.
+// ListLogEvents returns filtered log events in time order, paginated.
+// Example: server=prod, levels=[ERROR], desc, limit=50 -> latest 50 matching events.
 func (c *Client) ListLogEvents(
 	ctx context.Context,
 	filter LogFilter,
-	order LogSortOrder,
+	desc bool,
 	limit, offset int32,
 ) ([]LogEvent, error) {
 	where := filter.conditions(false)
-	if len(filter.Levels) > 0 {
-		where.add("log_level IN {levels:Array(Int32)}", listParam("levels", filter.Levels))
-	}
-
-	args := where.with(
-		listParam("severity_of", order.SeverityOf),
-		listParam("category_of", order.CategoryOf),
-		countParam("row_limit", limit),
-		countParam("row_offset", offset),
-	)
-
-	rows, err := c.conn.Query(ctx,
-		fmt.Sprintf(listLogEventsSQL, where.sql(), order.expression()), args...)
-	if err != nil {
-		return nil, fmt.Errorf("query log events: %w", err)
-	}
-	defer rows.Close()
 
 	var out []LogEvent
-
-	for rows.Next() {
-		var (
-			event                    LogEvent
-			logLevel, classification uint8
-		)
-
-		if err = rows.Scan(
-			&event.ID, &event.OccurredAt, &logLevel, &classification,
-			&event.Message, &event.Pid, &event.UserName, &event.DatabaseName,
-			&event.ApplicationName, &event.Detail, &event.Hint, &event.Context,
-			&event.Statement, &event.BackendType, &event.StateCode, &event.StatementSampleID,
-		); err != nil {
-			return nil, fmt.Errorf("scan log event: %w", err)
-		}
-
-		event.LogLevel = int32(logLevel)
-		event.Classification = int32(classification)
-		out = append(out, event)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("read log events: %w", err)
+	if err := c.conn.Select(ctx, &out, fmt.Sprintf(listLogEventsSQL, where.sql(), direction(desc)),
+		where.with(countParam("row_limit", limit), countParam("row_offset", offset))...); err != nil {
+		return nil, fmt.Errorf("query log events: %w", err)
 	}
 
 	return out, nil
 }
 
 type LogHistogramBin struct {
-	BucketEnd      time.Time
-	LogLevel       int32
-	Classification int32
-	Count          int64
+	BucketEnd      time.Time `ch:"bucket_end"`
+	LogLevel       int32     `ch:"log_level"`
+	Classification int32     `ch:"classification"`
+	Count          int64     `ch:"count"`
 }
 
 const logHistogramSQL = `
 SELECT {from:DateTime('UTC')} + toIntervalSecond(
            (intDiv(toUInt32(toDateTime(occurred_at)) - toUInt32({from:DateTime('UTC')}) - 1,
                    {bucket:UInt32}) + 1) * {bucket:UInt32}) AS bucket_end,
-       log_level,
-       classification,
-       toInt64(count()) AS n
+       toInt32(log_level) AS log_level,
+       toInt32(classification) AS classification,
+       toInt64(count()) AS count
 FROM log_events
 WHERE %s
 GROUP BY bucket_end, log_level, classification
@@ -251,40 +174,17 @@ func (c *Client) LogEventHistogram(
 	bucket time.Duration,
 ) ([]LogHistogramBin, error) {
 	where := filter.conditions(true)
-	args := where.with(secondsParam("bucket", bucket))
-
-	rows, err := c.conn.Query(ctx, fmt.Sprintf(logHistogramSQL, where.sql()), args...)
-	if err != nil {
-		return nil, fmt.Errorf("query log histogram: %w", err)
-	}
-	defer rows.Close()
 
 	var out []LogHistogramBin
-
-	for rows.Next() {
-		var (
-			bin                      LogHistogramBin
-			logLevel, classification uint8
-		)
-
-		if err = rows.Scan(&bin.BucketEnd, &logLevel, &classification, &bin.Count); err != nil {
-			return nil, fmt.Errorf("scan log histogram bin: %w", err)
-		}
-
-		bin.LogLevel = int32(logLevel)
-		bin.Classification = int32(classification)
-
-		out = append(out, bin)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("read log histogram: %w", err)
+	if err := c.conn.Select(ctx, &out, fmt.Sprintf(logHistogramSQL, where.sql()),
+		where.with(secondsParam("bucket", bucket))...); err != nil {
+		return nil, fmt.Errorf("query log histogram: %w", err)
 	}
 
 	return out, nil
 }
 
-type LogFacetDimension uint8
+type LogFacetDimension = uint8
 
 const (
 	FacetClassification LogFacetDimension = iota
@@ -295,29 +195,20 @@ const (
 	FacetBackendType
 )
 
-const facetDimensions = 6
-
 type LogFacetRow struct {
-	Dimension       LogFacetDimension
-	Classification  int32
-	LogLevel        int32
-	DatabaseName    string
-	UserName        string
-	ApplicationName string
-	BackendType     string
-	Count           int64
+	Dimension LogFacetDimension `ch:"dimension"`
+	Value     string            `ch:"value"`
+	Count     int64             `ch:"count"`
 }
 
 const logFacetsSQL = `
-SELECT toInt32(grouping(classification, log_level, database_name, user_name,
-                        application_name, backend_type)) AS grouping_id,
-       classification,
-       log_level,
-       database_name,
-       user_name,
-       application_name,
-       backend_type,
-       toInt64(count()) AS n
+SELECT toUInt8(multiIf(grouping(classification) = 0, 0, grouping(log_level) = 0, 1,
+                       grouping(database_name) = 0, 2, grouping(user_name) = 0, 3,
+                       grouping(application_name) = 0, 4, 5)) AS dimension,
+       multiIf(dimension = 0, toString(classification), dimension = 1, toString(log_level),
+               dimension = 2, database_name, dimension = 3, user_name,
+               dimension = 4, application_name, backend_type) AS value,
+       toInt64(count()) AS count
 FROM log_events
 WHERE %s
 GROUP BY GROUPING SETS (
@@ -328,48 +219,16 @@ GROUP BY GROUPING SETS (
     (application_name),
     (backend_type)
 )
-ORDER BY grouping_id, n DESC`
+ORDER BY dimension, count DESC, value`
 
-// LogEventFacets counts matching events by each filter dimension.
+// LogEventFacets counts matching events by each filter dimension, most common values first.
 // Example: database_name -> postgres=120, app=40; log_level -> ERROR=30, WARNING=20.
 func (c *Client) LogEventFacets(ctx context.Context, filter LogFilter) ([]LogFacetRow, error) {
 	where := filter.conditions(false)
 
-	rows, err := c.conn.Query(ctx, fmt.Sprintf(logFacetsSQL, where.sql()), where.args...)
-	if err != nil {
-		return nil, fmt.Errorf("query log facets: %w", err)
-	}
-	defer rows.Close()
-
 	var out []LogFacetRow
-
-	for rows.Next() {
-		var (
-			row                      LogFacetRow
-			groupingID               int32
-			logLevel, classification uint8
-		)
-
-		if err = rows.Scan(&groupingID, &classification, &logLevel,
-			&row.DatabaseName, &row.UserName, &row.ApplicationName,
-			&row.BackendType, &row.Count); err != nil {
-			return nil, fmt.Errorf("scan log facet row: %w", err)
-		}
-
-		dimension, ok := facetDimensionOf(groupingID)
-		if !ok {
-			continue
-		}
-
-		row.Dimension = dimension
-		row.LogLevel = int32(logLevel)
-		row.Classification = int32(classification)
-
-		out = append(out, row)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("read log facets: %w", err)
+	if err := c.conn.Select(ctx, &out, fmt.Sprintf(logFacetsSQL, where.sql()), where.args...); err != nil {
+		return nil, fmt.Errorf("query log facets: %w", err)
 	}
 
 	return out, nil
@@ -407,20 +266,4 @@ func (c *Client) CountLogErrors(
 	}
 
 	return current, previous, nil
-}
-
-func facetDimensionOf(groupingID int32) (LogFacetDimension, bool) {
-	for dimension := range LogFacetDimension(facetDimensions) {
-		if groupingID == facetGroupingID(dimension) {
-			return dimension, true
-		}
-	}
-
-	return 0, false
-}
-
-func facetGroupingID(dimension LogFacetDimension) int32 {
-	const allSet = int32(1)<<facetDimensions - 1
-
-	return allSet &^ (int32(1) << (facetDimensions - 1 - dimension))
 }

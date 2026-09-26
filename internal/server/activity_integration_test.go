@@ -45,11 +45,11 @@ func queryTransaction(t *testing.T, serverName string, base time.Time) *queryshe
 	t.Helper()
 
 	stats := chstats.New(testdb.ClickHouse(t))
-	srv := server.NewActivityServer(nil, stats, nil)
+	srv := server.NewActivityServer(stats, nil)
 
-	resp, err := srv.QueryTransactions(
+	resp, err := srv.ListTransactions(
 		viewer(context.Background()),
-		connect.NewRequest(&querysheriffv1.QueryTransactionsRequest{
+		connect.NewRequest(&querysheriffv1.ListTransactionsRequest{
 			ServerName:   serverName,
 			DatabaseName: "db",
 			From:         timestamppb.New(base.Add(-time.Minute)),
@@ -58,7 +58,7 @@ func queryTransaction(t *testing.T, serverName string, base time.Time) *queryshe
 		}),
 	)
 	if err != nil {
-		t.Fatalf("QueryTransactions: %v", err)
+		t.Fatalf("ListTransactions: %v", err)
 	}
 
 	transactions := resp.Msg.GetTransactions()
@@ -101,7 +101,7 @@ func TestTransactionTimelineIsContiguousFromTheTransactionStart(t *testing.T) {
 	}
 
 	last := events[len(events)-1]
-	if to, end := last.GetTo().AsTime(), transaction.GetEnd().AsTime(); !to.Equal(end) {
+	if to, end := last.GetTo().AsTime(), transaction.GetLastSeenAt().AsTime(); !to.Equal(end) {
 		t.Errorf("the last event ends at %s, want the transaction end %s", to, end)
 	}
 }
@@ -145,5 +145,53 @@ func TestTransactionEventStatusFollowsTheBackendState(t *testing.T) {
 		if event.GetQueryTags()["service"] != "checkout" {
 			t.Errorf("event %d tags = %v, want the query tags carried onto every run", i, event.GetQueryTags())
 		}
+	}
+}
+
+func TestActivityRequiresServerAndDatabase(t *testing.T) {
+	t.Parallel()
+
+	srv := server.NewActivityServer(chstats.New(testdb.ClickHouse(t)), nil)
+	from, to := timestamppb.New(time.Now().Add(-time.Hour)), timestamppb.Now()
+
+	for name, request := range map[string]*querysheriffv1.ListTransactionsRequest{
+		"no server":   {DatabaseName: "db", From: from, To: to},
+		"no database": {ServerName: "some-server", From: from, To: to},
+	} {
+		_, err := srv.ListTransactions(viewer(context.Background()), connect.NewRequest(request))
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("%s: ListTransactions = %v, want invalid_argument", name, err)
+		}
+	}
+}
+
+func TestTransactionAgeSeriesPeaksAtTheTransactionsAge(t *testing.T) {
+	t.Parallel()
+
+	const serverName = "transaction-age-series"
+
+	base := time.Now().UTC().Add(-time.Hour).Truncate(time.Minute)
+	seedTransaction(t, serverName, []string{"active", "active", "active", "active"}, base.Add(time.Second), base)
+
+	srv := server.NewActivityServer(chstats.New(testdb.ClickHouse(t)), nil)
+
+	resp, err := srv.GetTransactionAgeSeries(viewer(context.Background()),
+		connect.NewRequest(&querysheriffv1.GetTransactionAgeSeriesRequest{
+			ServerName:   serverName,
+			DatabaseName: "db",
+			From:         timestamppb.New(base.Add(-10 * time.Minute)),
+			To:           timestamppb.New(base.Add(10 * time.Minute)),
+		}))
+	if err != nil {
+		t.Fatalf("GetTransactionAgeSeries: %v", err)
+	}
+
+	var peak float64
+	for _, point := range resp.Msg.GetAgeSeconds() {
+		peak = max(peak, point.GetValue())
+	}
+
+	if peak != 4 {
+		t.Errorf("peak age = %vs, want 4s: xact_start +1s, last seen +5s", peak)
 	}
 }

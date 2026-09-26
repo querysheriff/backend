@@ -9,7 +9,7 @@ option go_package = "github.com/querysheriff/backend/gen/querysheriff/v1;querysh
 service AuthService {
   rpc Login(LoginRequest) returns (LoginResponse) {}
   rpc Logout(LogoutRequest) returns (LogoutResponse) {}
-  rpc CurrentUser(CurrentUserRequest) returns (CurrentUserResponse) {}
+  rpc GetCurrentUser(GetCurrentUserRequest) returns (GetCurrentUserResponse) {}
 }
 
 message User {
@@ -34,8 +34,8 @@ message LogoutRequest {}
 
 message LogoutResponse {}
 
-message CurrentUserRequest {}
+message GetCurrentUserRequest {}
 
-message CurrentUserResponse {
+message GetCurrentUserResponse {
   User user = 1;
 }

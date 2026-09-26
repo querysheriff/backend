@@ -3,26 +3,13 @@ package humanize
 import (
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 )
 
 const (
-	MaxQueryPreview = 80
-
 	thousand = 1000.0
 	million  = 1_000_000.0
 )
-
-// QueryPreview normalizes whitespace and truncates long queries. Example: "SELECT  *\nFROM x" -> "SELECT * FROM x".
-func QueryPreview(query string) string {
-	query = strings.Join(strings.Fields(query), " ")
-	if len(query) > MaxQueryPreview {
-		return query[:MaxQueryPreview] + "..."
-	}
-
-	return query
-}
 
 // Duration formats duration using its largest unit. Example: 90*time.Minute -> "1 hour".
 func Duration(d time.Duration) string {
