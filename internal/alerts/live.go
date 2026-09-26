@@ -23,105 +23,87 @@ func (n *Notifier) CheckActivity(
 	collectedAt time.Time,
 	snapshots []*querysheriffv1.ActivitySnapshot,
 ) {
-	blocked, blockedFor := longestOver(snapshots, blockingThreshold,
-		func(snap *querysheriffv1.ActivitySnapshot) (time.Duration, bool) {
+	blocked := longestOver(snapshots, blockingThreshold,
+		func(snap *querysheriffv1.ActivitySnapshot) time.Duration {
 			if snap.GetBlockedByPid() == 0 || snap.GetLockWaitStart() == nil {
-				return 0, false
+				return 0
 			}
 
-			return collectedAt.Sub(snap.GetLockWaitStart().AsTime()), true
+			return collectedAt.Sub(snap.GetLockWaitStart().AsTime())
 		})
 
-	running, runningFor := longestOver(snapshots, longQueryThreshold,
-		func(snap *querysheriffv1.ActivitySnapshot) (time.Duration, bool) {
+	running := longestOver(snapshots, longQueryThreshold,
+		func(snap *querysheriffv1.ActivitySnapshot) time.Duration {
 			if snap.GetState() != activeState || snap.GetQueryStart() == nil {
-				return 0, false
+				return 0
 			}
 
-			return collectedAt.Sub(snap.GetQueryStart().AsTime()), true
+			return collectedAt.Sub(snap.GetQueryStart().AsTime())
 		})
 
-	open, openFor := longestOver(snapshots, openTxnThreshold,
-		func(snap *querysheriffv1.ActivitySnapshot) (time.Duration, bool) {
-			return collectedAt.Sub(snap.GetXactStart().AsTime()), true
+	open := longestOver(snapshots, openTxnThreshold,
+		func(snap *querysheriffv1.ActivitySnapshot) time.Duration {
+			return collectedAt.Sub(snap.GetXactStart().AsTime())
 		})
 
 	if blocked != nil {
-		n.Fire(serverName, KeyBlockedQuery, blockedQueryText(blocked, blockedFor, snapshots))
+		n.Fire(serverName, blocked.GetDatabaseName(), KeyBlockedQuery, blockedQueryText(blocked, snapshots))
 	}
+
 	if running != nil {
-		n.Fire(serverName, KeyLongQuery, sessionText("query", "running", running, runningFor))
+		n.Fire(serverName, running.GetDatabaseName(), KeyLongQuery,
+			fmt.Sprintf("A query has been running more than %s.\n", humanize.Duration(longQueryThreshold))+
+				queryBlock("Query", running)+killLine("Kill", running.GetPid()))
 	}
+
 	if open != nil {
-		n.Fire(serverName, KeyLongTransaction, sessionText("transaction", "open", open, openFor))
+		n.Fire(serverName, open.GetDatabaseName(), KeyLongTransaction,
+			fmt.Sprintf("A transaction has been open more than %s.\n", humanize.Duration(openTxnThreshold))+
+				queryBlock("Current query", open)+killLine("Kill", open.GetPid()))
 	}
 }
 
+// longestOver returns the snapshot with the largest measured duration at or above threshold.
+// measure should return 0 for snapshots where the measurement does not apply.
 func longestOver(
 	snapshots []*querysheriffv1.ActivitySnapshot,
 	threshold time.Duration,
-	measure func(*querysheriffv1.ActivitySnapshot) (time.Duration, bool),
-) (*querysheriffv1.ActivitySnapshot, time.Duration) {
+	measure func(*querysheriffv1.ActivitySnapshot) time.Duration,
+) *querysheriffv1.ActivitySnapshot {
 	var worst *querysheriffv1.ActivitySnapshot
 	var longest time.Duration
 
 	for _, snap := range snapshots {
-		measured, ok := measure(snap)
-		if ok && measured >= threshold && measured > longest {
+		if measured := measure(snap); measured >= threshold && measured > longest {
 			worst, longest = snap, measured
 		}
 	}
 
-	return worst, longest
+	return worst
 }
 
-func inDatabase(name string) string {
-	if name == "" {
-		return ""
-	}
+func blockedQueryText(blocked *querysheriffv1.ActivitySnapshot, snapshots []*querysheriffv1.ActivitySnapshot) string {
+	blocking := "\n*Blocking:* not captured"
 
-	return " in " + name
-}
-
-func sessionText(
-	subject, verb string,
-	snap *querysheriffv1.ActivitySnapshot,
-	elapsed time.Duration,
-) string {
-	return fmt.Sprintf(
-		"A %s%s has been %s %s.\n\nquery: %s\npid: %d",
-		subject,
-		inDatabase(snap.GetDatabaseName()),
-		verb,
-		humanize.Duration(elapsed),
-		sqltext.AlertPreview(snap.GetQuery()),
-		snap.GetPid(),
-	)
-}
-
-func blockedQueryText(
-	blocked *querysheriffv1.ActivitySnapshot,
-	waited time.Duration,
-	snapshots []*querysheriffv1.ActivitySnapshot,
-) string {
-	blockerQuery := "not captured"
 	for _, snap := range snapshots {
 		if snap.GetPid() == blocked.GetBlockedByPid() {
-			blockerQuery = sqltext.AlertPreview(snap.GetQuery())
+			blocking = queryBlock("Blocking", snap)
 
 			break
 		}
 	}
 
-	return fmt.Sprintf(
-		"A query%s has been waiting %s for a lock.\n\nwaiting: %s\nblocking: %s\npids: %d blocked by %d",
-		inDatabase(blocked.GetDatabaseName()),
-		humanize.Duration(waited),
-		sqltext.AlertPreview(blocked.GetQuery()),
-		blockerQuery,
-		blocked.GetPid(),
-		blocked.GetBlockedByPid(),
-	)
+	return fmt.Sprintf("A query has been waiting more than %s for a lock.\n", humanize.Duration(blockingThreshold)) +
+		queryBlock("Waiting", blocked) + blocking + killLine("Kill blocking", blocked.GetBlockedByPid())
+}
+
+func queryBlock(label string, snap *querysheriffv1.ActivitySnapshot) string {
+	return fmt.Sprintf("\n*%s:*%s\n```%s```", label, tagPills(snap.GetQueryTags()),
+		slackEscape(sqltext.AlertQuery(snap.GetQuery())))
+}
+
+func killLine(label string, pid int32) string {
+	return fmt.Sprintf("\n*%s:* `SELECT pg_terminate_backend(%d);`", label, pid)
 }
 
 // CheckLogs fires the crash alert when a log batch shows the server crashing.
@@ -130,7 +112,7 @@ func (n *Notifier) CheckLogs(serverName string, events []*querysheriffv1.LogEven
 	for _, event := range events {
 		if event.GetLogLevel() == querysheriffv1.LogEvent_LOG_LEVEL_PANIC ||
 			event.GetClassification() == querysheriffv1.LogEvent_LOG_CLASSIFICATION_SERVER_CRASHED {
-			n.Fire(serverName, KeyPanic, event.GetMessage())
+			n.Fire(serverName, "", KeyPanic, slackEscape(event.GetMessage()))
 
 			return
 		}

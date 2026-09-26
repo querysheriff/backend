@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
+	"strings"
 	"time"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
@@ -31,10 +34,11 @@ const (
 )
 
 type slackAttachment struct {
-	Color  string `json:"color"`
-	Title  string `json:"title"`
-	Text   string `json:"text"`
-	Footer string `json:"footer"`
+	Color    string   `json:"color"`
+	Title    string   `json:"title"`
+	Text     string   `json:"text"`
+	Footer   string   `json:"footer"`
+	MrkdwnIn []string `json:"mrkdwn_in"`
 }
 
 type slackPayload struct {
@@ -61,12 +65,13 @@ func slackTitle(def Def) string {
 	return severityPrefix + def.Title
 }
 
-func postToSlack(ctx context.Context, client *http.Client, webhookURL string, def Def, serverName, text string) error {
+func postToSlack(ctx context.Context, client *http.Client, webhookURL string, def Def, footer, text string) error {
 	body, err := json.Marshal(slackPayload{Attachments: []slackAttachment{{
-		Color:  slackColor(def.Level),
-		Title:  slackTitle(def),
-		Text:   text,
-		Footer: serverName,
+		Color:    slackColor(def.Level),
+		Title:    slackTitle(def),
+		Text:     text,
+		Footer:   footer,
+		MrkdwnIn: []string{"text"},
 	}}})
 	if err != nil {
 		return err
@@ -118,4 +123,19 @@ func withoutURL(err error) error {
 	}
 
 	return err
+}
+
+// slackEscape escapes the characters Slack reads as markup, so query text like "a < b" shows as written.
+func slackEscape(text string) string {
+	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(text)
+}
+
+// tagPills renders tags as inline-code pills, each prefixed by a space.
+func tagPills(tags map[string]string) string {
+	var pills strings.Builder
+	for _, key := range slices.Sorted(maps.Keys(tags)) {
+		fmt.Fprintf(&pills, " `%s=%s`", key, tags[key])
+	}
+
+	return slackEscape(pills.String())
 }

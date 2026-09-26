@@ -18,7 +18,6 @@ const (
 	KeyBlockedQuery      = "blocked_query"
 	KeyLongQuery         = "long_query"
 	KeyLongTransaction   = "long_transaction"
-	KeySlowQueryReport   = "slow_query_report"
 	KeyWeeklyReport      = "weekly_report"
 )
 
@@ -27,7 +26,6 @@ const (
 	openTxnCooldown     = 10 * time.Minute
 	crashCooldown       = 15 * time.Minute
 	monitoringCooldown  = 30 * time.Minute
-	dailyCadence        = 23 * time.Hour
 	weeklyCadence       = 6 * 24 * time.Hour
 )
 
@@ -47,7 +45,6 @@ func Catalog() []Def {
 		{KeyBlockedQuery, "Query blocked by a lock", warning, liveProblemCooldown},
 		{KeyLongQuery, "Query running too long", warning, liveProblemCooldown},
 		{KeyLongTransaction, "Transaction open too long", warning, openTxnCooldown},
-		{KeySlowQueryReport, "Daily slow query report", info, dailyCadence},
 		{KeyWeeklyReport, "Weekly report", info, weeklyCadence},
 	}
 }

@@ -13,7 +13,7 @@ import (
 const (
 	previewLimit       = 100
 	samplePreviewLimit = 120
-	alertPreviewLimit  = 80
+	alertQueryLimit    = 1000
 )
 
 type Result struct {
@@ -134,10 +134,10 @@ func concretizeNaive(query string, params []string) string {
 	return b.String()
 }
 
-// AlertPreview collapses whitespace and truncates a query for an alert message.
-// Example: "SELECT  *\nFROM x" -> "SELECT * FROM x".
-func AlertPreview(query string) string {
-	return capLen(collapse(query), alertPreviewLimit)
+// AlertQuery caps a query's length for an alert message, keeping its formatting.
+// Example: a 5000-character query -> its first 1000 characters and "...".
+func AlertQuery(query string) string {
+	return capLen(query, alertQueryLimit)
 }
 
 // SamplePreview cleans comments, inserts parameters, and truncates to 120 characters.

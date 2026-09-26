@@ -233,37 +233,3 @@ func (c *Client) LogEventFacets(ctx context.Context, filter LogFilter) ([]LogFac
 
 	return out, nil
 }
-
-const countLogErrorsSQL = `
-SELECT
-    toInt64(countIf(occurred_at >= {current_start:DateTime('UTC')})) AS current_errors,
-    toInt64(countIf(occurred_at <  {current_start:DateTime('UTC')})) AS previous_errors
-FROM log_events
-WHERE server_name = {server_name:String}
-  AND occurred_at >= {previous_start:DateTime('UTC')}
-  AND occurred_at <  {current_end:DateTime('UTC')}
-  AND log_level IN {levels:Array(Int32)}`
-
-// CountLogErrors returns error counts for current and previous periods.
-// Example: previous=10, current=15 -> (15, 10).
-func (c *Client) CountLogErrors(
-	ctx context.Context,
-	serverName string,
-	previousStart, currentStart, currentEnd time.Time,
-	levels []int32,
-) (int64, int64, error) {
-	var current, previous int64
-
-	err := c.conn.QueryRow(ctx, countLogErrorsSQL,
-		param("server_name", serverName),
-		timeParam("previous_start", previousStart),
-		timeParam("current_start", currentStart),
-		timeParam("current_end", currentEnd),
-		listParam("levels", levels),
-	).Scan(&current, &previous)
-	if err != nil {
-		return 0, 0, fmt.Errorf("count log errors: %w", err)
-	}
-
-	return current, previous, nil
-}

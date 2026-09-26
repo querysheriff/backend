@@ -156,23 +156,14 @@ func (c *Client) StatementLatencySeries(
 }
 
 type TopStatement struct {
-	ID      uint64            `ch:"id"`
-	Calls   int64             `ch:"calls"`
-	AvgMs   float64           `ch:"avg_ms"`
-	TotalMs float64           `ch:"total_ms"`
-	Tags    map[string]string `ch:"tags"`
-}
-
-type TopStatementsParams struct {
-	ServerName string
-	From       time.Time
-	MinCalls   int64
-	MinAvgMs   float64
-	MaxRows    int32
+	ID    uint64            `ch:"id"`
+	Calls int64             `ch:"calls"`
+	AvgMs float64           `ch:"avg_ms"`
+	Tags  map[string]string `ch:"tags"`
 }
 
 const topStatementsSQL = `
-SELECT d.statement_id AS id, d.calls AS calls, d.total_ms AS total_ms, d.avg_ms AS avg_ms, s.tags AS tags
+SELECT d.statement_id AS id, d.calls AS calls, d.avg_ms AS avg_ms, s.tags AS tags
 FROM (
     SELECT statement_id,
            toInt64(sum(calls))                    AS calls,
@@ -182,8 +173,6 @@ FROM (
     WHERE server_name = {server_name:String}
       AND collected_at >= {from:DateTime('UTC')}
     GROUP BY statement_id
-    HAVING calls >= {min_calls:Int64}
-       AND avg_ms >= {min_avg_ms:Float64}
     ORDER BY total_ms DESC
     LIMIT {max_rows:UInt32}
 ) AS d
@@ -192,81 +181,22 @@ LEFT JOIN (
 ) AS s ON s.id = d.statement_id
 ORDER BY d.total_ms DESC`
 
-// TopStatements returns the statements with the most execution time that pass the call and average thresholds.
-// Example: MinCalls=10, MinAvgMs=1000 -> statements called 10+ times averaging 1s+, busiest first.
-func (c *Client) TopStatements(ctx context.Context, params TopStatementsParams) ([]TopStatement, error) {
+// TopStatements returns a server's statements with the most execution time since from, busiest first.
+// Example: limit=10 -> the 10 statements that kept the server busiest.
+func (c *Client) TopStatements(
+	ctx context.Context,
+	serverName string,
+	from time.Time,
+	limit int32,
+) ([]TopStatement, error) {
 	var out []TopStatement
 	if err := c.conn.Select(ctx, &out, topStatementsSQL,
-		param("server_name", params.ServerName),
-		timeParam("from", params.From),
-		param("min_calls", params.MinCalls),
-		param("min_avg_ms", params.MinAvgMs),
-		countParam("max_rows", params.MaxRows),
+		param("server_name", serverName),
+		timeParam("from", from),
+		countParam("max_rows", limit),
 	); err != nil {
 		return nil, fmt.Errorf("query top statements: %w", err)
 	}
 
 	return out, nil
-}
-
-const callsBetweenSQL = `
-SELECT toInt64(sum(calls))
-FROM statement_deltas
-WHERE server_name = {server_name:String}
-  AND collected_at >= {from:DateTime('UTC')}
-  AND collected_at <  {to:DateTime('UTC')}`
-
-func (c *Client) CallsBetween(ctx context.Context, serverName string, from, to time.Time) (int64, error) {
-	var calls int64
-	if err := c.conn.QueryRow(ctx, callsBetweenSQL,
-		param("server_name", serverName),
-		timeParam("from", from),
-		timeParam("to", to),
-	).Scan(&calls); err != nil {
-		return 0, fmt.Errorf("query calls total: %w", err)
-	}
-
-	return calls, nil
-}
-
-const latencyQuantileSQL = `
-WITH
-    dimension AS (
-        SELECT id, query_kind
-        FROM statements FINAL
-        WHERE server_name = {server_name:String}
-    ),
-    bins AS (
-        SELECT count() AS samples,
-               quantileExactWeighted({quantile:Float64})(` + latencyBinSQL + `, calls) AS bin
-        FROM statement_deltas AS d
-        INNER JOIN dimension AS s ON s.id = d.statement_id
-        WHERE server_name = {server_name:String}
-          AND collected_at >= {from:DateTime('UTC')}
-          AND collected_at <  {to:DateTime('UTC')}
-          AND calls > 0
-          AND s.query_kind != {utility_kind:Int32}
-    )
-SELECT if(samples = 0, 0, exp((bin + 0.5) * log(1.01)))
-FROM bins`
-
-func (c *Client) LatencyQuantile(
-	ctx context.Context,
-	serverName string,
-	from, to time.Time,
-	quantile float64,
-	utilityKind int32,
-) (float64, error) {
-	var ms float64
-	if err := c.conn.QueryRow(ctx, latencyQuantileSQL,
-		param("server_name", serverName),
-		timeParam("from", from),
-		timeParam("to", to),
-		param("quantile", quantile),
-		param("utility_kind", utilityKind),
-	).Scan(&ms); err != nil {
-		return 0, fmt.Errorf("query latency quantile: %w", err)
-	}
-
-	return ms, nil
 }

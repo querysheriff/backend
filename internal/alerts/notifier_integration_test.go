@@ -42,7 +42,7 @@ func TestFailedDeliveryReleasesTheCooldownAndHidesTheWebhook(t *testing.T) {
 	var logs bytes.Buffer
 
 	notifier := alerts.NewNotifier(queries, slog.New(slog.NewTextHandler(&logs, nil)))
-	notifier.Fire(serverName, alerts.KeyPanic, "server crashed")
+	notifier.Fire(serverName, "", alerts.KeyPanic, "server crashed")
 	notifier.Wait()
 
 	if !strings.Contains(logs.String(), "alert delivery failed") {

@@ -198,3 +198,15 @@ func TestConcretize(t *testing.T) {
 		})
 	}
 }
+
+func TestAlertQueryKeepsFormattingAndCapsLength(t *testing.T) {
+	t.Parallel()
+
+	if got := sqltext.AlertQuery("UPDATE servers\n   SET state = $1"); got != "UPDATE servers\n   SET state = $1" {
+		t.Errorf("AlertQuery = %q, want the query unchanged", got)
+	}
+
+	if capped := sqltext.AlertQuery(strings.Repeat("x", 5000)); utf8.RuneCountInString(capped) >= 5000 {
+		t.Errorf("AlertQuery kept %d runes of a 5000-rune query, want it capped", utf8.RuneCountInString(capped))
+	}
+}

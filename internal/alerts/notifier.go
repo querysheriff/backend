@@ -34,7 +34,9 @@ func NewNotifier(queries *db.Queries, logger *slog.Logger) *Notifier {
 	}
 }
 
-func (n *Notifier) Fire(serverName, alertKey, text string) {
+// Fire sends an alert asynchronously to the server's Slack webhook.
+// databaseName is optional and is used only in the message footer.
+func (n *Notifier) Fire(serverName, databaseName, alertKey, text string) {
 	def, ok := defByKey(alertKey)
 	if !ok {
 		n.logger.ErrorContext(context.Background(), "fire requested for unknown alert", "alert", alertKey)
@@ -42,7 +44,12 @@ func (n *Notifier) Fire(serverName, alertKey, text string) {
 		return
 	}
 
-	n.inFlight.Go(func() { n.deliver(def, serverName, text) })
+	footer := serverName
+	if databaseName != "" {
+		footer += " · " + databaseName
+	}
+
+	n.inFlight.Go(func() { n.deliver(def, serverName, footer, text) })
 }
 
 // Wait blocks until every fired alert has been delivered or given up on.
@@ -50,7 +57,7 @@ func (n *Notifier) Wait() {
 	n.inFlight.Wait()
 }
 
-func (n *Notifier) deliver(def Def, serverName, text string) {
+func (n *Notifier) deliver(def Def, serverName, footer, text string) {
 	ctx, cancel := context.WithTimeout(context.Background(), fireTimeout)
 	defer cancel()
 
@@ -71,7 +78,7 @@ func (n *Notifier) deliver(def Def, serverName, text string) {
 		return // suppressed by the cooldown window
 	}
 
-	if err = postToSlack(ctx, n.client, webhookURL, def, serverName, text); err != nil {
+	if err = postToSlack(ctx, n.client, webhookURL, def, footer, text); err != nil {
 		n.logger.ErrorContext(ctx, "alert delivery failed", "server", serverName, "alert", def.Key, "error", err)
 		n.release(serverName, def.Key, firedAt)
 	}
