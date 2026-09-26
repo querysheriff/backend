@@ -12,7 +12,6 @@ permissions:
   packages: write
 
 jobs:
-  # Build the Debian package and publish a GitHub Release.
   image:
     runs-on: ubuntu-latest
     steps:
