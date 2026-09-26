@@ -149,3 +149,17 @@ func TestParseTrimsTheDashboardURL(t *testing.T) {
 		t.Errorf("DashboardURL = %q, want %q (trimmed, no trailing slash)", cfg.DashboardURL, want)
 	}
 }
+
+func TestParseDevAutoLoginNeedsLoopback(t *testing.T) {
+	t.Parallel()
+
+	for addr, wantErr := range map[string]bool{"localhost:3000": false, "[::1]:3000": false, "0.0.0.0:3000": true, ":3000": true} {
+		pairs := requiredEnv()
+		pairs["DEV_AUTO_LOGIN"] = "true"
+		pairs["LISTEN_ADDR"] = addr
+
+		if _, err := config.Parse(env(pairs)); (err != nil) != wantErr {
+			t.Errorf("Parse(DEV_AUTO_LOGIN, LISTEN_ADDR=%q) = %v, want error %v", addr, err, wantErr)
+		}
+	}
+}

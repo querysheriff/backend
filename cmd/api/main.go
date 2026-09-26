@@ -69,7 +69,7 @@ func run(logger *slog.Logger) error {
 
 	queries := db.New(pool)
 	handlerOptions := connect.WithOptions(
-		connect.WithInterceptors(server.NewAuthInterceptor(queries)),
+		connect.WithInterceptors(server.NewAuthInterceptor(queries, cfg.DevAutoLogin)),
 		connect.WithReadMaxBytes(maxRequestBytes),
 	)
 

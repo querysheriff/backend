@@ -21,7 +21,7 @@ const (
 
 // NewAuthInterceptor authenticates collectors/users and enforces admin access.
 // Example: collector Bearer token -> server in context; user session -> principal in context.
-func NewAuthInterceptor(queries *db.Queries) connect.UnaryInterceptorFunc {
+func NewAuthInterceptor(queries *db.Queries, devAutoLogin bool) connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			procedure := req.Spec().Procedure
@@ -39,7 +39,7 @@ func NewAuthInterceptor(queries *db.Queries) connect.UnaryInterceptorFunc {
 				return next(auth.WithServerName(ctx, serverName), req)
 
 			default:
-				principal, err := authenticateUser(ctx, queries, req.Header())
+				principal, err := authenticateUser(ctx, queries, req.Header(), devAutoLogin)
 				if err != nil {
 					return nil, err
 				}
@@ -87,8 +87,17 @@ func authenticateCollector(ctx context.Context, queries *db.Queries, header http
 	return serverName, nil
 }
 
-func authenticateUser(ctx context.Context, queries *db.Queries, header http.Header) (*auth.Principal, error) {
+func authenticateUser(
+	ctx context.Context,
+	queries *db.Queries,
+	header http.Header,
+	devAutoLogin bool,
+) (*auth.Principal, error) {
 	token := sessionTokenFromHeader(header)
+	if token == "" && devAutoLogin {
+		return &auth.Principal{Name: "dev", Email: "dev@localhost", IsSuperAdmin: true}, nil
+	}
+
 	if token == "" {
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("authentication required"))
 	}

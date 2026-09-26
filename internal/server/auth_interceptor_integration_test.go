@@ -42,7 +42,7 @@ func newAuthFixture(t *testing.T) authFixture {
 	queries := db.New(pool)
 	unique := time.Now().UnixNano()
 
-	interceptors := connect.WithInterceptors(server.NewAuthInterceptor(queries))
+	interceptors := connect.WithInterceptors(server.NewAuthInterceptor(queries, false))
 
 	mux := http.NewServeMux()
 

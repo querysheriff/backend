@@ -20,6 +20,7 @@ type Config struct {
 	AllowedOrigins []string
 	CookieSecure   bool
 	DashboardURL   string
+	DevAutoLogin   bool
 }
 
 // Load reads config from environment variables.
@@ -46,6 +47,12 @@ func Parse(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
+	devAutoLogin := getenv("DEV_AUTO_LOGIN") == "true"
+	host, _, _ := net.SplitHostPort(listenAddr)
+	if devAutoLogin && host != "localhost" && !net.ParseIP(host).IsLoopback() {
+		return Config{}, fmt.Errorf("DEV_AUTO_LOGIN needs a loopback LISTEN_ADDR, got %q", listenAddr)
+	}
+
 	return Config{
 		DatabaseURL:    databaseURL,
 		ClickHouseURL:  clickhouseURL,
@@ -53,6 +60,7 @@ func Parse(getenv func(string) string) (Config, error) {
 		AllowedOrigins: parseAllowedOrigins(getenv("CORS_ALLOWED_ORIGINS")),
 		CookieSecure:   getenv("COOKIE_SECURE") == "true",
 		DashboardURL:   strings.TrimSuffix(strings.TrimSpace(getenv("DASHBOARD_URL")), "/"),
+		DevAutoLogin:   devAutoLogin,
 	}, nil
 }
 
