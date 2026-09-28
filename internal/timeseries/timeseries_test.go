@@ -20,9 +20,12 @@ func TestBucketWidthScalesWithTheRange(t *testing.T) {
 	}{
 		{time.Minute, time.Minute},
 		{time.Hour, time.Minute},
-		{6 * time.Hour, 6 * time.Minute},
-		{24 * time.Hour, 24 * time.Minute},
-		{7 * 24 * time.Hour, 168 * time.Minute},
+		{5 * time.Hour, time.Minute},
+		{6 * time.Hour, 2 * time.Minute},
+		{24 * time.Hour, 5 * time.Minute},
+		{7 * 24 * time.Hour, time.Hour},
+		{30 * 24 * time.Hour, 3 * time.Hour},
+		{10 * 365 * 24 * time.Hour, 7 * 24 * time.Hour},
 		{90 * time.Second, time.Minute},
 	}
 
@@ -34,17 +37,27 @@ func TestBucketWidthScalesWithTheRange(t *testing.T) {
 	}
 }
 
-func TestBucketIsAWholeNumberOfMinutes(t *testing.T) {
+func TestBucketIsARoundStepWithinThePointBudget(t *testing.T) {
 	t.Parallel()
 
-	for span := time.Minute; span <= 14*24*time.Hour; span += 37 * time.Second {
+	const maxPoints = 300
+
+	round := map[time.Duration]bool{}
+	for _, step := range []time.Duration{
+		time.Minute, 2 * time.Minute, 5 * time.Minute, 10 * time.Minute, 15 * time.Minute, 30 * time.Minute,
+		time.Hour, 2 * time.Hour, 3 * time.Hour, 6 * time.Hour, 12 * time.Hour, 24 * time.Hour, 7 * 24 * time.Hour,
+	} {
+		round[step] = true
+	}
+
+	for span := time.Minute; span <= 30*24*time.Hour; span += 37 * time.Minute {
 		bounds := timeseries.NewBounds(nowish().Add(-span), nowish(), nowish())
-		if bounds.Bucket%time.Minute != 0 {
-			t.Fatalf("span %s: bucket %s is not a whole number of minutes", span, bounds.Bucket)
+		if !round[bounds.Bucket] {
+			t.Fatalf("span %s: bucket %s is not a round step", span, bounds.Bucket)
 		}
 
-		if bounds.Bucket <= 0 {
-			t.Fatalf("span %s: bucket %s is not positive", span, bounds.Bucket)
+		if n := span / bounds.Bucket; n > maxPoints {
+			t.Fatalf("span %s: %d buckets of %s, want at most %d", span, n, bounds.Bucket, maxPoints)
 		}
 	}
 }

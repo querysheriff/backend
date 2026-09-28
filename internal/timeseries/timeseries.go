@@ -2,10 +2,8 @@ package timeseries
 
 import "time"
 
-const (
-	points    = 60
-	minBucket = time.Minute
-)
+// maxPoints keeps charts to roughly this many buckets.
+const maxPoints = 300
 
 type Bounds struct {
 	Bucket     time.Duration
@@ -34,7 +32,7 @@ func NewBounds(from, to, now time.Time) Bounds {
 // Ends returns all bucket end times from RangeStart to Anchor.
 // Example: Bucket=1m, RangeStart=11:59, Anchor=12:02 -> [12:00, 12:01, 12:02].
 func (b Bounds) Ends() []time.Time {
-	ends := make([]time.Time, 0, points+1)
+	ends := make([]time.Time, 0, maxPoints+1)
 	for end := b.RangeStart.Add(b.Bucket); !end.After(b.Anchor); end = end.Add(b.Bucket) {
 		ends = append(ends, end)
 	}
@@ -42,13 +40,22 @@ func (b Bounds) Ends() []time.Time {
 	return ends
 }
 
+// bucketFor picks the smallest round bucket that keeps the range within maxPoints.
+// Example: 24h -> 5m = 288 buckets. Very large ranges fall back to 1 week.
 func bucketFor(d time.Duration) time.Duration {
-	bucket := d / points
-	if bucket < minBucket {
-		return minBucket
+	const day = 24 * time.Hour
+
+	steps := [...]time.Duration{
+		time.Minute, 2 * time.Minute, 5 * time.Minute, 10 * time.Minute, 15 * time.Minute, 30 * time.Minute,
+		time.Hour, 2 * time.Hour, 3 * time.Hour, 6 * time.Hour, 12 * time.Hour, day, 7 * day,
+	}
+	for _, step := range steps {
+		if d <= step*maxPoints {
+			return step
+		}
 	}
 
-	return bucket.Round(time.Minute)
+	return steps[len(steps)-1]
 }
 
 func binStart(t, anchor time.Time, bucket time.Duration) time.Time {
