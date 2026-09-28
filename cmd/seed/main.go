@@ -15,7 +15,7 @@ var seedSQL string
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+		Level: slog.LevelDebug,
 	}))
 
 	if err := run(context.Background(), logger); err != nil {

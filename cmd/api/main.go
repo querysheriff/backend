@@ -41,7 +41,7 @@ const (
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+		Level: slog.LevelDebug,
 	}))
 
 	if err := run(logger); err != nil {
@@ -69,7 +69,10 @@ func run(logger *slog.Logger) error {
 
 	queries := db.New(pool)
 	handlerOptions := connect.WithOptions(
-		connect.WithInterceptors(server.NewAuthInterceptor(queries, cfg.DevAutoLogin)),
+		connect.WithInterceptors(
+			server.NewLogInterceptor(logger),
+			server.NewAuthInterceptor(queries, cfg.DevAutoLogin),
+		),
 		connect.WithReadMaxBytes(maxRequestBytes),
 	)
 
