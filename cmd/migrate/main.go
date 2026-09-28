@@ -35,11 +35,17 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 
-	if err = migrate(ctx, "clickhouse", cfg.ClickHouseURL, chmigrations.Up); err != nil {
+	if err = migrate(ctx, "clickhouse", cfg.ClickHouseURL, func(ctx context.Context, db *sql.DB) error {
+		if upErr := chmigrations.Up(ctx, db); upErr != nil {
+			return upErr
+		}
+
+		return chmigrations.SetRetention(ctx, db, cfg.RetentionDays)
+	}); err != nil {
 		return err
 	}
 
-	logger.InfoContext(ctx, "migrations applied")
+	logger.InfoContext(ctx, "migrations applied", "retention_days", cfg.RetentionDays)
 
 	return nil
 }

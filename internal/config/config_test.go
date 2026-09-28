@@ -163,3 +163,29 @@ func TestParseDevAutoLoginNeedsLoopback(t *testing.T) {
 		}
 	}
 }
+
+func TestParseRetentionDays(t *testing.T) {
+	t.Parallel()
+
+	for raw, want := range map[string]int{"": 30, "1": 1, "90": 90, "365": 365, "0": 0, "-7": 0, "366": 0, "7d": 0, "1.5": 0} {
+		pairs := requiredEnv()
+		pairs["RETENTION_DAYS"] = raw
+
+		cfg, err := config.Parse(env(pairs))
+		if want == 0 {
+			if err == nil {
+				t.Errorf("Parse(RETENTION_DAYS=%q) = nil error, want a failure", raw)
+			}
+
+			continue
+		}
+
+		if err != nil {
+			t.Fatalf("Parse(RETENTION_DAYS=%q): %v", raw, err)
+		}
+
+		if cfg.RetentionDays != want {
+			t.Errorf("RETENTION_DAYS=%q gave RetentionDays = %d, want %d", raw, cfg.RetentionDays, want)
+		}
+	}
+}

@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 )
 
 const (
 	defaultListenAddr    = "localhost:3000"
 	defaultAllowedOrigin = "http://localhost:3001"
+	defaultRetentionDays = 30
+	maxRetentionDays     = 365
 )
 
 type Config struct {
@@ -21,6 +24,7 @@ type Config struct {
 	CookieSecure   bool
 	DashboardURL   string
 	DevAutoLogin   bool
+	RetentionDays  int
 }
 
 // Load reads config from environment variables.
@@ -47,6 +51,11 @@ func Parse(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
+	retentionDays, err := parseRetentionDays(getenv("RETENTION_DAYS"))
+	if err != nil {
+		return Config{}, err
+	}
+
 	devAutoLogin := getenv("DEV_AUTO_LOGIN") == "true"
 	host, _, _ := net.SplitHostPort(listenAddr)
 	if devAutoLogin && host != "localhost" && !net.ParseIP(host).IsLoopback() {
@@ -61,6 +70,7 @@ func Parse(getenv func(string) string) (Config, error) {
 		CookieSecure:   getenv("COOKIE_SECURE") == "true",
 		DashboardURL:   strings.TrimSuffix(strings.TrimSpace(getenv("DASHBOARD_URL")), "/"),
 		DevAutoLogin:   devAutoLogin,
+		RetentionDays:  retentionDays,
 	}, nil
 }
 
@@ -74,6 +84,23 @@ func parseListenAddr(raw string) (string, error) {
 	}
 
 	return raw, nil
+}
+
+func parseRetentionDays(raw string) (int, error) {
+	if raw == "" {
+		return defaultRetentionDays, nil
+	}
+
+	days, err := strconv.Atoi(raw)
+	if err != nil || days < 1 || days > maxRetentionDays {
+		return 0, fmt.Errorf(
+			"RETENTION_DAYS must be a whole number of days from 1 to %d, got %q",
+			maxRetentionDays,
+			raw,
+		)
+	}
+
+	return days, nil
 }
 
 func parseAllowedOrigins(raw string) []string {
