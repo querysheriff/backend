@@ -106,18 +106,18 @@ func TestLiveAlertMessages(t *testing.T) {
 
 	cases := map[string][]string{
 		"Query blocked by a lock": {
-			"A query has been waiting more than 10 seconds for a lock.",
+			"A query has been waiting more than 30 seconds for a lock.",
 			"*Waiting:* `gql_operation=Provision`\n```UPDATE servers SET state = $1 WHERE id = $2```",
 			"*Blocking:* `job=reconcile`\n```SELECT * FROM servers WHERE load &lt; 5 FOR UPDATE```",
 			"*Kill blocking:* `SELECT pg_terminate_backend(20);`",
 		},
 		"Query running too long": {
-			"A query has been running more than 1 minute.",
+			"A query has been running more than 2 minutes.",
 			"*Query:*\n```SELECT pg_sleep(600)```",
 			"*Kill:* `SELECT pg_terminate_backend(30);`",
 		},
 		"Transaction open too long": {
-			"A transaction has been open more than 10 minutes.",
+			"A transaction has been open more than 15 minutes.",
 			"*Current query:* `job=reconcile`\n```SELECT * FROM servers WHERE load &lt; 5 FOR UPDATE```",
 			"*Kill:* `SELECT pg_terminate_backend(20);`",
 		},
