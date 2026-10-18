@@ -101,11 +101,10 @@ func seedSession(ctx context.Context, t *testing.T, queries *db.Queries, unique 
 	}
 
 	userID, err := createUser(ctx, queries, db.CreateUserParams{
-		Name:           role,
-		Email:          userEmail(role, unique),
-		PasswordHash:   hash,
-		IsSuperAdmin:   admin,
-		AllowedServers: []string{},
+		Name:         role,
+		Email:        userEmail(role, unique),
+		PasswordHash: hash,
+		IsSuperAdmin: admin,
 	})
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
@@ -144,8 +143,8 @@ func createUser(ctx context.Context, queries *db.Queries, params db.CreateUserPa
 	}
 
 	for _, candidate := range existing {
-		if candidate.IsSuperAdmin {
-			return candidate.ID, nil
+		if candidate.User.IsSuperAdmin {
+			return candidate.User.ID, nil
 		}
 	}
 

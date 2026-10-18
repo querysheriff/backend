@@ -29,6 +29,8 @@ func TestAlertSettingsReadBackWhatWasSaved(t *testing.T) {
 	queries := db.New(testdb.Postgres(t))
 	srv := server.NewAlertServer(queries)
 
+	seedCollectorToken(ctx, t, queries, serverName)
+
 	if err := queries.UpsertCollectorHealth(ctx, db.UpsertCollectorHealthParams{
 		ServerName:  serverName,
 		CollectedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},

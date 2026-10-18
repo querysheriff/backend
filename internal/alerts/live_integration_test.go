@@ -36,7 +36,7 @@ func TestLiveAlertMessages(t *testing.T) {
 	const serverName = "live-alert-texts"
 
 	ctx := context.Background()
-	queries := db.New(testdb.Postgres(t))
+	pool := testdb.Postgres(t)
 
 	var (
 		mu       sync.Mutex
@@ -55,16 +55,12 @@ func TestLiveAlertMessages(t *testing.T) {
 	}))
 	defer slack.Close()
 
-	if err := queries.UpsertAlertWebhook(ctx, db.UpsertAlertWebhookParams{
-		ServerName: serverName, SlackWebhookUrl: slack.URL,
-	}); err != nil {
-		t.Fatalf("UpsertAlertWebhook: %v", err)
-	}
+	seedServerWithWebhook(ctx, t, db.New(pool), serverName, slack.URL)
 
 	now := time.Now()
 	ago := func(d time.Duration) *timestamppb.Timestamp { return timestamppb.New(now.Add(-d)) }
 
-	notifier := alerts.NewNotifier(queries, slog.New(slog.DiscardHandler))
+	notifier := alerts.NewNotifier(pool, slog.New(slog.DiscardHandler))
 	notifier.CheckActivity(serverName, now, []*querysheriffv1.ActivitySnapshot{
 		{
 			Pid:           10,

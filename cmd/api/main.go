@@ -83,7 +83,7 @@ func run(logger *slog.Logger) error {
 	defer func() { _ = conn.Close() }()
 
 	stats := chstats.New(conn)
-	notifier := alerts.NewNotifier(queries, logger)
+	notifier := alerts.NewNotifier(pool, logger)
 	defer notifier.Wait()
 
 	apiMux := registerServices(pool, queries, stats, notifier, cfg, handlerOptions)

@@ -16,10 +16,14 @@ type Principal struct {
 }
 
 // AllowedServerFilter returns allowed servers, or nil for unrestricted access.
-// Example: admin -> nil; user -> ["prod-1", "prod-2"].
+// Example: admin -> nil; user -> ["prod-1", "prod-2"]; user without servers -> [].
 func (p *Principal) AllowedServerFilter() []string {
-	if p == nil || p.IsSuperAdmin {
+	if p != nil && p.IsSuperAdmin {
 		return nil
+	}
+
+	if p == nil || p.AllowedServers == nil {
+		return []string{}
 	}
 
 	return p.AllowedServers

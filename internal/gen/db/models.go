@@ -14,17 +14,6 @@ type AlertFire struct {
 	FiredAt    pgtype.Timestamptz
 }
 
-type AlertNotification struct {
-	ServerName  string
-	AlertKey    string
-	LastFiredAt pgtype.Timestamptz
-}
-
-type AlertSetting struct {
-	ServerName      string
-	SlackWebhookUrl string
-}
-
 type AlertToggle struct {
 	ServerName string
 	AlertKey   string
@@ -44,14 +33,23 @@ type CollectorToken struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type Server struct {
+	ServerName      string
+	SlackWebhookUrl pgtype.Text
+}
+
 type User struct {
-	ID             int64
-	Name           string
-	Email          string
-	PasswordHash   string
-	IsSuperAdmin   bool
-	AllowedServers []string
-	CreatedAt      pgtype.Timestamptz
+	ID           int64
+	Name         string
+	Email        string
+	PasswordHash string
+	IsSuperAdmin bool
+	CreatedAt    pgtype.Timestamptz
+}
+
+type UserServer struct {
+	UserID     int64
+	ServerName string
 }
 
 type UserSession struct {

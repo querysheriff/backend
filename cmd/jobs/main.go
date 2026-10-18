@@ -53,7 +53,7 @@ func run(logger *slog.Logger) error {
 	stats := chstats.New(conn)
 
 	queries := db.New(pool)
-	notifier := alerts.NewNotifier(queries, logger)
+	notifier := alerts.NewNotifier(pool, logger)
 
 	logger.InfoContext(ctx, "querysheriff jobs started")
 

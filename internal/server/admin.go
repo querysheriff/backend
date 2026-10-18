@@ -83,8 +83,7 @@ func (s *AdminServer) CreateCollectorToken(
 	}), nil
 }
 
-// DeleteCollectorToken deletes a collector token and cleans server access if it was the last one.
-// Example: delete last token for "prod" -> removes "prod" from users and alert config.
+// DeleteCollectorToken deletes a collector token. Deleting a server's last token removes the server together with its health, alert config and user access.
 func (s *AdminServer) DeleteCollectorToken(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.DeleteCollectorTokenRequest],
@@ -94,38 +93,19 @@ func (s *AdminServer) DeleteCollectorToken(
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("token id is required"))
 	}
 
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	q := s.queries.WithTx(tx)
-
-	serverName, err := q.DeleteCollectorToken(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return connect.NewResponse(&querysheriffv1.DeleteCollectorTokenResponse{}), nil
-	}
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-
-	remaining, err := q.CountCollectorTokensForServer(ctx, serverName)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-
-	if remaining == 0 {
-		if err = q.RemoveServerFromUsers(ctx, serverName); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+	err := s.inTx(ctx, func(q *db.Queries) error {
+		serverName, err := q.DeleteCollectorToken(ctx, id)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
 		}
-		if err = q.DeleteAlertConfigForServer(ctx, serverName); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+		if err != nil {
+			return err
 		}
-	}
 
-	if err = tx.Commit(ctx); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return q.DeleteServerIfUnused(ctx, serverName)
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return connect.NewResponse(&querysheriffv1.DeleteCollectorTokenResponse{}), nil
@@ -144,7 +124,7 @@ func (s *AdminServer) ListUsers(
 
 	users := make([]*querysheriffv1.User, len(rows))
 	for i, row := range rows {
-		users[i] = userProto(principalFromUser(row))
+		users[i] = userProto(principalFromUser(row.User, row.AllowedServers))
 	}
 
 	return connect.NewResponse(&querysheriffv1.ListUsersResponse{Users: users}), nil
@@ -168,23 +148,32 @@ func (s *AdminServer) CreateUser(
 		return nil, err
 	}
 
-	created, err := s.queries.CreateUser(ctx, db.CreateUserParams{
-		Name:           name,
-		Email:          email,
-		PasswordHash:   hash,
-		IsSuperAdmin:   false,
-		AllowedServers: orEmptyStrings(req.Msg.GetAllowedServers()),
-	})
-	if err != nil {
-		if isUniqueViolation(err) {
-			return nil, connect.NewError(connect.CodeAlreadyExists, errors.New(emailExistsMsg))
+	var created db.GetUserByIDRow
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		user, createErr := q.CreateUser(ctx, db.CreateUserParams{
+			Name:         name,
+			Email:        email,
+			PasswordHash: hash,
+			IsSuperAdmin: false,
+		})
+		if isUniqueViolation(createErr) {
+			return connect.NewError(connect.CodeAlreadyExists, errors.New(emailExistsMsg))
+		}
+		if createErr != nil {
+			return createErr
 		}
 
-		return nil, connect.NewError(connect.CodeInternal, err)
+		created, createErr = setUserServers(ctx, q, user.ID, req.Msg.GetAllowedServers())
+
+		return createErr
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return connect.NewResponse(&querysheriffv1.CreateUserResponse{
-		User: userProto(principalFromUser(created)),
+		User: userProto(principalFromUser(created.User, created.AllowedServers)),
 	}), nil
 }
 
@@ -211,27 +200,36 @@ func (s *AdminServer) UpdateUser(
 		passwordHash = pgtype.Text{String: hash, Valid: true}
 	}
 
-	updated, err := s.queries.UpdateUser(ctx, db.UpdateUserParams{
-		Name:              name,
-		Email:             email,
-		PasswordHash:      passwordHash,
-		AllowedServers:    orEmptyStrings(req.Msg.GetAllowedServers()),
-		ID:                id,
-		CallerSessionHash: auth.HashToken(sessionTokenFromHeader(req.Header())),
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("user not found"))
-	}
-	if err != nil {
+	var updated db.GetUserByIDRow
+
+	err := s.inTx(ctx, func(q *db.Queries) error {
+		rows, err := q.UpdateUser(ctx, db.UpdateUserParams{
+			Name:              name,
+			Email:             email,
+			PasswordHash:      passwordHash,
+			ID:                id,
+			CallerSessionHash: auth.HashToken(sessionTokenFromHeader(req.Header())),
+		})
 		if isUniqueViolation(err) {
-			return nil, connect.NewError(connect.CodeAlreadyExists, errors.New(emailExistsMsg))
+			return connect.NewError(connect.CodeAlreadyExists, errors.New(emailExistsMsg))
+		}
+		if err != nil {
+			return err
+		}
+		if rows == 0 {
+			return connect.NewError(connect.CodeNotFound, errors.New("user not found"))
 		}
 
-		return nil, connect.NewError(connect.CodeInternal, err)
+		updated, err = setUserServers(ctx, q, id, req.Msg.GetAllowedServers())
+
+		return err
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return connect.NewResponse(&querysheriffv1.UpdateUserResponse{
-		User: userProto(principalFromUser(updated)),
+		User: userProto(principalFromUser(updated.User, updated.AllowedServers)),
 	}), nil
 }
 
@@ -246,7 +244,7 @@ func (s *AdminServer) DeleteUser(
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("user id is required"))
 	}
 
-	user, err := s.queries.GetUserByID(ctx, id)
+	row, err := s.queries.GetUserByID(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("user not found"))
 	}
@@ -254,7 +252,7 @@ func (s *AdminServer) DeleteUser(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	if user.IsSuperAdmin {
+	if row.User.IsSuperAdmin {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("the super admin cannot be deleted"))
 	}
 
@@ -263,4 +261,32 @@ func (s *AdminServer) DeleteUser(
 	}
 
 	return connect.NewResponse(&querysheriffv1.DeleteUserResponse{}), nil
+}
+
+// inTx runs fn in a transaction.
+func (s *AdminServer) inTx(ctx context.Context, fn func(q *db.Queries) error) error {
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error { return fn(s.queries.WithTx(tx)) })
+
+	var connectErr *connect.Error
+	if err == nil || errors.As(err, &connectErr) {
+		return err
+	}
+
+	return connect.NewError(connect.CodeInternal, err)
+}
+
+// setUserServers replaces a user's server access and returns the user as stored.
+func setUserServers(ctx context.Context, q *db.Queries, userID int64, serverNames []string) (db.GetUserByIDRow, error) {
+	err := q.SetUserServers(ctx, db.SetUserServersParams{UserID: userID, ServerNames: serverNames})
+	if isForeignKeyViolation(err) {
+		return db.GetUserByIDRow{}, connect.NewError(
+			connect.CodeInvalidArgument,
+			errors.New("allowed_servers lists an unknown server"),
+		)
+	}
+	if err != nil {
+		return db.GetUserByIDRow{}, err
+	}
+
+	return q.GetUserByID(ctx, userID)
 }

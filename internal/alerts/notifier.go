@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/querysheriff/backend/internal/gen/db"
 )
@@ -20,15 +21,17 @@ const (
 )
 
 type Notifier struct {
+	pool     *pgxpool.Pool
 	queries  *db.Queries
 	client   *http.Client
 	logger   *slog.Logger
 	inFlight sync.WaitGroup
 }
 
-func NewNotifier(queries *db.Queries, logger *slog.Logger) *Notifier {
+func NewNotifier(pool *pgxpool.Pool, logger *slog.Logger) *Notifier {
 	return &Notifier{
-		queries: queries,
+		pool:    pool,
+		queries: db.New(pool),
 		client:  &http.Client{Timeout: slackTimeout},
 		logger:  logger,
 	}
@@ -84,11 +87,25 @@ func (n *Notifier) deliver(def Def, serverName, footer, text string) {
 	}
 }
 
+// claim records a fire unless one happened within the cooldown.
 func (n *Notifier) claim(ctx context.Context, serverName string, def Def) (pgtype.Timestamptz, bool) {
-	firedAt, err := n.queries.TryClaimAlertNotification(ctx, db.TryClaimAlertNotificationParams{
-		ServerName: serverName,
-		AlertKey:   def.Key,
-		Cooldown:   intervalFromDuration(def.Cooldown),
+	var firedAt pgtype.Timestamptz
+
+	err := pgx.BeginFunc(ctx, n.pool, func(tx pgx.Tx) error {
+		q := n.queries.WithTx(tx)
+
+		err := q.LockAlertClaim(ctx, db.LockAlertClaimParams{ServerName: serverName, AlertKey: def.Key})
+		if err != nil {
+			return err
+		}
+
+		firedAt, err = q.ClaimAlertFire(ctx, db.ClaimAlertFireParams{
+			ServerName: serverName,
+			AlertKey:   def.Key,
+			Cooldown:   intervalFromDuration(def.Cooldown),
+		})
+
+		return err
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return firedAt, false
@@ -107,7 +124,7 @@ func (n *Notifier) release(serverName, alertKey string, firedAt pgtype.Timestamp
 	ctx, cancel := context.WithTimeout(context.Background(), releaseTimeout)
 	defer cancel()
 
-	err := n.queries.ReleaseAlertClaim(ctx, db.ReleaseAlertClaimParams{
+	err := n.queries.DeleteAlertFire(ctx, db.DeleteAlertFireParams{
 		ServerName: serverName,
 		AlertKey:   alertKey,
 		FiredAt:    firedAt,

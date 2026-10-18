@@ -16,21 +16,33 @@ ORDER BY server_name;
 SELECT count(*) AS total FROM users;
 
 -- name: CreateUser :one
-INSERT INTO users (name, email, password_hash, is_super_admin, allowed_servers)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO users (name, email, password_hash, is_super_admin)
+VALUES ($1, $2, $3, $4)
 RETURNING *;
 
 -- name: GetUserByEmail :one
-SELECT * FROM users WHERE email = $1;
+SELECT sqlc.embed(users), ARRAY(
+    SELECT us.server_name FROM user_servers us WHERE us.user_id = users.id ORDER BY us.server_name
+)::text[] AS allowed_servers
+FROM users
+WHERE email = $1;
 
 -- name: GetUserByID :one
-SELECT * FROM users WHERE id = $1;
+SELECT sqlc.embed(users), ARRAY(
+    SELECT us.server_name FROM user_servers us WHERE us.user_id = users.id ORDER BY us.server_name
+)::text[] AS allowed_servers
+FROM users
+WHERE id = $1;
 
 -- name: ListUsers :many
-SELECT * FROM users ORDER BY created_at, id;
+SELECT sqlc.embed(users), ARRAY(
+    SELECT us.server_name FROM user_servers us WHERE us.user_id = users.id ORDER BY us.server_name
+)::text[] AS allowed_servers
+FROM users
+ORDER BY created_at, id;
 
 -- A new password ends every session opened with the old one, except the caller's own.
--- name: UpdateUser :one
+-- name: UpdateUser :execrows
 WITH revoked AS (
     DELETE FROM user_sessions
     WHERE user_id = sqlc.arg('id')
@@ -40,10 +52,21 @@ WITH revoked AS (
 UPDATE users
 SET name = sqlc.arg('name'),
     email = sqlc.arg('email'),
-    password_hash = coalesce(sqlc.narg('password_hash')::text, password_hash),
-    allowed_servers = sqlc.arg('allowed_servers')
-WHERE id = sqlc.arg('id')
-RETURNING *;
+    password_hash = coalesce(sqlc.narg('password_hash')::text, password_hash)
+WHERE id = sqlc.arg('id');
+
+-- name: SetUserServers :exec
+WITH wanted AS (
+    SELECT unnest(sqlc.arg('server_names')::text[]) AS server_name
+),
+revoked AS (
+    DELETE FROM user_servers
+    WHERE user_id = sqlc.arg('user_id')
+      AND server_name NOT IN (SELECT server_name FROM wanted)
+)
+INSERT INTO user_servers (user_id, server_name)
+SELECT sqlc.arg('user_id')::bigint, server_name FROM wanted
+ON CONFLICT (user_id, server_name) DO NOTHING;
 
 -- name: DeleteUser :exec
 DELETE FROM users WHERE id = $1;
@@ -53,7 +76,10 @@ INSERT INTO user_sessions (token_hash, user_id, expires_at)
 VALUES ($1, $2, $3);
 
 -- name: GetSessionUser :one
-SELECT * FROM users
+SELECT sqlc.embed(users), ARRAY(
+    SELECT us.server_name FROM user_servers us WHERE us.user_id = users.id ORDER BY us.server_name
+)::text[] AS allowed_servers
+FROM users
 WHERE id = (SELECT user_id FROM user_sessions WHERE token_hash = $1 AND expires_at > now());
 
 -- name: DeleteSession :exec
@@ -63,8 +89,11 @@ DELETE FROM user_sessions WHERE token_hash = $1;
 DELETE FROM user_sessions WHERE expires_at <= now();
 
 -- name: CreateCollectorToken :one
+WITH server AS (
+    INSERT INTO servers (server_name) VALUES (sqlc.arg('server_name')) ON CONFLICT DO NOTHING
+)
 INSERT INTO collector_tokens (server_name, token_hash)
-VALUES ($1, $2)
+VALUES (sqlc.arg('server_name'), sqlc.arg('token_hash'))
 RETURNING id, server_name, created_at;
 
 -- name: GetCollectorServerByHash :one
@@ -77,80 +106,57 @@ SELECT id, server_name, created_at FROM collector_tokens ORDER BY created_at, id
 DELETE FROM collector_tokens WHERE id = $1
 RETURNING server_name;
 
--- name: CountCollectorTokensForServer :one
-SELECT count(*) AS total FROM collector_tokens WHERE server_name = $1;
-
--- name: RemoveServerFromUsers :exec
-UPDATE users SET allowed_servers = array_remove(allowed_servers, sqlc.arg('server_name')::text);
+-- name: DeleteServerIfUnused :exec
+DELETE FROM servers s
+WHERE s.server_name = $1
+  AND NOT EXISTS (SELECT 1 FROM collector_tokens t WHERE t.server_name = s.server_name);
 
 -- name: ListAlertWebhooks :many
-SELECT server_name, slack_webhook_url
-FROM alert_settings
-WHERE (sqlc.narg('allowed_servers')::text[] IS NULL OR server_name = ANY(sqlc.narg('allowed_servers')::text[]));
+SELECT server_name, slack_webhook_url::text AS slack_webhook_url
+FROM servers
+WHERE slack_webhook_url IS NOT NULL
+  AND (sqlc.narg('allowed_servers')::text[] IS NULL OR server_name = ANY(sqlc.narg('allowed_servers')::text[]));
 
 -- name: ListAlertToggles :many
 SELECT server_name, alert_key, enabled
 FROM alert_toggles
 WHERE (sqlc.narg('allowed_servers')::text[] IS NULL OR server_name = ANY(sqlc.narg('allowed_servers')::text[]));
 
--- name: UpsertAlertWebhook :exec
-INSERT INTO alert_settings (server_name, slack_webhook_url)
-VALUES ($1, $2)
-ON CONFLICT (server_name) DO UPDATE SET slack_webhook_url = EXCLUDED.slack_webhook_url;
+-- name: UpdateServerWebhook :execrows
+UPDATE servers
+SET slack_webhook_url = nullif(sqlc.arg('slack_webhook_url')::text, '')
+WHERE server_name = sqlc.arg('server_name');
 
 -- name: UpsertAlertToggle :exec
 INSERT INTO alert_toggles (server_name, alert_key, enabled)
 VALUES ($1, $2, $3)
 ON CONFLICT (server_name, alert_key) DO UPDATE SET enabled = EXCLUDED.enabled;
 
--- name: DeleteAlertConfigForServer :exec
-WITH cleared_settings AS (
-    DELETE FROM alert_settings WHERE alert_settings.server_name = sqlc.arg('server_name')
-),
-cleared_toggles AS (
-    DELETE FROM alert_toggles WHERE alert_toggles.server_name = sqlc.arg('server_name')
-),
-cleared_fires AS (
-    DELETE FROM alert_fires WHERE alert_fires.server_name = sqlc.arg('server_name')
-)
-DELETE FROM alert_notifications WHERE alert_notifications.server_name = sqlc.arg('server_name');
-
 -- name: GetEnabledAlertWebhook :one
-SELECT s.slack_webhook_url
-FROM alert_settings s
+SELECT s.slack_webhook_url::text AS slack_webhook_url
+FROM servers s
 LEFT JOIN alert_toggles t
   ON t.server_name = s.server_name AND t.alert_key = sqlc.arg('alert_key')
 WHERE s.server_name = sqlc.arg('server_name')
-  AND s.slack_webhook_url <> ''
+  AND s.slack_webhook_url IS NOT NULL
   AND coalesce(t.enabled, true);
 
--- name: TryClaimAlertNotification :one
-WITH claimed AS (
-    INSERT INTO alert_notifications (server_name, alert_key, last_fired_at)
-    VALUES (sqlc.arg('server_name'), sqlc.arg('alert_key'), now())
-    ON CONFLICT (server_name, alert_key)
-    DO UPDATE SET last_fired_at = now()
-    WHERE alert_notifications.last_fired_at < now() - sqlc.arg('cooldown')::interval
-    RETURNING last_fired_at
-),
-recorded AS (
-    INSERT INTO alert_fires (server_name, alert_key, fired_at)
-    SELECT sqlc.arg('server_name'), sqlc.arg('alert_key'), claimed.last_fired_at
-    FROM claimed
-)
-SELECT last_fired_at FROM claimed;
+-- name: LockAlertClaim :exec
+SELECT pg_advisory_xact_lock(hashtextextended(sqlc.arg('server_name')::text || '/' || sqlc.arg('alert_key')::text, 0));
 
--- name: ReleaseAlertClaim :exec
-WITH released_fire AS (
-    DELETE FROM alert_fires
-    WHERE alert_fires.server_name = sqlc.arg('server_name')
-      AND alert_fires.alert_key = sqlc.arg('alert_key')
-      AND alert_fires.fired_at = sqlc.arg('fired_at')
+-- name: ClaimAlertFire :one
+INSERT INTO alert_fires (server_name, alert_key, fired_at)
+SELECT sqlc.arg('server_name')::text, sqlc.arg('alert_key')::text, now()
+WHERE NOT EXISTS (
+    SELECT 1 FROM alert_fires
+    WHERE server_name = sqlc.arg('server_name')::text
+      AND alert_key = sqlc.arg('alert_key')::text
+      AND fired_at >= now() - sqlc.arg('cooldown')::interval
 )
-DELETE FROM alert_notifications
-WHERE alert_notifications.server_name = sqlc.arg('server_name')
-  AND alert_notifications.alert_key = sqlc.arg('alert_key')
-  AND alert_notifications.last_fired_at = sqlc.arg('fired_at');
+RETURNING fired_at;
+
+-- name: DeleteAlertFire :exec
+DELETE FROM alert_fires WHERE server_name = $1 AND alert_key = $2 AND fired_at = $3;
 
 -- name: CountRecentAlertFires :many
 SELECT server_name, alert_key, count(*) AS fires
@@ -171,10 +177,10 @@ ORDER BY server_name;
 
 -- name: ListServersWithAlertEnabled :many
 SELECT s.server_name
-FROM alert_settings s
+FROM servers s
 LEFT JOIN alert_toggles t
   ON t.server_name = s.server_name AND t.alert_key = sqlc.arg('alert_key')
-WHERE s.slack_webhook_url <> ''
+WHERE s.slack_webhook_url IS NOT NULL
   AND coalesce(t.enabled, true)
 ORDER BY s.server_name;
 

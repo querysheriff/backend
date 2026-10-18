@@ -110,7 +110,7 @@ func authenticateUser(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	return principalFromUser(row), nil
+	return principalFromUser(row.User, row.AllowedServers), nil
 }
 
 func requirePrincipal(ctx context.Context) (*auth.Principal, error) {

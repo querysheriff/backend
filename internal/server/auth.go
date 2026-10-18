@@ -21,6 +21,7 @@ import (
 const (
 	invalidCredentialsMsg = "invalid email or password"
 	pgUniqueViolation     = "23505"
+	pgForeignKeyViolation = "23503"
 )
 
 type AuthServer struct {
@@ -102,7 +103,7 @@ func (s *AuthServer) GetCurrentUser(
 }
 
 func (s *AuthServer) authenticate(ctx context.Context, email, password string) (*auth.Principal, error) {
-	user, err := s.queries.GetUserByEmail(ctx, email)
+	row, err := s.queries.GetUserByEmail(ctx, email)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return s.bootstrapSuperAdmin(ctx, email, password)
 	}
@@ -110,11 +111,11 @@ func (s *AuthServer) authenticate(ctx context.Context, email, password string) (
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	if !auth.CheckPassword(user.PasswordHash, password) {
+	if !auth.CheckPassword(row.User.PasswordHash, password) {
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New(invalidCredentialsMsg))
 	}
 
-	return principalFromUser(user), nil
+	return principalFromUser(row.User, row.AllowedServers), nil
 }
 
 func (s *AuthServer) bootstrapSuperAdmin(ctx context.Context, email, password string) (*auth.Principal, error) {
@@ -134,11 +135,10 @@ func (s *AuthServer) bootstrapSuperAdmin(ctx context.Context, email, password st
 	}
 
 	created, err := s.queries.CreateUser(ctx, db.CreateUserParams{
-		Name:           defaultNameFromEmail(email),
-		Email:          email,
-		PasswordHash:   hash,
-		IsSuperAdmin:   true,
-		AllowedServers: []string{},
+		Name:         defaultNameFromEmail(email),
+		Email:        email,
+		PasswordHash: hash,
+		IsSuperAdmin: true,
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -148,17 +148,17 @@ func (s *AuthServer) bootstrapSuperAdmin(ctx context.Context, email, password st
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	return principalFromUser(created), nil
+	return principalFromUser(created, []string{}), nil
 }
 
-func principalFromUser(user db.User) *auth.Principal {
+func principalFromUser(user db.User, allowedServers []string) *auth.Principal {
 	return &auth.Principal{
 		UserID:         user.ID,
 		Name:           user.Name,
 		Email:          user.Email,
 		IsSuperAdmin:   user.IsSuperAdmin,
 		CreatedAt:      user.CreatedAt.Time,
-		AllowedServers: user.AllowedServers,
+		AllowedServers: allowedServers,
 	}
 }
 
@@ -197,4 +197,10 @@ func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 
 	return errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation
+}
+
+func isForeignKeyViolation(err error) bool {
+	var pgErr *pgconn.PgError
+
+	return errors.As(err, &pgErr) && pgErr.Code == pgForeignKeyViolation
 }

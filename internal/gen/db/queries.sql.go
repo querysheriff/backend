@@ -11,15 +11,29 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const countCollectorTokensForServer = `-- name: CountCollectorTokensForServer :one
-SELECT count(*) AS total FROM collector_tokens WHERE server_name = $1
+const claimAlertFire = `-- name: ClaimAlertFire :one
+INSERT INTO alert_fires (server_name, alert_key, fired_at)
+SELECT $1::text, $2::text, now()
+WHERE NOT EXISTS (
+    SELECT 1 FROM alert_fires
+    WHERE server_name = $1::text
+      AND alert_key = $2::text
+      AND fired_at >= now() - $3::interval
+)
+RETURNING fired_at
 `
 
-func (q *Queries) CountCollectorTokensForServer(ctx context.Context, serverName string) (int64, error) {
-	row := q.db.QueryRow(ctx, countCollectorTokensForServer, serverName)
-	var total int64
-	err := row.Scan(&total)
-	return total, err
+type ClaimAlertFireParams struct {
+	ServerName string
+	AlertKey   string
+	Cooldown   pgtype.Interval
+}
+
+func (q *Queries) ClaimAlertFire(ctx context.Context, arg ClaimAlertFireParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, claimAlertFire, arg.ServerName, arg.AlertKey, arg.Cooldown)
+	var fired_at pgtype.Timestamptz
+	err := row.Scan(&fired_at)
+	return fired_at, err
 }
 
 const countRecentAlertFires = `-- name: CountRecentAlertFires :many
@@ -73,6 +87,9 @@ func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
 }
 
 const createCollectorToken = `-- name: CreateCollectorToken :one
+WITH server AS (
+    INSERT INTO servers (server_name) VALUES ($1) ON CONFLICT DO NOTHING
+)
 INSERT INTO collector_tokens (server_name, token_hash)
 VALUES ($1, $2)
 RETURNING id, server_name, created_at
@@ -113,17 +130,16 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 }
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (name, email, password_hash, is_super_admin, allowed_servers)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, email, password_hash, is_super_admin, allowed_servers, created_at
+INSERT INTO users (name, email, password_hash, is_super_admin)
+VALUES ($1, $2, $3, $4)
+RETURNING id, name, email, password_hash, is_super_admin, created_at
 `
 
 type CreateUserParams struct {
-	Name           string
-	Email          string
-	PasswordHash   string
-	IsSuperAdmin   bool
-	AllowedServers []string
+	Name         string
+	Email        string
+	PasswordHash string
+	IsSuperAdmin bool
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
@@ -132,7 +148,6 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		arg.Email,
 		arg.PasswordHash,
 		arg.IsSuperAdmin,
-		arg.AllowedServers,
 	)
 	var i User
 	err := row.Scan(
@@ -141,27 +156,23 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Email,
 		&i.PasswordHash,
 		&i.IsSuperAdmin,
-		&i.AllowedServers,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
-const deleteAlertConfigForServer = `-- name: DeleteAlertConfigForServer :exec
-WITH cleared_settings AS (
-    DELETE FROM alert_settings WHERE alert_settings.server_name = $1
-),
-cleared_toggles AS (
-    DELETE FROM alert_toggles WHERE alert_toggles.server_name = $1
-),
-cleared_fires AS (
-    DELETE FROM alert_fires WHERE alert_fires.server_name = $1
-)
-DELETE FROM alert_notifications WHERE alert_notifications.server_name = $1
+const deleteAlertFire = `-- name: DeleteAlertFire :exec
+DELETE FROM alert_fires WHERE server_name = $1 AND alert_key = $2 AND fired_at = $3
 `
 
-func (q *Queries) DeleteAlertConfigForServer(ctx context.Context, serverName string) error {
-	_, err := q.db.Exec(ctx, deleteAlertConfigForServer, serverName)
+type DeleteAlertFireParams struct {
+	ServerName string
+	AlertKey   string
+	FiredAt    pgtype.Timestamptz
+}
+
+func (q *Queries) DeleteAlertFire(ctx context.Context, arg DeleteAlertFireParams) error {
+	_, err := q.db.Exec(ctx, deleteAlertFire, arg.ServerName, arg.AlertKey, arg.FiredAt)
 	return err
 }
 
@@ -183,6 +194,17 @@ DELETE FROM user_sessions WHERE expires_at <= now()
 
 func (q *Queries) DeleteExpiredSessions(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, deleteExpiredSessions)
+	return err
+}
+
+const deleteServerIfUnused = `-- name: DeleteServerIfUnused :exec
+DELETE FROM servers s
+WHERE s.server_name = $1
+  AND NOT EXISTS (SELECT 1 FROM collector_tokens t WHERE t.server_name = s.server_name)
+`
+
+func (q *Queries) DeleteServerIfUnused(ctx context.Context, serverName string) error {
+	_, err := q.db.Exec(ctx, deleteServerIfUnused, serverName)
 	return err
 }
 
@@ -216,12 +238,12 @@ func (q *Queries) GetCollectorServerByHash(ctx context.Context, tokenHash string
 }
 
 const getEnabledAlertWebhook = `-- name: GetEnabledAlertWebhook :one
-SELECT s.slack_webhook_url
-FROM alert_settings s
+SELECT s.slack_webhook_url::text AS slack_webhook_url
+FROM servers s
 LEFT JOIN alert_toggles t
   ON t.server_name = s.server_name AND t.alert_key = $1
 WHERE s.server_name = $2
-  AND s.slack_webhook_url <> ''
+  AND s.slack_webhook_url IS NOT NULL
   AND coalesce(t.enabled, true)
 `
 
@@ -238,59 +260,85 @@ func (q *Queries) GetEnabledAlertWebhook(ctx context.Context, arg GetEnabledAler
 }
 
 const getSessionUser = `-- name: GetSessionUser :one
-SELECT id, name, email, password_hash, is_super_admin, allowed_servers, created_at FROM users
+SELECT users.id, users.name, users.email, users.password_hash, users.is_super_admin, users.created_at, ARRAY(
+    SELECT us.server_name FROM user_servers us WHERE us.user_id = users.id ORDER BY us.server_name
+)::text[] AS allowed_servers
+FROM users
 WHERE id = (SELECT user_id FROM user_sessions WHERE token_hash = $1 AND expires_at > now())
 `
 
-func (q *Queries) GetSessionUser(ctx context.Context, tokenHash string) (User, error) {
+type GetSessionUserRow struct {
+	User           User
+	AllowedServers []string
+}
+
+func (q *Queries) GetSessionUser(ctx context.Context, tokenHash string) (GetSessionUserRow, error) {
 	row := q.db.QueryRow(ctx, getSessionUser, tokenHash)
-	var i User
+	var i GetSessionUserRow
 	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Email,
-		&i.PasswordHash,
-		&i.IsSuperAdmin,
+		&i.User.ID,
+		&i.User.Name,
+		&i.User.Email,
+		&i.User.PasswordHash,
+		&i.User.IsSuperAdmin,
+		&i.User.CreatedAt,
 		&i.AllowedServers,
-		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, name, email, password_hash, is_super_admin, allowed_servers, created_at FROM users WHERE email = $1
+SELECT users.id, users.name, users.email, users.password_hash, users.is_super_admin, users.created_at, ARRAY(
+    SELECT us.server_name FROM user_servers us WHERE us.user_id = users.id ORDER BY us.server_name
+)::text[] AS allowed_servers
+FROM users
+WHERE email = $1
 `
 
-func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
+type GetUserByEmailRow struct {
+	User           User
+	AllowedServers []string
+}
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
 	row := q.db.QueryRow(ctx, getUserByEmail, email)
-	var i User
+	var i GetUserByEmailRow
 	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Email,
-		&i.PasswordHash,
-		&i.IsSuperAdmin,
+		&i.User.ID,
+		&i.User.Name,
+		&i.User.Email,
+		&i.User.PasswordHash,
+		&i.User.IsSuperAdmin,
+		&i.User.CreatedAt,
 		&i.AllowedServers,
-		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, name, email, password_hash, is_super_admin, allowed_servers, created_at FROM users WHERE id = $1
+SELECT users.id, users.name, users.email, users.password_hash, users.is_super_admin, users.created_at, ARRAY(
+    SELECT us.server_name FROM user_servers us WHERE us.user_id = users.id ORDER BY us.server_name
+)::text[] AS allowed_servers
+FROM users
+WHERE id = $1
 `
 
-func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
+type GetUserByIDRow struct {
+	User           User
+	AllowedServers []string
+}
+
+func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, error) {
 	row := q.db.QueryRow(ctx, getUserByID, id)
-	var i User
+	var i GetUserByIDRow
 	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Email,
-		&i.PasswordHash,
-		&i.IsSuperAdmin,
+		&i.User.ID,
+		&i.User.Name,
+		&i.User.Email,
+		&i.User.PasswordHash,
+		&i.User.IsSuperAdmin,
+		&i.User.CreatedAt,
 		&i.AllowedServers,
-		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -322,20 +370,26 @@ func (q *Queries) ListAlertToggles(ctx context.Context, allowedServers []string)
 }
 
 const listAlertWebhooks = `-- name: ListAlertWebhooks :many
-SELECT server_name, slack_webhook_url
-FROM alert_settings
-WHERE ($1::text[] IS NULL OR server_name = ANY($1::text[]))
+SELECT server_name, slack_webhook_url::text AS slack_webhook_url
+FROM servers
+WHERE slack_webhook_url IS NOT NULL
+  AND ($1::text[] IS NULL OR server_name = ANY($1::text[]))
 `
 
-func (q *Queries) ListAlertWebhooks(ctx context.Context, allowedServers []string) ([]AlertSetting, error) {
+type ListAlertWebhooksRow struct {
+	ServerName      string
+	SlackWebhookUrl string
+}
+
+func (q *Queries) ListAlertWebhooks(ctx context.Context, allowedServers []string) ([]ListAlertWebhooksRow, error) {
 	rows, err := q.db.Query(ctx, listAlertWebhooks, allowedServers)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []AlertSetting
+	var items []ListAlertWebhooksRow
 	for rows.Next() {
-		var i AlertSetting
+		var i ListAlertWebhooksRow
 		if err := rows.Scan(&i.ServerName, &i.SlackWebhookUrl); err != nil {
 			return nil, err
 		}
@@ -407,10 +461,10 @@ func (q *Queries) ListMonitoredServers(ctx context.Context, allowedServers []str
 
 const listServersWithAlertEnabled = `-- name: ListServersWithAlertEnabled :many
 SELECT s.server_name
-FROM alert_settings s
+FROM servers s
 LEFT JOIN alert_toggles t
   ON t.server_name = s.server_name AND t.alert_key = $1
-WHERE s.slack_webhook_url <> ''
+WHERE s.slack_webhook_url IS NOT NULL
   AND coalesce(t.enabled, true)
 ORDER BY s.server_name
 `
@@ -464,26 +518,35 @@ func (q *Queries) ListStaleServers(ctx context.Context, staleAfter pgtype.Interv
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, name, email, password_hash, is_super_admin, allowed_servers, created_at FROM users ORDER BY created_at, id
+SELECT users.id, users.name, users.email, users.password_hash, users.is_super_admin, users.created_at, ARRAY(
+    SELECT us.server_name FROM user_servers us WHERE us.user_id = users.id ORDER BY us.server_name
+)::text[] AS allowed_servers
+FROM users
+ORDER BY created_at, id
 `
 
-func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
+type ListUsersRow struct {
+	User           User
+	AllowedServers []string
+}
+
+func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 	rows, err := q.db.Query(ctx, listUsers)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []User
+	var items []ListUsersRow
 	for rows.Next() {
-		var i User
+		var i ListUsersRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Email,
-			&i.PasswordHash,
-			&i.IsSuperAdmin,
+			&i.User.ID,
+			&i.User.Name,
+			&i.User.Email,
+			&i.User.PasswordHash,
+			&i.User.IsSuperAdmin,
+			&i.User.CreatedAt,
 			&i.AllowedServers,
-			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -495,6 +558,20 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 	return items, nil
 }
 
+const lockAlertClaim = `-- name: LockAlertClaim :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text || '/' || $2::text, 0))
+`
+
+type LockAlertClaimParams struct {
+	ServerName string
+	AlertKey   string
+}
+
+func (q *Queries) LockAlertClaim(ctx context.Context, arg LockAlertClaimParams) error {
+	_, err := q.db.Exec(ctx, lockAlertClaim, arg.ServerName, arg.AlertKey)
+	return err
+}
+
 const pruneAlertFires = `-- name: PruneAlertFires :exec
 DELETE FROM alert_fires WHERE fired_at < now() - $1::interval
 `
@@ -504,115 +581,84 @@ func (q *Queries) PruneAlertFires(ctx context.Context, historyWindow pgtype.Inte
 	return err
 }
 
-const releaseAlertClaim = `-- name: ReleaseAlertClaim :exec
-WITH released_fire AS (
-    DELETE FROM alert_fires
-    WHERE alert_fires.server_name = $1
-      AND alert_fires.alert_key = $2
-      AND alert_fires.fired_at = $3
-)
-DELETE FROM alert_notifications
-WHERE alert_notifications.server_name = $1
-  AND alert_notifications.alert_key = $2
-  AND alert_notifications.last_fired_at = $3
-`
-
-type ReleaseAlertClaimParams struct {
-	ServerName string
-	AlertKey   string
-	FiredAt    pgtype.Timestamptz
-}
-
-func (q *Queries) ReleaseAlertClaim(ctx context.Context, arg ReleaseAlertClaimParams) error {
-	_, err := q.db.Exec(ctx, releaseAlertClaim, arg.ServerName, arg.AlertKey, arg.FiredAt)
-	return err
-}
-
-const removeServerFromUsers = `-- name: RemoveServerFromUsers :exec
-UPDATE users SET allowed_servers = array_remove(allowed_servers, $1::text)
-`
-
-func (q *Queries) RemoveServerFromUsers(ctx context.Context, serverName string) error {
-	_, err := q.db.Exec(ctx, removeServerFromUsers, serverName)
-	return err
-}
-
-const tryClaimAlertNotification = `-- name: TryClaimAlertNotification :one
-WITH claimed AS (
-    INSERT INTO alert_notifications (server_name, alert_key, last_fired_at)
-    VALUES ($1, $2, now())
-    ON CONFLICT (server_name, alert_key)
-    DO UPDATE SET last_fired_at = now()
-    WHERE alert_notifications.last_fired_at < now() - $3::interval
-    RETURNING last_fired_at
+const setUserServers = `-- name: SetUserServers :exec
+WITH wanted AS (
+    SELECT unnest($2::text[]) AS server_name
 ),
-recorded AS (
-    INSERT INTO alert_fires (server_name, alert_key, fired_at)
-    SELECT $1, $2, claimed.last_fired_at
-    FROM claimed
+revoked AS (
+    DELETE FROM user_servers
+    WHERE user_id = $1
+      AND server_name NOT IN (SELECT server_name FROM wanted)
 )
-SELECT last_fired_at FROM claimed
+INSERT INTO user_servers (user_id, server_name)
+SELECT $1::bigint, server_name FROM wanted
+ON CONFLICT (user_id, server_name) DO NOTHING
 `
 
-type TryClaimAlertNotificationParams struct {
-	ServerName string
-	AlertKey   string
-	Cooldown   pgtype.Interval
+type SetUserServersParams struct {
+	UserID      int64
+	ServerNames []string
 }
 
-func (q *Queries) TryClaimAlertNotification(ctx context.Context, arg TryClaimAlertNotificationParams) (pgtype.Timestamptz, error) {
-	row := q.db.QueryRow(ctx, tryClaimAlertNotification, arg.ServerName, arg.AlertKey, arg.Cooldown)
-	var last_fired_at pgtype.Timestamptz
-	err := row.Scan(&last_fired_at)
-	return last_fired_at, err
+func (q *Queries) SetUserServers(ctx context.Context, arg SetUserServersParams) error {
+	_, err := q.db.Exec(ctx, setUserServers, arg.UserID, arg.ServerNames)
+	return err
 }
 
-const updateUser = `-- name: UpdateUser :one
+const updateServerWebhook = `-- name: UpdateServerWebhook :execrows
+UPDATE servers
+SET slack_webhook_url = nullif($1::text, '')
+WHERE server_name = $2
+`
+
+type UpdateServerWebhookParams struct {
+	SlackWebhookUrl string
+	ServerName      string
+}
+
+func (q *Queries) UpdateServerWebhook(ctx context.Context, arg UpdateServerWebhookParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateServerWebhook, arg.SlackWebhookUrl, arg.ServerName)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateUser = `-- name: UpdateUser :execrows
 WITH revoked AS (
     DELETE FROM user_sessions
-    WHERE user_id = $5
-      AND token_hash <> $6
+    WHERE user_id = $4
+      AND token_hash <> $5
       AND $3::text IS NOT NULL
 )
 UPDATE users
 SET name = $1,
     email = $2,
-    password_hash = coalesce($3::text, password_hash),
-    allowed_servers = $4
-WHERE id = $5
-RETURNING id, name, email, password_hash, is_super_admin, allowed_servers, created_at
+    password_hash = coalesce($3::text, password_hash)
+WHERE id = $4
 `
 
 type UpdateUserParams struct {
 	Name              string
 	Email             string
 	PasswordHash      pgtype.Text
-	AllowedServers    []string
 	ID                int64
 	CallerSessionHash string
 }
 
 // A new password ends every session opened with the old one, except the caller's own.
-func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUser,
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateUser,
 		arg.Name,
 		arg.Email,
 		arg.PasswordHash,
-		arg.AllowedServers,
 		arg.ID,
 		arg.CallerSessionHash,
 	)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Email,
-		&i.PasswordHash,
-		&i.IsSuperAdmin,
-		&i.AllowedServers,
-		&i.CreatedAt,
-	)
-	return i, err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const upsertAlertToggle = `-- name: UpsertAlertToggle :exec
@@ -629,22 +675,6 @@ type UpsertAlertToggleParams struct {
 
 func (q *Queries) UpsertAlertToggle(ctx context.Context, arg UpsertAlertToggleParams) error {
 	_, err := q.db.Exec(ctx, upsertAlertToggle, arg.ServerName, arg.AlertKey, arg.Enabled)
-	return err
-}
-
-const upsertAlertWebhook = `-- name: UpsertAlertWebhook :exec
-INSERT INTO alert_settings (server_name, slack_webhook_url)
-VALUES ($1, $2)
-ON CONFLICT (server_name) DO UPDATE SET slack_webhook_url = EXCLUDED.slack_webhook_url
-`
-
-type UpsertAlertWebhookParams struct {
-	ServerName      string
-	SlackWebhookUrl string
-}
-
-func (q *Queries) UpsertAlertWebhook(ctx context.Context, arg UpsertAlertWebhookParams) error {
-	_, err := q.db.Exec(ctx, upsertAlertWebhook, arg.ServerName, arg.SlackWebhookUrl)
 	return err
 }
 

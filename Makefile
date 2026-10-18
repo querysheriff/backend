@@ -79,10 +79,6 @@ ch-migrate-status:
 ch-migrate-create:
 	$(GOOSE) -dir $(CH_MIGRATIONS_DIR) create $(name) sql
 
-.PHONY: seed
-seed:
-	POSTGRES_URL="$(POSTGRES_URL)" go run ./cmd/seed
-
 .PHONY: dev-up
 dev-up:
 	docker compose -f dev/docker-compose.yml up -d --wait

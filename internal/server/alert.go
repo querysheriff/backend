@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -14,7 +15,10 @@ import (
 	"github.com/querysheriff/backend/internal/gen/db"
 )
 
-const slackWebhookHost = "hooks.slack.com"
+const (
+	slackWebhookHost = "hooks.slack.com"
+	unknownServerMsg = "unknown server"
+)
 
 type AlertServer struct {
 	queries *db.Queries
@@ -108,11 +112,15 @@ func (s *AlertServer) UpdateAlertWebhook(
 		return nil, err
 	}
 
-	if err = s.queries.UpsertAlertWebhook(ctx, db.UpsertAlertWebhookParams{
+	updated, err := s.queries.UpdateServerWebhook(ctx, db.UpdateServerWebhookParams{
 		ServerName:      msg.GetServerName(),
 		SlackWebhookUrl: webhookURL,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if updated == 0 {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New(unknownServerMsg))
 	}
 
 	return connect.NewResponse(&querysheriffv1.UpdateAlertWebhookResponse{}), nil
@@ -134,11 +142,15 @@ func (s *AlertServer) UpdateAlertSetting(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown alert key %q", msg.GetKey()))
 	}
 
-	if err := s.queries.UpsertAlertToggle(ctx, db.UpsertAlertToggleParams{
+	err := s.queries.UpsertAlertToggle(ctx, db.UpsertAlertToggleParams{
 		ServerName: msg.GetServerName(),
 		AlertKey:   msg.GetKey(),
 		Enabled:    msg.GetEnabled(),
-	}); err != nil {
+	})
+	if isForeignKeyViolation(err) {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New(unknownServerMsg))
+	}
+	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
