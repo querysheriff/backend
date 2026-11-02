@@ -27,6 +27,7 @@ func everyKind() []querysheriffv1.QueryKind {
 	}
 }
 
+// tagFilterFixture seeds one statement that ran 5 minutes ago, sampled 5 minutes ago with service=payments.
 func tagFilterFixture(t *testing.T, serverName string) *chstats.Client {
 	t.Helper()
 
@@ -49,13 +50,28 @@ func tagFilterFixture(t *testing.T, serverName string) *chstats.Client {
 		t.Fatalf("seed delta: %v", err)
 	}
 
-	if err := stats.ReplaceStatementTags(ctx, map[uint64]map[string]string{
-		id: {"service": "payments"},
-	}); err != nil {
-		t.Fatalf("seed statement tags: %v", err)
-	}
+	seedTaggedSample(t, stats, serverName, occurred, map[string]string{"service": "payments"})
 
 	return stats
+}
+
+func seedTaggedSample(t *testing.T, stats *chstats.Client, serverName string, at time.Time, tags map[string]string) {
+	t.Helper()
+
+	if err := stats.InsertSamples(context.Background(), []chstats.Sample{{
+		ID:          chstats.SampleID(serverName, at, "SELECT 1", 1, 0),
+		CollectedAt: at, OccurredAt: at, ServerName: serverName, DatabaseName: "db",
+		StatementID: chstats.StatementID(serverName, "db", "app", tagFilterQueryID),
+		Query:       "SELECT 1", DurationMs: 1, Tags: tags,
+	}}); err != nil {
+		t.Fatalf("seed sample: %v", err)
+	}
+}
+
+func lastWindow(window time.Duration) (*timestamppb.Timestamp, *timestamppb.Timestamp) {
+	to := time.Now()
+
+	return timestamppb.New(to.Add(-window)), timestamppb.New(to)
 }
 
 func listStatements(
@@ -65,16 +81,16 @@ func listStatements(
 	serverName string,
 	window time.Duration,
 	filters ...*querysheriffv1.TagFilter,
-) int {
+) []*querysheriffv1.StatementStat {
 	t.Helper()
 
-	to := time.Now()
+	from, to := lastWindow(window)
 
 	resp, err := srv.ListStatements(ctx, connect.NewRequest(&querysheriffv1.ListStatementsRequest{
 		ServerName:   serverName,
 		DatabaseName: "db",
-		From:         timestamppb.New(to.Add(-window)),
-		To:           timestamppb.New(to),
+		From:         from,
+		To:           to,
 		TagFilters:   filters,
 		Kinds:        everyKind(),
 		Limit:        50,
@@ -83,61 +99,129 @@ func listStatements(
 		t.Fatalf("ListStatements: %v", err)
 	}
 
-	return len(resp.Msg.GetStatements())
+	return resp.Msg.GetStatements()
+}
+
+func statementTags(
+	ctx context.Context,
+	t *testing.T,
+	srv *server.StatementServer,
+	serverName string,
+	window time.Duration,
+) []string {
+	t.Helper()
+
+	from, to := lastWindow(window)
+
+	resp, err := srv.GetStatementTags(ctx, connect.NewRequest(&querysheriffv1.GetStatementTagsRequest{
+		ServerName:   serverName,
+		DatabaseName: "db",
+		StatementId:  chstats.StatementID(serverName, "db", "app", tagFilterQueryID),
+		From:         from,
+		To:           to,
+	}))
+	if err != nil {
+		t.Fatalf("GetStatementTags: %v", err)
+	}
+
+	return pairs(resp.Msg.GetTags())
+}
+
+func pairs(tags []*querysheriffv1.Tag) []string {
+	out := make([]string, len(tags))
+	for i, tag := range tags {
+		out[i] = tag.GetKey() + "=" + tag.GetValue()
+	}
+
+	return out
 }
 
 func serviceIs(value string) *querysheriffv1.TagFilter {
 	return tagFilter("service", querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_EQUAL, value)
 }
 
-func TestTagFiltersFollowTheLatestSample(t *testing.T) {
+func TestStatementTagsMergeEveryValueSampledInTheRange(t *testing.T) {
 	t.Parallel()
 
-	const serverName = "tagfilter-latest-sample"
+	const serverName = "tagfilter-merge"
 
 	ctx := context.Background()
 	stats := tagFilterFixture(t, serverName)
 	srv := server.NewStatementServer(stats)
 	viewing := viewer(ctx)
-	id := chstats.StatementID(serverName, "db", "app", tagFilterQueryID)
+	now := time.Now()
 
-	if n := listStatements(viewing, t, srv, serverName, 24*time.Hour, serviceIs("payments")); n != 1 {
-		t.Fatalf("service=payments matched %d statements, want 1", n)
+	seedTaggedSample(t, stats, serverName, now.Add(-20*time.Minute),
+		map[string]string{"service": "billing", "process_id": "17"})
+	seedTaggedSample(t, stats, serverName, now.Add(-48*time.Hour), map[string]string{"service": "legacy"})
+
+	want := []string{"service=billing", "service=payments"}
+
+	listed := listStatements(viewing, t, srv, serverName, time.Hour)
+	if len(listed) != 1 || !slices.Equal(pairs(listed[0].GetTags()), want) {
+		t.Errorf("listed statements = %v, want one tagged %v", listed, want)
 	}
 
-	if err := stats.ReplaceStatementTags(ctx, map[uint64]map[string]string{
-		id: {"service": "billing"},
-	}); err != nil {
-		t.Fatalf("ReplaceStatementTags: %v", err)
+	if got := statementTags(viewing, t, srv, serverName, time.Hour); !slices.Equal(got, want) {
+		t.Errorf("statement tags over 1h = %v, want %v", got, want)
 	}
 
-	if n := listStatements(viewing, t, srv, serverName, 24*time.Hour, serviceIs("billing")); n != 1 {
-		t.Errorf("service=billing matched %d statements after a newer sample, want 1", n)
+	if got := statementTags(
+		viewing,
+		t,
+		srv,
+		serverName,
+		10*time.Minute,
+	); !slices.Equal(
+		got,
+		[]string{"service=payments"},
+	) {
+		t.Errorf("statement tags over 10m = %v, want only the sample inside the range", got)
 	}
 
-	if n := listStatements(viewing, t, srv, serverName, 24*time.Hour, serviceIs("payments")); n != 0 {
-		t.Errorf("service=payments still matched %d statements after a newer sample, want 0", n)
-	}
-}
-
-func TestTagFiltersIgnoreTheQueryWindow(t *testing.T) {
-	t.Parallel()
-
-	const serverName = "tagfilter-window"
-
-	ctx := context.Background()
-	stats := tagFilterFixture(t, serverName)
-	srv := server.NewStatementServer(stats)
-	viewing := viewer(ctx)
-
-	unfiltered := listStatements(viewing, t, srv, serverName, 24*time.Hour)
-	if unfiltered != 1 {
-		t.Fatalf("the fixture statement is not visible unfiltered: got %d, want 1", unfiltered)
+	cases := []struct {
+		window time.Duration
+		filter *querysheriffv1.TagFilter
+		want   int
+	}{
+		{time.Hour, serviceIs("billing"), 1},
+		{time.Hour, serviceIs("payments"), 1},
+		{time.Hour, serviceIs("legacy"), 0},
+		{72 * time.Hour, serviceIs("legacy"), 1},
+		{time.Hour, tagFilter("service", querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_NOT_EQUAL, "billing"), 0},
+		{time.Hour, tagFilter("service", querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_EXISTS), 1},
+		{time.Hour, tagFilter("process_id", querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_EXISTS), 0},
 	}
 
-	for _, window := range []time.Duration{10 * time.Minute, 24 * time.Hour, 60 * 24 * time.Hour} {
-		if n := listStatements(viewing, t, srv, serverName, window, serviceIs("payments")); n != 1 {
-			t.Errorf("a %s window matched %d statements, want 1", window, n)
+	for _, c := range cases {
+		if n := len(listStatements(viewing, t, srv, serverName, c.window, c.filter)); n != c.want {
+			t.Errorf("%s over %s matched %d statements, want %d", c.filter, c.window, n, c.want)
+		}
+	}
+
+	for _, c := range []struct {
+		window time.Duration
+		want   []string
+	}{
+		{time.Hour, []string{"billing", "payments"}},
+		{72 * time.Hour, []string{"billing", "legacy", "payments"}},
+	} {
+		from, to := lastWindow(c.window)
+
+		resp, err := srv.ListTagValues(viewing, connect.NewRequest(&querysheriffv1.ListTagValuesRequest{
+			ServerName: serverName, DatabaseName: "db", Key: "service", From: from, To: to,
+		}))
+		if err != nil {
+			t.Fatalf("ListTagValues: %v", err)
+		}
+
+		values := make([]string, 0, len(resp.Msg.GetValues()))
+		for _, value := range resp.Msg.GetValues() {
+			values = append(values, value.GetValue())
+		}
+
+		if !slices.Equal(values, c.want) {
+			t.Errorf("service values over %s = %v, want %v", c.window, values, c.want)
 		}
 	}
 }
@@ -150,7 +234,7 @@ func TestTagFiltersRejectMalformedRequests(t *testing.T) {
 	ctx := context.Background()
 	stats := tagFilterFixture(t, serverName)
 	srv := server.NewStatementServer(stats)
-	to := time.Now()
+	from, to := lastWindow(time.Hour)
 
 	cases := map[string]*querysheriffv1.TagFilter{
 		"uppercase key":     tagFilter("Service", querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_EXISTS),
@@ -168,8 +252,8 @@ func TestTagFiltersRejectMalformedRequests(t *testing.T) {
 			_, err := srv.ListStatements(viewer(ctx), connect.NewRequest(&querysheriffv1.ListStatementsRequest{
 				ServerName:   serverName,
 				DatabaseName: "db",
-				From:         timestamppb.New(to.Add(-time.Hour)),
-				To:           timestamppb.New(to),
+				From:         from,
+				To:           to,
 				TagFilters:   []*querysheriffv1.TagFilter{filter},
 				Kinds:        everyKind(),
 				Limit:        50,
@@ -208,7 +292,7 @@ func TestReportedSampleTagsDropHighCardinalityKeys(t *testing.T) {
 				Query:      "SELECT 1",
 				DurationMs: 900,
 				Tags: map[string]string{
-					"service":  "payments",
+					"service":  "checkout",
 					"user_id":  "8123",
 					"order_id": "55",
 				},
@@ -219,39 +303,31 @@ func TestReportedSampleTagsDropHighCardinalityKeys(t *testing.T) {
 		t.Fatalf("ReportLogs: %v", err)
 	}
 
+	from, to := lastWindow(time.Hour)
+
 	resp, err := statements.ListTagKeys(viewer(ctx), connect.NewRequest(&querysheriffv1.ListTagKeysRequest{
-		ServerName:   serverName,
-		DatabaseName: "db",
+		ServerName: serverName, DatabaseName: "db", From: from, To: to,
 	}))
 	if err != nil {
 		t.Fatalf("ListTagKeys: %v", err)
 	}
 
-	keys := make([]string, 0, len(resp.Msg.GetKeys()))
-	for _, key := range resp.Msg.GetKeys() {
-		keys = append(keys, key.GetKey())
-	}
-
-	if !slices.Contains(keys, "service") {
-		t.Errorf("tag keys = %v, want the shape tag `service` kept", keys)
-	}
-
-	for _, dropped := range []string{"user_id", "order_id"} {
-		if slices.Contains(keys, dropped) {
-			t.Errorf("tag keys = %v, want the per-execution key %q dropped", keys, dropped)
-		}
+	keys := resp.Msg.GetKeys()
+	if len(keys) != 1 || keys[0].GetKey() != "service" || keys[0].GetValueCount() != 2 {
+		t.Errorf("tag keys = %v, want only `service` with its 2 values, per-execution `*_id` keys dropped", keys)
 	}
 
 	values, err := statements.ListTagValues(viewer(ctx), connect.NewRequest(&querysheriffv1.ListTagValuesRequest{
-		ServerName: serverName, DatabaseName: "db", Key: "service",
+		ServerName: serverName, DatabaseName: "db", Key: "service", From: from, To: to,
 	}))
 	if err != nil {
 		t.Fatalf("ListTagValues: %v", err)
 	}
 
-	if got := values.Msg.GetValues(); len(got) != 1 || got[0].GetValue() != "payments" ||
-		got[0].GetStatementCount() != 1 {
-		t.Errorf("service values = %v, want payments on 1 statement", got)
+	got := values.Msg.GetValues()
+	if len(got) != 2 || got[0].GetValue() != "checkout" || got[1].GetValue() != "payments" ||
+		got[0].GetStatementCount() != 1 || got[1].GetStatementCount() != 1 {
+		t.Errorf("service values = %v, want checkout and payments on 1 statement each", got)
 	}
 }
 
@@ -279,14 +355,9 @@ func TestNotEqualTagFilterMatchesUntaggedStatements(t *testing.T) {
 	}
 
 	notPayments := tagFilter("service", querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_NOT_EQUAL, "payments")
-	if n := listStatements(
-		viewer(ctx),
-		t,
-		server.NewStatementServer(stats),
-		serverName,
-		time.Hour,
-		notPayments,
-	); n != 1 {
-		t.Errorf("service!=payments matched %d statements, want only the untagged one", n)
+
+	listed := listStatements(viewer(ctx), t, server.NewStatementServer(stats), serverName, time.Hour, notPayments)
+	if len(listed) != 1 || listed[0].GetId() != untagged || len(listed[0].GetTags()) != 0 {
+		t.Errorf("service!=payments matched %v, want only the untagged statement", listed)
 	}
 }

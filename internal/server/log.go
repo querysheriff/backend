@@ -241,33 +241,7 @@ func (s *LogServer) insertStatementSamples(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	if err := s.stats.ReplaceStatementTags(ctx, shapeTagsByStatement(samples)); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-
 	return sampleIDs, nil
-}
-
-func shapeTagsByStatement(samples []clickhouse.Sample) map[uint64]map[string]string {
-	byStatement := map[uint64]map[string]string{}
-
-	for _, sample := range samples {
-		if sample.StatementID == 0 || len(sample.Tags) == 0 {
-			continue
-		}
-
-		shape := map[string]string{}
-
-		for key, value := range sample.Tags {
-			if !strings.HasSuffix(key, "_id") {
-				shape[key] = value
-			}
-		}
-
-		byStatement[sample.StatementID] = shape
-	}
-
-	return byStatement
 }
 
 func logEventRow(

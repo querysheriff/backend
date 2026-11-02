@@ -3,7 +3,6 @@ package clickhouse
 import (
 	"context"
 	"fmt"
-	"maps"
 	"math"
 	"strconv"
 	"strings"
@@ -32,21 +31,21 @@ type ListStatementStatsParams struct {
 }
 
 type StatementStatRow struct {
-	ID            uint64            `ch:"id"`
-	Preview       string            `ch:"preview"`
-	UserName      string            `ch:"user_name"`
-	Calls         int64             `ch:"calls"`
-	Rows          int64             `ch:"row_count"`
-	TotalExecTime float64           `ch:"total_exec_time"`
-	PctOfTotal    float64           `ch:"pct_of_total"`
-	PctIo         float64           `ch:"pct_io"`
-	Tags          map[string]string `ch:"tags"`
+	ID            uint64              `ch:"id"`
+	Preview       string              `ch:"preview"`
+	UserName      string              `ch:"user_name"`
+	Calls         int64               `ch:"calls"`
+	Rows          int64               `ch:"row_count"`
+	TotalExecTime float64             `ch:"total_exec_time"`
+	PctOfTotal    float64             `ch:"pct_of_total"`
+	PctIo         float64             `ch:"pct_io"`
+	Tags          map[string][]string `ch:"tags"`
 }
 
 const listStatementStatsSQL = `
 WITH
     dimension AS (
-        SELECT id, user_name, query_short, query_kind, tags
+        SELECT id, user_name, query_short, query_kind
         FROM statements FINAL
         WHERE server_name = {server_name:String}
           AND database_name = {database_name:String}
@@ -73,7 +72,8 @@ WITH
                sum(total_exec_time) OVER () AS every_exec_time,
                sum(total_io_time)   OVER () AS every_io_time
         FROM per_statement
-    )
+    ),
+    tagged AS (` + tagsByStatementSQL + `)
 SELECT d.statement_id AS id,
        s.query_short AS preview,
        s.user_name AS user_name,
@@ -82,9 +82,10 @@ SELECT d.statement_id AS id,
        d.total_exec_time AS total_exec_time,
        if(d.every_exec_time = 0, 0, d.total_exec_time / d.every_exec_time) * 100 AS pct_of_total,
        if(d.every_io_time   = 0, 0, d.total_io_time   / d.every_io_time)   * 100 AS pct_io,
-       s.tags AS tags
+       t.tags AS tags
 FROM with_totals AS d
 INNER JOIN dimension AS s ON s.id = d.statement_id
+LEFT JOIN tagged AS t ON t.statement_id = d.statement_id
 WHERE has({kinds:Array(Int32)}, s.query_kind)
   AND ({every_statement:UInt8} = 1 OR d.statement_id IN {statement_ids:Array(UInt64)})
   %s
@@ -119,8 +120,8 @@ func (c *Client) ListStatementStats(
 }
 
 // tagFilterConditions builds SQL conditions for statement-tag filters.
-// Missing tags read as ""; filter values are always non-empty.
-// Example: env=prod -> AND has({tag_values_0:Array(String)}, s.tags[{tag_key_0:String}]).
+// A statement carries a tag value when any of its samples in range did, and *_id tags never match.
+// Example: env=prod -> AND d.statement_id IN (SELECT statement_id FROM statement_samples WHERE ... tags['env'] ...).
 func tagFilterConditions(filters []tagfilter.Filter) (string, []any) {
 	var (
 		sql  strings.Builder
@@ -129,15 +130,18 @@ func tagFilterConditions(filters []tagfilter.Filter) (string, []any) {
 
 	for i, filter := range filters {
 		key, values := fmt.Sprintf("tag_key_%d", i), fmt.Sprintf("tag_values_%d", i)
-		value := fmt.Sprintf("s.tags[{%s:String}]", key)
+		samples := fmt.Sprintf("(SELECT statement_id FROM statement_samples%s\n  AND NOT endsWith({%s:String}, '_id')",
+			tagScopeSQL, key)
+		withKey := fmt.Sprintf("%s\n  AND mapContains(tags, {%s:String}))", samples, key)
+		withValue := fmt.Sprintf("%s\n  AND has({%s:Array(String)}, tags[{%s:String}]))", samples, values, key)
 
 		switch filter.Op {
 		case tagfilter.OpExists:
-			fmt.Fprintf(&sql, "\n  AND mapContains(s.tags, {%s:String})", key)
+			fmt.Fprintf(&sql, "\n  AND d.statement_id IN %s", withKey)
 		case tagfilter.OpEqual:
-			fmt.Fprintf(&sql, "\n  AND has({%s:Array(String)}, %s)", values, value)
+			fmt.Fprintf(&sql, "\n  AND d.statement_id IN %s", withValue)
 		case tagfilter.OpNotEqual:
-			fmt.Fprintf(&sql, "\n  AND NOT has({%s:Array(String)}, %s)", values, value)
+			fmt.Fprintf(&sql, "\n  AND d.statement_id NOT IN %s", withValue)
 		}
 
 		args = append(args, param(key, filter.Key), listParam(values, filter.Values))
@@ -223,19 +227,18 @@ func (c *Client) StatementsWithText(ctx context.Context, ids []uint64) (map[uint
 }
 
 type StatementDetail struct {
-	Query        string            `ch:"query_full"`
-	ServerName   string            `ch:"server_name"`
-	DatabaseName string            `ch:"database_name"`
-	Tags         map[string]string `ch:"tags"`
+	Query        string `ch:"query_full"`
+	ServerName   string `ch:"server_name"`
+	DatabaseName string `ch:"database_name"`
 }
 
 const statementDetailSQL = `
-SELECT query_full, server_name, database_name, tags
+SELECT query_full, server_name, database_name
 FROM statements FINAL
 WHERE id = {id:UInt64}`
 
-// StatementDetail returns query text, its server/database scope, and tags.
-// Example: id=42 -> {Query:"SELECT ...", ServerName:"prod", DatabaseName:"app", Tags:{"env":"prod"}}.
+// StatementDetail returns query text and its server/database scope.
+// Example: id=42 -> {Query:"SELECT ...", ServerName:"prod", DatabaseName:"app"}.
 func (c *Client) StatementDetail(ctx context.Context, id uint64) (StatementDetail, error) {
 	var detail StatementDetail
 	if err := c.conn.QueryRow(ctx, statementDetailSQL, param("id", id)).ScanStruct(&detail); err != nil {
@@ -246,127 +249,25 @@ func (c *Client) StatementDetail(ctx context.Context, id uint64) (StatementDetai
 }
 
 type Statement struct {
-	ID           uint64            `ch:"id"`
-	ServerName   string            `ch:"server_name"`
-	DatabaseName string            `ch:"database_name"`
-	UserName     string            `ch:"user_name"`
-	QueryID      int64             `ch:"query_id"`
-	QueryFull    string            `ch:"query_full"`
-	QueryShort   string            `ch:"query_short"`
-	QueryKind    int32             `ch:"query_kind"`
-	Tags         map[string]string `ch:"tags"`
+	ID           uint64
+	ServerName   string
+	DatabaseName string
+	UserName     string
+	QueryID      int64
+	QueryFull    string
+	QueryShort   string
+	QueryKind    int32
 }
 
 // UpsertStatements inserts or replaces statements using the latest version.
-// Example: existing ID=42 with new tags -> latest row becomes active.
 func (c *Client) UpsertStatements(ctx context.Context, statements []Statement) error {
 	version := uint64(time.Now().UnixNano())
 
 	return insertBatch(ctx, c, "statements", statements, func(statement Statement) []any {
-		tags := statement.Tags
-		if tags == nil {
-			tags = map[string]string{}
-		}
-
 		return []any{
 			statement.ID, statement.ServerName, statement.DatabaseName, statement.UserName,
 			statement.QueryID, statement.QueryFull, statement.QueryShort, enumOf(statement.QueryKind),
-			tags, version,
+			version,
 		}
 	})
-}
-
-const statementRowsSQL = `
-SELECT id, server_name, database_name, user_name, query_id, query_full, query_short,
-       toInt32(query_kind) AS query_kind, tags
-FROM statements FINAL
-WHERE id IN {ids:Array(UInt64)}`
-
-// ReplaceStatementTags updates tags only when they changed.
-// Example: {42:{"env":"prod"}} -> statement 42 gets those tags.
-func (c *Client) ReplaceStatementTags(ctx context.Context, tagsByStatement map[uint64]map[string]string) error {
-	if len(tagsByStatement) == 0 {
-		return nil
-	}
-
-	ids := make([]uint64, 0, len(tagsByStatement))
-	for id := range tagsByStatement {
-		ids = append(ids, id)
-	}
-
-	var current []Statement
-	if err := c.conn.Select(ctx, &current, statementRowsSQL, listParam("ids", ids)); err != nil {
-		return fmt.Errorf("query statement rows: %w", err)
-	}
-
-	updated := make([]Statement, 0, len(current))
-
-	for _, statement := range current {
-		tags := tagsByStatement[statement.ID]
-		if maps.Equal(statement.Tags, tags) {
-			continue
-		}
-
-		statement.Tags = tags
-		updated = append(updated, statement)
-	}
-
-	return c.UpsertStatements(ctx, updated)
-}
-
-type TagKey struct {
-	Key        string `ch:"key"`
-	ValueCount int64  `ch:"value_count"`
-}
-
-const tagKeysSQL = `
-SELECT key, toInt64(uniqExact(tags[key])) AS value_count
-FROM statements FINAL
-ARRAY JOIN mapKeys(tags) AS key
-WHERE server_name = {server_name:String}
-  AND database_name = {database_name:String}
-GROUP BY key
-ORDER BY count() DESC, key`
-
-// TagKeys returns the tag keys in one server/database, most used first, with their distinct value counts.
-// Example: ("prod","app") -> [{Key:"env", ValueCount:3}, {Key:"team", ValueCount:5}].
-func (c *Client) TagKeys(ctx context.Context, serverName, databaseName string) ([]TagKey, error) {
-	var out []TagKey
-	if err := c.conn.Select(ctx, &out, tagKeysSQL,
-		param("server_name", serverName),
-		param("database_name", databaseName),
-	); err != nil {
-		return nil, fmt.Errorf("query tag keys: %w", err)
-	}
-
-	return out, nil
-}
-
-type TagValue struct {
-	Value          string `ch:"value"`
-	StatementCount int64  `ch:"statement_count"`
-}
-
-const tagValuesSQL = `
-SELECT tags[{key:String}] AS value, toInt64(count()) AS statement_count
-FROM statements FINAL
-WHERE server_name = {server_name:String}
-  AND database_name = {database_name:String}
-  AND mapContains(tags, {key:String})
-GROUP BY value
-ORDER BY count() DESC, value`
-
-// TagValues returns one tag key's values in one server/database with their statement counts.
-// Example: key="env" -> [{Value:"prod", StatementCount:20}, {Value:"dev", StatementCount:5}].
-func (c *Client) TagValues(ctx context.Context, serverName, databaseName, key string) ([]TagValue, error) {
-	var out []TagValue
-	if err := c.conn.Select(ctx, &out, tagValuesSQL,
-		param("server_name", serverName),
-		param("database_name", databaseName),
-		param("key", key),
-	); err != nil {
-		return nil, fmt.Errorf("query tag values: %w", err)
-	}
-
-	return out, nil
 }

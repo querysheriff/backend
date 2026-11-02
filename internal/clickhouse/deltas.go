@@ -160,14 +160,14 @@ func (c *Client) StatementLatencySeries(
 }
 
 type TopStatement struct {
-	ID    uint64            `ch:"id"`
-	Calls int64             `ch:"calls"`
-	AvgMs float64           `ch:"avg_ms"`
-	Tags  map[string]string `ch:"tags"`
+	ID    uint64              `ch:"id"`
+	Calls int64               `ch:"calls"`
+	AvgMs float64             `ch:"avg_ms"`
+	Tags  map[string][]string `ch:"tags"`
 }
 
 const topStatementsSQL = `
-SELECT d.statement_id AS id, d.calls AS calls, d.avg_ms AS avg_ms, s.tags AS tags
+SELECT d.statement_id AS id, d.calls AS calls, d.avg_ms AS avg_ms, t.tags AS tags
 FROM (
     SELECT statement_id,
            toInt64(sum(calls))                    AS calls,
@@ -181,8 +181,12 @@ FROM (
     LIMIT {max_rows:UInt32}
 ) AS d
 LEFT JOIN (
-    SELECT id, tags FROM statements FINAL WHERE server_name = {server_name:String}
-) AS s ON s.id = d.statement_id
+    SELECT statement_id, groupUniqArrayMap(` + baseTagsSQL + `) AS tags
+    FROM statement_samples
+    WHERE server_name = {server_name:String}
+      AND collected_at >= {from:DateTime('UTC')}
+    GROUP BY statement_id
+) AS t ON t.statement_id = d.statement_id
 ORDER BY d.total_ms DESC`
 
 // TopStatements returns a server's statements with the most execution time since from, busiest first.

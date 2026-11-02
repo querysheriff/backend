@@ -199,7 +199,7 @@ func (s *StatementServer) ListStatements(
 			Id:       row.ID,
 			Preview:  row.Preview,
 			UserName: row.UserName,
-			Tags:     row.Tags,
+			Tags:     tagsProto(row.Tags),
 			Calls:    row.Calls,
 			Rows:     row.Rows,
 			AvgMs:    avgExecTime(row.TotalExecTime, row.Calls),
@@ -214,8 +214,8 @@ func (s *StatementServer) ListStatements(
 	}), nil
 }
 
-// GetStatement returns one statement's full query text, scope, and tags.
-// Example: id=42 -> {Query:"SELECT ...", ServerName:"prod", DatabaseName:"app", Tags:{...}}.
+// GetStatement returns one statement's full query text and scope.
+// Example: id=42 -> {Query:"SELECT ...", ServerName:"prod", DatabaseName:"app"}.
 func (s *StatementServer) GetStatement(
 	ctx context.Context,
 	req *connect.Request[querysheriffv1.GetStatementRequest],
@@ -229,7 +229,6 @@ func (s *StatementServer) GetStatement(
 		Query:        detail.Query,
 		ServerName:   detail.ServerName,
 		DatabaseName: detail.DatabaseName,
-		Tags:         detail.Tags,
 	}), nil
 }
 

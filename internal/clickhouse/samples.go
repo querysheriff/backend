@@ -181,3 +181,101 @@ func SampleID(serverName string, collectedAt time.Time, query string, durationMs
 
 	return xxhash.Sum64String(key) & math.MaxInt64
 }
+
+type TagScope struct {
+	ServerName   string
+	DatabaseName string
+	From, To     time.Time
+}
+
+func (s TagScope) args(extra ...any) []any {
+	return append([]any{
+		param("server_name", s.ServerName),
+		param("database_name", s.DatabaseName),
+		timeParam("from", s.From),
+		timeParam("to", s.To),
+	}, extra...)
+}
+
+const tagScopeSQL = `
+WHERE server_name = {server_name:String}
+  AND database_name = {database_name:String}
+  AND collected_at >= {from:DateTime('UTC')}
+  AND collected_at <= {to:DateTime('UTC')}`
+
+// baseTagsSQL drops *_id tags, which stay on samples only.
+const baseTagsSQL = "mapFilter((key, value) -> NOT endsWith(key, '_id'), tags)"
+
+// tagsByStatementSQL merges the tags of each statement's samples in scope.
+const tagsByStatementSQL = `
+SELECT statement_id, groupUniqArrayMap(` + baseTagsSQL + `) AS tags
+FROM statement_samples` + tagScopeSQL + `
+GROUP BY statement_id`
+
+const statementTagsSQL = `
+SELECT groupUniqArrayMap(` + baseTagsSQL + `)
+FROM statement_samples` + tagScopeSQL + `
+  AND statement_id = {statement_id:UInt64}`
+
+// StatementTags returns the tags of one statement's samples in scope.
+// Example: statement 42 sampled with op=A and op=B -> {op:[A, B]}.
+func (c *Client) StatementTags(ctx context.Context, scope TagScope, statementID uint64) (map[string][]string, error) {
+	var tags map[string][]string
+	if err := c.conn.QueryRow(ctx, statementTagsSQL,
+		scope.args(param("statement_id", statementID))...,
+	).Scan(&tags); err != nil {
+		return nil, fmt.Errorf("query statement tags: %w", err)
+	}
+
+	return tags, nil
+}
+
+type TagKey struct {
+	Key        string `ch:"key"`
+	ValueCount int64  `ch:"value_count"`
+}
+
+const tagKeysSQL = `
+SELECT key, toInt64(uniqExact(value)) AS value_count
+FROM statement_samples
+ARRAY JOIN mapKeys(tags) AS key, mapValues(tags) AS value` + tagScopeSQL + `
+  AND statement_id != 0
+  AND NOT endsWith(key, '_id')
+GROUP BY key
+ORDER BY uniqExact(statement_id) DESC, key`
+
+// TagKeys returns the tag keys in scope, on most statements first, with their distinct value counts.
+// Example: -> [{Key:"env", ValueCount:3}, {Key:"team", ValueCount:5}].
+func (c *Client) TagKeys(ctx context.Context, scope TagScope) ([]TagKey, error) {
+	var out []TagKey
+	if err := c.conn.Select(ctx, &out, tagKeysSQL, scope.args()...); err != nil {
+		return nil, fmt.Errorf("query tag keys: %w", err)
+	}
+
+	return out, nil
+}
+
+type TagValue struct {
+	Value          string `ch:"value"`
+	StatementCount int64  `ch:"statement_count"`
+}
+
+const tagValuesSQL = `
+SELECT tags[{key:String}] AS value, toInt64(uniqExact(statement_id)) AS statement_count
+FROM statement_samples` + tagScopeSQL + `
+  AND statement_id != 0
+  AND NOT endsWith({key:String}, '_id')
+  AND mapContains(tags, {key:String})
+GROUP BY value
+ORDER BY statement_count DESC, value`
+
+// TagValues returns one tag key's values in scope with their statement counts.
+// Example: key="env" -> [{Value:"prod", StatementCount:20}, {Value:"dev", StatementCount:5}].
+func (c *Client) TagValues(ctx context.Context, scope TagScope, key string) ([]TagValue, error) {
+	var out []TagValue
+	if err := c.conn.Select(ctx, &out, tagValuesSQL, scope.args(param("key", key))...); err != nil {
+		return nil, fmt.Errorf("query tag values: %w", err)
+	}
+
+	return out, nil
+}

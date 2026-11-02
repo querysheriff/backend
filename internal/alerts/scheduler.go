@@ -93,7 +93,7 @@ func (s scheduler) sendWeeklyReports(ctx context.Context) {
 	}
 
 	for _, server := range servers {
-		text, buildErr := s.weeklyReport(ctx, server)
+		text, buildErr := WeeklyReport(ctx, s.stats, server, s.dashboardURL)
 		if buildErr != nil {
 			s.logger.ErrorContext(ctx, "weekly report build failed", "server", server, "error", buildErr)
 
@@ -106,9 +106,9 @@ func (s scheduler) sendWeeklyReports(ctx context.Context) {
 	}
 }
 
-// weeklyReport lists the server's busiest queries of the last week; it is empty when nothing ran.
-func (s scheduler) weeklyReport(ctx context.Context, server string) (string, error) {
-	rows, err := s.stats.TopStatements(ctx, server, time.Now().Add(-weeklyWindow), weeklyTopRows)
+// WeeklyReport lists the server's busiest queries of the last week; it is empty when nothing ran.
+func WeeklyReport(ctx context.Context, stats *clickhouse.Client, server, dashboardURL string) (string, error) {
+	rows, err := stats.TopStatements(ctx, server, time.Now().Add(-weeklyWindow), weeklyTopRows)
 	if err != nil || len(rows) == 0 {
 		return "", err
 	}
@@ -120,8 +120,8 @@ func (s scheduler) weeklyReport(ctx context.Context, server string) (string, err
 	for _, row := range rows {
 		fmt.Fprintf(&b, "\n• *%d calls averaging %s*%s", row.Calls, humanize.Millis(row.AvgMs), tagPills(row.Tags))
 
-		if s.dashboardURL != "" {
-			fmt.Fprintf(&b, "\n  <%s/queries/%d|open in querysheriff>", s.dashboardURL, row.ID)
+		if dashboardURL != "" {
+			fmt.Fprintf(&b, "\n  <%s/queries/%d|open in querysheriff>", dashboardURL, row.ID)
 		}
 	}
 

@@ -130,11 +130,19 @@ func slackEscape(text string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(text)
 }
 
-// tagPills renders tags as inline-code pills, each prefixed by a space.
-func tagPills(tags map[string]string) string {
+// tagPills renders tags as inline-code pills, one per value, each prefixed by a space.
+// Example: {"op": ["B", "A"]} -> " `op=A` `op=B`".
+func tagPills[V string | []string](tags map[string]V) string {
 	var pills strings.Builder
 	for _, key := range slices.Sorted(maps.Keys(tags)) {
-		fmt.Fprintf(&pills, " `%s=%s`", key, tags[key])
+		switch value := any(tags[key]).(type) {
+		case string:
+			fmt.Fprintf(&pills, " `%s=%s`", key, value)
+		case []string:
+			for _, v := range slices.Sorted(slices.Values(value)) {
+				fmt.Fprintf(&pills, " `%s=%s`", key, v)
+			}
+		}
 	}
 
 	return slackEscape(pills.String())

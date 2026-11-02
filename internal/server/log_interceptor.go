@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -17,6 +18,11 @@ func NewLogInterceptor(logger *slog.Logger) connect.UnaryInterceptorFunc {
 			resp, err := next(ctx, req)
 			if err != nil {
 				code := connect.CodeOf(err)
+
+				if errors.Is(ctx.Err(), context.Canceled) {
+					code = connect.CodeCanceled
+				}
+
 				logger.Log(ctx, failureLevel(code), "rpc failed",
 					"procedure", req.Spec().Procedure,
 					"code", code.String(),

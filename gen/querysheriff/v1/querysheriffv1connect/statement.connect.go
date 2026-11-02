@@ -45,6 +45,9 @@ const (
 	// StatementServiceGetStatementProcedure is the fully-qualified name of the StatementService's
 	// GetStatement RPC.
 	StatementServiceGetStatementProcedure = "/querysheriff.v1.StatementService/GetStatement"
+	// StatementServiceGetStatementTagsProcedure is the fully-qualified name of the StatementService's
+	// GetStatementTags RPC.
+	StatementServiceGetStatementTagsProcedure = "/querysheriff.v1.StatementService/GetStatementTags"
 	// StatementServiceGetStatementSeriesProcedure is the fully-qualified name of the StatementService's
 	// GetStatementSeries RPC.
 	StatementServiceGetStatementSeriesProcedure = "/querysheriff.v1.StatementService/GetStatementSeries"
@@ -71,6 +74,7 @@ type StatementServiceClient interface {
 	ReportStatementTexts(context.Context, *connect.Request[v1.ReportStatementTextsRequest]) (*connect.Response[v1.ReportStatementTextsResponse], error)
 	ListStatements(context.Context, *connect.Request[v1.ListStatementsRequest]) (*connect.Response[v1.ListStatementsResponse], error)
 	GetStatement(context.Context, *connect.Request[v1.GetStatementRequest]) (*connect.Response[v1.GetStatementResponse], error)
+	GetStatementTags(context.Context, *connect.Request[v1.GetStatementTagsRequest]) (*connect.Response[v1.GetStatementTagsResponse], error)
 	GetStatementSeries(context.Context, *connect.Request[v1.GetStatementSeriesRequest]) (*connect.Response[v1.GetStatementSeriesResponse], error)
 	GetLatencySeries(context.Context, *connect.Request[v1.GetLatencySeriesRequest]) (*connect.Response[v1.GetLatencySeriesResponse], error)
 	ListStatementSamples(context.Context, *connect.Request[v1.ListStatementSamplesRequest]) (*connect.Response[v1.ListStatementSamplesResponse], error)
@@ -112,6 +116,12 @@ func NewStatementServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+StatementServiceGetStatementProcedure,
 			connect.WithSchema(statementServiceMethods.ByName("GetStatement")),
+			connect.WithClientOptions(opts...),
+		),
+		getStatementTags: connect.NewClient[v1.GetStatementTagsRequest, v1.GetStatementTagsResponse](
+			httpClient,
+			baseURL+StatementServiceGetStatementTagsProcedure,
+			connect.WithSchema(statementServiceMethods.ByName("GetStatementTags")),
 			connect.WithClientOptions(opts...),
 		),
 		getStatementSeries: connect.NewClient[v1.GetStatementSeriesRequest, v1.GetStatementSeriesResponse](
@@ -159,6 +169,7 @@ type statementServiceClient struct {
 	reportStatementTexts *connect.Client[v1.ReportStatementTextsRequest, v1.ReportStatementTextsResponse]
 	listStatements       *connect.Client[v1.ListStatementsRequest, v1.ListStatementsResponse]
 	getStatement         *connect.Client[v1.GetStatementRequest, v1.GetStatementResponse]
+	getStatementTags     *connect.Client[v1.GetStatementTagsRequest, v1.GetStatementTagsResponse]
 	getStatementSeries   *connect.Client[v1.GetStatementSeriesRequest, v1.GetStatementSeriesResponse]
 	getLatencySeries     *connect.Client[v1.GetLatencySeriesRequest, v1.GetLatencySeriesResponse]
 	listStatementSamples *connect.Client[v1.ListStatementSamplesRequest, v1.ListStatementSamplesResponse]
@@ -185,6 +196,11 @@ func (c *statementServiceClient) ListStatements(ctx context.Context, req *connec
 // GetStatement calls querysheriff.v1.StatementService.GetStatement.
 func (c *statementServiceClient) GetStatement(ctx context.Context, req *connect.Request[v1.GetStatementRequest]) (*connect.Response[v1.GetStatementResponse], error) {
 	return c.getStatement.CallUnary(ctx, req)
+}
+
+// GetStatementTags calls querysheriff.v1.StatementService.GetStatementTags.
+func (c *statementServiceClient) GetStatementTags(ctx context.Context, req *connect.Request[v1.GetStatementTagsRequest]) (*connect.Response[v1.GetStatementTagsResponse], error) {
+	return c.getStatementTags.CallUnary(ctx, req)
 }
 
 // GetStatementSeries calls querysheriff.v1.StatementService.GetStatementSeries.
@@ -223,6 +239,7 @@ type StatementServiceHandler interface {
 	ReportStatementTexts(context.Context, *connect.Request[v1.ReportStatementTextsRequest]) (*connect.Response[v1.ReportStatementTextsResponse], error)
 	ListStatements(context.Context, *connect.Request[v1.ListStatementsRequest]) (*connect.Response[v1.ListStatementsResponse], error)
 	GetStatement(context.Context, *connect.Request[v1.GetStatementRequest]) (*connect.Response[v1.GetStatementResponse], error)
+	GetStatementTags(context.Context, *connect.Request[v1.GetStatementTagsRequest]) (*connect.Response[v1.GetStatementTagsResponse], error)
 	GetStatementSeries(context.Context, *connect.Request[v1.GetStatementSeriesRequest]) (*connect.Response[v1.GetStatementSeriesResponse], error)
 	GetLatencySeries(context.Context, *connect.Request[v1.GetLatencySeriesRequest]) (*connect.Response[v1.GetLatencySeriesResponse], error)
 	ListStatementSamples(context.Context, *connect.Request[v1.ListStatementSamplesRequest]) (*connect.Response[v1.ListStatementSamplesResponse], error)
@@ -260,6 +277,12 @@ func NewStatementServiceHandler(svc StatementServiceHandler, opts ...connect.Han
 		StatementServiceGetStatementProcedure,
 		svc.GetStatement,
 		connect.WithSchema(statementServiceMethods.ByName("GetStatement")),
+		connect.WithHandlerOptions(opts...),
+	)
+	statementServiceGetStatementTagsHandler := connect.NewUnaryHandler(
+		StatementServiceGetStatementTagsProcedure,
+		svc.GetStatementTags,
+		connect.WithSchema(statementServiceMethods.ByName("GetStatementTags")),
 		connect.WithHandlerOptions(opts...),
 	)
 	statementServiceGetStatementSeriesHandler := connect.NewUnaryHandler(
@@ -308,6 +331,8 @@ func NewStatementServiceHandler(svc StatementServiceHandler, opts ...connect.Han
 			statementServiceListStatementsHandler.ServeHTTP(w, r)
 		case StatementServiceGetStatementProcedure:
 			statementServiceGetStatementHandler.ServeHTTP(w, r)
+		case StatementServiceGetStatementTagsProcedure:
+			statementServiceGetStatementTagsHandler.ServeHTTP(w, r)
 		case StatementServiceGetStatementSeriesProcedure:
 			statementServiceGetStatementSeriesHandler.ServeHTTP(w, r)
 		case StatementServiceGetLatencySeriesProcedure:
@@ -343,6 +368,10 @@ func (UnimplementedStatementServiceHandler) ListStatements(context.Context, *con
 
 func (UnimplementedStatementServiceHandler) GetStatement(context.Context, *connect.Request[v1.GetStatementRequest]) (*connect.Response[v1.GetStatementResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.StatementService.GetStatement is not implemented"))
+}
+
+func (UnimplementedStatementServiceHandler) GetStatementTags(context.Context, *connect.Request[v1.GetStatementTagsRequest]) (*connect.Response[v1.GetStatementTagsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("querysheriff.v1.StatementService.GetStatementTags is not implemented"))
 }
 
 func (UnimplementedStatementServiceHandler) GetStatementSeries(context.Context, *connect.Request[v1.GetStatementSeriesRequest]) (*connect.Response[v1.GetStatementSeriesResponse], error) {
