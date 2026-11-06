@@ -1,4 +1,4 @@
-package logtaxonomy
+package logcategory
 
 import (
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"

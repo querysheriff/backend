@@ -10,8 +10,8 @@ import (
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 	"github.com/querysheriff/backend/internal/alerts"
+	"github.com/querysheriff/backend/internal/chartbucket"
 	"github.com/querysheriff/backend/internal/clickhouse"
-	"github.com/querysheriff/backend/internal/timeseries"
 )
 
 type ActivityServer struct {
@@ -147,12 +147,12 @@ func activitySeries(
 	ctx context.Context,
 	serverName, databaseName string,
 	from, to *timestamppb.Timestamp,
-) (clickhouse.TransactionScope, timeseries.Bounds, error) {
+) (clickhouse.TransactionScope, chartbucket.Bounds, error) {
 	if err := authorizeDatabaseQuery(ctx, serverName, databaseName, from, to); err != nil {
-		return clickhouse.TransactionScope{}, timeseries.Bounds{}, err
+		return clickhouse.TransactionScope{}, chartbucket.Bounds{}, err
 	}
 
-	bounds := timeseries.NewBounds(from.AsTime(), to.AsTime(), time.Now())
+	bounds := chartbucket.NewBounds(from.AsTime(), to.AsTime(), time.Now())
 
 	return clickhouse.TransactionScope{
 		ServerName:   serverName,

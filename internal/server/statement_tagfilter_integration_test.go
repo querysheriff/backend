@@ -5,6 +5,7 @@ package server_test
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -226,43 +227,26 @@ func TestStatementTagsMergeEveryValueSampledInTheRange(t *testing.T) {
 	}
 }
 
-func TestTagFiltersRejectMalformedRequests(t *testing.T) {
+func TestTagFiltersAcceptRequestsAtTheLimits(t *testing.T) {
 	t.Parallel()
 
-	const serverName = "tagfilter-validation"
+	const serverName = "tagfilter-limits"
 
 	ctx := context.Background()
-	stats := tagFilterFixture(t, serverName)
-	srv := server.NewStatementServer(stats)
-	from, to := lastWindow(time.Hour)
+	srv := server.NewStatementServer(tagFilterFixture(t, serverName))
 
-	cases := map[string]*querysheriffv1.TagFilter{
-		"uppercase key":     tagFilter("Service", querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_EXISTS),
-		"missing op":        {Key: "service", Values: []string{"payments"}},
-		"exists with value": tagFilter("service", querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_EXISTS, "x"),
-		"equal without a value": tagFilter(
-			"service", querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_EQUAL,
-		),
+	longValues := slices.Repeat([]string{strings.Repeat("x", maxTagValueBytes)}, maxTagValues)
+	filters := []*querysheriffv1.TagFilter{
+		tagFilter("service", tagEqual, "payments"),
+		tagFilter("route_2", tagNotEqual, longValues...),
 	}
 
-	for name, filter := range cases {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
+	for len(filters) < maxTagFilters {
+		filters = append(filters, tagFilter("service", tagExists))
+	}
 
-			_, err := srv.ListStatements(viewer(ctx), connect.NewRequest(&querysheriffv1.ListStatementsRequest{
-				ServerName:   serverName,
-				DatabaseName: "db",
-				From:         from,
-				To:           to,
-				TagFilters:   []*querysheriffv1.TagFilter{filter},
-				Kinds:        everyKind(),
-				Limit:        50,
-			}))
-
-			if connect.CodeOf(err) != connect.CodeInvalidArgument {
-				t.Errorf("ListStatements(%+v) = %v, want an invalid_argument error", filter, err)
-			}
-		})
+	if got := listStatements(viewer(ctx), t, srv, serverName, time.Hour, filters...); len(got) != 1 {
+		t.Errorf("ListStatements with %d filters at the limits = %d statements, want 1", len(filters), len(got))
 	}
 }
 

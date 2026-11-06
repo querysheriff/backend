@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -11,7 +12,6 @@ import (
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 	"github.com/querysheriff/backend/internal/clickhouse"
-	"github.com/querysheriff/backend/internal/tagfilter"
 )
 
 // GetStatementTags returns the tags of one statement's samples in the range, every value of each key.
@@ -75,9 +75,8 @@ func (s *StatementServer) ListTagValues(
 	}
 
 	key := msg.GetKey()
-	if !tagfilter.ValidKey(key) {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("tag key %q must match ^[a-z][a-z0-9_]*$", key))
+	if err = validateTagKey(key); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
 	rows, err := s.stats.TagValues(ctx, scope, key)
@@ -122,4 +121,104 @@ func tagsProto(tags map[string][]string) []*querysheriffv1.Tag {
 	}
 
 	return out
+}
+
+const (
+	maxTagFilters    = 20
+	maxTagValues     = 50
+	maxTagValueBytes = 256
+)
+
+// tagFiltersFromProto validates a request's tag filters and converts them to ClickHouse filters.
+func tagFiltersFromProto(filters []*querysheriffv1.TagFilter) ([]clickhouse.TagFilter, error) {
+	if len(filters) == 0 {
+		return nil, nil
+	}
+
+	if len(filters) > maxTagFilters {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("at most %d tag filters are allowed", maxTagFilters))
+	}
+
+	parsed := make([]clickhouse.TagFilter, len(filters))
+
+	for i, filter := range filters {
+		op, err := tagFilterOp(filter.GetOp())
+		if err != nil {
+			return nil, err
+		}
+
+		if err = validateTagFilter(filter.GetKey(), op, filter.GetValues()); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+
+		parsed[i] = clickhouse.TagFilter{Key: filter.GetKey(), Op: op, Values: filter.GetValues()}
+	}
+
+	return parsed, nil
+}
+
+func tagFilterOp(op querysheriffv1.TagFilterOperator) (clickhouse.TagFilterOp, error) {
+	switch op {
+	case querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_EXISTS:
+		return clickhouse.TagExists, nil
+	case querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_EQUAL:
+		return clickhouse.TagEqual, nil
+	case querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_NOT_EQUAL:
+		return clickhouse.TagNotEqual, nil
+	case querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_UNSPECIFIED:
+		return 0, connect.NewError(connect.CodeInvalidArgument, errors.New("tag filter op is required"))
+	}
+
+	return 0, connect.NewError(connect.CodeInvalidArgument, errors.New("unknown tag filter op"))
+}
+
+func validateTagFilter(key string, op clickhouse.TagFilterOp, values []string) error {
+	if err := validateTagKey(key); err != nil {
+		return err
+	}
+
+	if op == clickhouse.TagExists {
+		if len(values) != 0 {
+			return errors.New("an exists tag filter must not carry values")
+		}
+
+		return nil
+	}
+
+	if len(values) == 0 {
+		return errors.New("tag filter requires at least one value")
+	}
+
+	if len(values) > maxTagValues {
+		return fmt.Errorf("a tag filter accepts at most %d values", maxTagValues)
+	}
+
+	for _, value := range values {
+		if value == "" {
+			return errors.New("tag filter values must not be empty")
+		}
+
+		if len(value) > maxTagValueBytes {
+			return fmt.Errorf("tag filter values must be at most %d bytes", maxTagValueBytes)
+		}
+	}
+
+	return nil
+}
+
+// validateTagKey checks a tag key against ^[a-z][a-z0-9_]*$.
+// Example: "server_name" -> nil, "Server-Name" -> error.
+func validateTagKey(key string) error {
+	valid := key != "" && key[0] >= 'a' && key[0] <= 'z'
+	for i := 1; valid && i < len(key); i++ {
+		c := key[i]
+		valid = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'
+	}
+
+	if !valid {
+		return fmt.Errorf("tag key %q must match ^[a-z][a-z0-9_]*$", key)
+	}
+
+	return nil
 }

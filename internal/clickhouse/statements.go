@@ -9,9 +9,21 @@ import (
 	"time"
 
 	"github.com/cespare/xxhash/v2"
-
-	"github.com/querysheriff/backend/internal/tagfilter"
 )
+
+type TagFilterOp uint8
+
+const (
+	TagExists TagFilterOp = iota + 1
+	TagEqual
+	TagNotEqual
+)
+
+type TagFilter struct {
+	Key    string
+	Op     TagFilterOp
+	Values []string
+}
 
 type ListStatementStatsParams struct {
 	From, To time.Time
@@ -20,7 +32,7 @@ type ListStatementStatsParams struct {
 	DatabaseName string
 
 	StatementIDs []uint64
-	TagFilters   []tagfilter.Filter
+	TagFilters   []TagFilter
 
 	Kinds []int32
 
@@ -122,7 +134,7 @@ func (c *Client) ListStatementStats(
 // tagFilterConditions builds SQL conditions for statement-tag filters.
 // A statement carries a tag value when any of its samples in range did, and *_id tags never match.
 // Example: env=prod -> AND d.statement_id IN (SELECT statement_id FROM statement_samples WHERE ... tags['env'] ...).
-func tagFilterConditions(filters []tagfilter.Filter) (string, []any) {
+func tagFilterConditions(filters []TagFilter) (string, []any) {
 	var (
 		sql  strings.Builder
 		args []any
@@ -136,11 +148,11 @@ func tagFilterConditions(filters []tagfilter.Filter) (string, []any) {
 		withValue := fmt.Sprintf("%s\n  AND has({%s:Array(String)}, tags[{%s:String}]))", samples, values, key)
 
 		switch filter.Op {
-		case tagfilter.OpExists:
+		case TagExists:
 			fmt.Fprintf(&sql, "\n  AND d.statement_id IN %s", withKey)
-		case tagfilter.OpEqual:
+		case TagEqual:
 			fmt.Fprintf(&sql, "\n  AND d.statement_id IN %s", withValue)
-		case tagfilter.OpNotEqual:
+		case TagNotEqual:
 			fmt.Fprintf(&sql, "\n  AND d.statement_id NOT IN %s", withValue)
 		}
 

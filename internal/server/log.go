@@ -11,20 +11,20 @@ import (
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 	"github.com/querysheriff/backend/internal/alerts"
 	"github.com/querysheriff/backend/internal/clickhouse"
-	"github.com/querysheriff/backend/internal/logtaxonomy"
+	"github.com/querysheriff/backend/internal/logcategory"
 )
 
 type LogServer struct {
 	stats      *clickhouse.Client
 	notifier   *alerts.Notifier
-	categories *logtaxonomy.Categories
+	categories *logcategory.Categories
 }
 
 func NewLogServer(stats *clickhouse.Client, notifier *alerts.Notifier) *LogServer {
 	return &LogServer{
 		stats:      stats,
 		notifier:   notifier,
-		categories: logtaxonomy.New(),
+		categories: logcategory.New(),
 	}
 }
 

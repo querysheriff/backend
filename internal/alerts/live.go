@@ -5,7 +5,6 @@ import (
 	"time"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
-	"github.com/querysheriff/backend/internal/humanize"
 	"github.com/querysheriff/backend/internal/sqltext"
 )
 
@@ -52,13 +51,13 @@ func (n *Notifier) CheckActivity(
 
 	if running != nil {
 		n.Fire(serverName, running.GetDatabaseName(), KeyLongQuery,
-			fmt.Sprintf("A query has been running more than %s.\n", humanize.Duration(runningFor))+
+			fmt.Sprintf("A query has been running more than %s.\n", humanDuration(runningFor))+
 				queryBlock("Query", running)+killLine("Kill", running.GetPid()))
 	}
 
 	if open != nil {
 		n.Fire(serverName, open.GetDatabaseName(), KeyLongTransaction,
-			fmt.Sprintf("A transaction has been open more than %s.\n", humanize.Duration(openFor))+
+			fmt.Sprintf("A transaction has been open more than %s.\n", humanDuration(openFor))+
 				queryBlock("Current query", open)+killLine("Kill", open.GetPid()))
 	}
 }
@@ -97,7 +96,7 @@ func blockedQueryText(
 		}
 	}
 
-	return fmt.Sprintf("A query has been waiting more than %s for a lock.\n", humanize.Duration(waited)) +
+	return fmt.Sprintf("A query has been waiting more than %s for a lock.\n", humanDuration(waited)) +
 		queryBlock("Waiting", blocked) + blocking + killLine("Kill blocking", blocked.GetBlockedByPid())
 }
 

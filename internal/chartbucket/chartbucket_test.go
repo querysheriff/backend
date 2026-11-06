@@ -1,10 +1,10 @@
-package timeseries_test
+package chartbucket_test
 
 import (
 	"testing"
 	"time"
 
-	"github.com/querysheriff/backend/internal/timeseries"
+	"github.com/querysheriff/backend/internal/chartbucket"
 )
 
 func nowish() time.Time {
@@ -30,7 +30,7 @@ func TestBucketWidthScalesWithTheRange(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		bounds := timeseries.NewBounds(nowish().Add(-c.span), nowish(), nowish())
+		bounds := chartbucket.NewBounds(nowish().Add(-c.span), nowish(), nowish())
 		if bounds.Bucket != c.want {
 			t.Errorf("span %s: bucket = %s, want %s", c.span, bounds.Bucket, c.want)
 		}
@@ -51,7 +51,7 @@ func TestBucketIsARoundStepWithinThePointBudget(t *testing.T) {
 	}
 
 	for span := time.Minute; span <= 30*24*time.Hour; span += 37 * time.Minute {
-		bounds := timeseries.NewBounds(nowish().Add(-span), nowish(), nowish())
+		bounds := chartbucket.NewBounds(nowish().Add(-span), nowish(), nowish())
 		if !round[bounds.Bucket] {
 			t.Fatalf("span %s: bucket %s is not a round step", span, bounds.Bucket)
 		}
@@ -67,12 +67,12 @@ func TestAnchorClampsToNowAndTruncatesToTheMinute(t *testing.T) {
 
 	ragged := nowish().Add(42 * time.Second)
 
-	bounds := timeseries.NewBounds(nowish().Add(-time.Hour), nowish().Add(time.Hour), ragged)
+	bounds := chartbucket.NewBounds(nowish().Add(-time.Hour), nowish().Add(time.Hour), ragged)
 	if want := nowish(); !bounds.Anchor.Equal(want) {
 		t.Errorf("future `to`: anchor = %s, want %s (nowish(), truncated)", bounds.Anchor, want)
 	}
 
-	bounds = timeseries.NewBounds(nowish().Add(-time.Hour), ragged, ragged)
+	bounds = chartbucket.NewBounds(nowish().Add(-time.Hour), ragged, ragged)
 	if want := nowish(); !bounds.Anchor.Equal(want) {
 		t.Errorf("ragged `to`: anchor = %s, want %s", bounds.Anchor, want)
 	}
@@ -82,7 +82,7 @@ func TestEndsAreContiguousAndEndAtTheAnchor(t *testing.T) {
 	t.Parallel()
 
 	for _, span := range []time.Duration{time.Hour, 6 * time.Hour, 24 * time.Hour, 7 * 24 * time.Hour} {
-		bounds := timeseries.NewBounds(nowish().Add(-span), nowish(), nowish())
+		bounds := chartbucket.NewBounds(nowish().Add(-span), nowish(), nowish())
 
 		ends := bounds.Ends()
 		if len(ends) == 0 {
@@ -111,7 +111,7 @@ func TestRangeStartPrecedesTheRequestedWindow(t *testing.T) {
 	for _, span := range []time.Duration{time.Hour, 6 * time.Hour, 7 * 24 * time.Hour} {
 		from := nowish().Add(-span)
 
-		bounds := timeseries.NewBounds(from, nowish(), nowish())
+		bounds := chartbucket.NewBounds(from, nowish(), nowish())
 		if !bounds.RangeStart.Before(from) {
 			t.Errorf("span %s: range start %s does not precede from %s", span, bounds.RangeStart, from)
 		}

@@ -9,7 +9,6 @@ import (
 
 	"github.com/querysheriff/backend/internal/clickhouse"
 	"github.com/querysheriff/backend/internal/gen/db"
-	"github.com/querysheriff/backend/internal/humanize"
 )
 
 const (
@@ -75,7 +74,7 @@ func (s scheduler) fireStaleServers(ctx context.Context) {
 
 	for _, server := range servers {
 		s.notifier.Fire(server, "", KeyMonitoringStopped,
-			fmt.Sprintf("No data for over %s.", humanize.Duration(monitoringStaleAfter)))
+			fmt.Sprintf("No data for over %s.", humanDuration(monitoringStaleAfter)))
 	}
 }
 
@@ -118,7 +117,7 @@ func WeeklyReport(ctx context.Context, stats *clickhouse.Client, server, dashboa
 	fmt.Fprintf(&b, "Top %d busiest queries in the last week:\n", weeklyTopRows)
 
 	for _, row := range rows {
-		fmt.Fprintf(&b, "\n• *%d calls averaging %s*%s", row.Calls, humanize.Millis(row.AvgMs), tagPills(row.Tags))
+		fmt.Fprintf(&b, "\n• *%d calls averaging %s*%s", row.Calls, humanMillis(row.AvgMs), tagPills(row.Tags))
 
 		if dashboardURL != "" {
 			fmt.Fprintf(&b, "\n  <%s/queries/%d|open in querysheriff>", dashboardURL, row.ID)

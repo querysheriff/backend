@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -146,4 +147,35 @@ func tagPills[V string | []string](tags map[string]V) string {
 	}
 
 	return slackEscape(pills.String())
+}
+
+const thousand = 1000.0
+
+// humanDuration formats a duration in its largest unit. Example: 90*time.Minute -> "1 hour".
+func humanDuration(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return plural(int(d.Seconds()), "second", "seconds")
+	case d < time.Hour:
+		return plural(int(d.Minutes()), "minute", "minutes")
+	default:
+		return plural(int(d.Hours()), "hour", "hours")
+	}
+}
+
+// humanMillis formats milliseconds as ms or seconds. Example: 1500 -> "1.5 s".
+func humanMillis(ms float64) string {
+	if ms < thousand {
+		return fmt.Sprintf("%.0f ms", ms)
+	}
+
+	return fmt.Sprintf("%.1f s", ms/thousand)
+}
+
+func plural(n int, singular, many string) string {
+	if n == 1 {
+		return "1 " + singular
+	}
+
+	return strconv.Itoa(n) + " " + many
 }

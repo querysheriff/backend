@@ -8,8 +8,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
+	"github.com/querysheriff/backend/internal/chartbucket"
 	"github.com/querysheriff/backend/internal/clickhouse"
-	"github.com/querysheriff/backend/internal/timeseries"
 )
 
 const latencyPercentileFloorMs = 10.0
@@ -27,7 +27,7 @@ func (s *StatementServer) GetStatementSeries(
 		return nil, err
 	}
 
-	bounds := timeseries.NewBounds(msg.GetFrom().AsTime(), msg.GetTo().AsTime(), time.Now())
+	bounds := chartbucket.NewBounds(msg.GetFrom().AsTime(), msg.GetTo().AsTime(), time.Now())
 
 	buckets, err := s.stats.StatementMetricSeries(ctx, clickhouse.MetricSeriesParams{
 		RangeStart:   bounds.RangeStart,
@@ -65,7 +65,7 @@ func (s *StatementServer) GetLatencySeries(
 		return nil, err
 	}
 
-	bounds := timeseries.NewBounds(msg.GetFrom().AsTime(), msg.GetTo().AsTime(), time.Now())
+	bounds := chartbucket.NewBounds(msg.GetFrom().AsTime(), msg.GetTo().AsTime(), time.Now())
 
 	buckets, err := s.stats.StatementLatencySeries(ctx, clickhouse.LatencySeriesParams{
 		RangeStart:   bounds.RangeStart,

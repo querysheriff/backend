@@ -1,17 +1,17 @@
-package logtaxonomy_test
+package logcategory_test
 
 import (
 	"slices"
 	"testing"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
-	"github.com/querysheriff/backend/internal/logtaxonomy"
+	"github.com/querysheriff/backend/internal/logcategory"
 )
 
 func TestEveryClassificationHasACategory(t *testing.T) {
 	t.Parallel()
 
-	categories := logtaxonomy.New()
+	categories := logcategory.New()
 
 	for number, name := range querysheriffv1.LogEvent_LogClassification_name {
 		classification := querysheriffv1.LogEvent_LogClassification(number)
@@ -28,7 +28,7 @@ func TestEveryClassificationHasACategory(t *testing.T) {
 func TestUnspecifiedClassificationHasNoCategory(t *testing.T) {
 	t.Parallel()
 
-	got := logtaxonomy.New().Of(querysheriffv1.LogEvent_LOG_CLASSIFICATION_UNSPECIFIED)
+	got := logcategory.New().Of(querysheriffv1.LogEvent_LOG_CLASSIFICATION_UNSPECIFIED)
 	if got != querysheriffv1.LogCategory_LOG_CATEGORY_UNSPECIFIED {
 		t.Errorf("unspecified classification = %s, want the unspecified category", got)
 	}
@@ -37,7 +37,7 @@ func TestUnspecifiedClassificationHasNoCategory(t *testing.T) {
 func TestEveryCategoryIsListedOnceAndSelectsSomething(t *testing.T) {
 	t.Parallel()
 
-	categories := logtaxonomy.New()
+	categories := logcategory.New()
 
 	all := categories.All()
 	for i, category := range all {
@@ -73,7 +73,7 @@ func TestEveryCategoryIsListedOnceAndSelectsSomething(t *testing.T) {
 func TestSelectedUnionsCategoriesWithExplicitClassifications(t *testing.T) {
 	t.Parallel()
 
-	categories := logtaxonomy.New()
+	categories := logcategory.New()
 	explicit := int32(querysheriffv1.LogEvent_LOG_CLASSIFICATION_CHECKPOINT_COMPLETE)
 
 	selected := categories.Selected(
@@ -104,7 +104,7 @@ func TestSelectedUnionsCategoriesWithExplicitClassifications(t *testing.T) {
 func TestSelectedIsEmptyWhenNothingIsAskedFor(t *testing.T) {
 	t.Parallel()
 
-	if got := logtaxonomy.New().Selected(nil, nil); got != nil {
+	if got := logcategory.New().Selected(nil, nil); got != nil {
 		t.Errorf("Selected(nil, nil) = %v, want nil so the query stays unfiltered", got)
 	}
 }
@@ -112,7 +112,7 @@ func TestSelectedIsEmptyWhenNothingIsAskedFor(t *testing.T) {
 func TestUnspecifiedCategorySelectsOnlyTheUnclassified(t *testing.T) {
 	t.Parallel()
 
-	got := logtaxonomy.New().Selected(nil, []querysheriffv1.LogCategory{
+	got := logcategory.New().Selected(nil, []querysheriffv1.LogCategory{
 		querysheriffv1.LogCategory_LOG_CATEGORY_UNSPECIFIED,
 	})
 

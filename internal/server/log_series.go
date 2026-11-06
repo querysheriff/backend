@@ -9,8 +9,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
+	"github.com/querysheriff/backend/internal/chartbucket"
 	"github.com/querysheriff/backend/internal/clickhouse"
-	"github.com/querysheriff/backend/internal/timeseries"
 )
 
 // GetLogSeries returns log counts grouped into time buckets, levels, and categories.
@@ -25,7 +25,7 @@ func (s *LogServer) GetLogSeries(
 		return nil, err
 	}
 
-	bounds := timeseries.NewBounds(msg.GetFrom().AsTime(), msg.GetTo().AsTime(), time.Now())
+	bounds := chartbucket.NewBounds(msg.GetFrom().AsTime(), msg.GetTo().AsTime(), time.Now())
 
 	rows, err := s.stats.LogEventHistogram(ctx, clickhouse.LogFilter{
 		ServerName: msg.GetServerName(),
@@ -40,7 +40,7 @@ func (s *LogServer) GetLogSeries(
 }
 
 func (s *LogServer) logSeriesProto(
-	bounds timeseries.Bounds,
+	bounds chartbucket.Bounds,
 	rows []clickhouse.LogHistogramBin,
 ) *querysheriffv1.GetLogSeriesResponse {
 	ends := bounds.Ends()

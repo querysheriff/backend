@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -11,7 +10,6 @@ import (
 	querysheriffv1 "github.com/querysheriff/backend/gen/querysheriff/v1"
 	"github.com/querysheriff/backend/internal/clickhouse"
 	"github.com/querysheriff/backend/internal/sqltext"
-	"github.com/querysheriff/backend/internal/tagfilter"
 )
 
 type StatementServer struct {
@@ -301,44 +299,6 @@ func (s *StatementServer) GetStatementSample(
 		Query:    sqltext.Concretize(sample.Query, sample.Parameters),
 		PlanJson: sample.ExplainPlanJSON,
 	}), nil
-}
-
-func tagFiltersFromProto(filters []*querysheriffv1.TagFilter) ([]tagfilter.Filter, error) {
-	if len(filters) == 0 {
-		return nil, nil
-	}
-
-	parsed := make([]tagfilter.Filter, len(filters))
-
-	for i, tf := range filters {
-		op, err := tagFilterOp(tf.GetOp())
-		if err != nil {
-			return nil, err
-		}
-
-		parsed[i] = tagfilter.Filter{Key: tf.GetKey(), Op: op, Values: tf.GetValues()}
-	}
-
-	if err := tagfilter.Validate(parsed); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-
-	return parsed, nil
-}
-
-func tagFilterOp(op querysheriffv1.TagFilterOperator) (tagfilter.Op, error) {
-	switch op {
-	case querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_EXISTS:
-		return tagfilter.OpExists, nil
-	case querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_EQUAL:
-		return tagfilter.OpEqual, nil
-	case querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_NOT_EQUAL:
-		return tagfilter.OpNotEqual, nil
-	case querysheriffv1.TagFilterOperator_TAG_FILTER_OPERATOR_UNSPECIFIED:
-		return 0, connect.NewError(connect.CodeInvalidArgument, errors.New("tag filter op is required"))
-	}
-
-	return 0, connect.NewError(connect.CodeInvalidArgument, errors.New("unknown tag filter op"))
 }
 
 const sortKeyPctTime = "pct_time"
